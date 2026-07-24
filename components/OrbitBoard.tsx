@@ -151,7 +151,9 @@ export default function OrbitBoard() {
   async function ping(service: string) {
     setPings((p) => ({ ...p, [service]: "loading" }));
     try {
-      const res = await fetch("/api/ping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ service, cfg: toClientConfig(settings) }) });
+      // the proxy is not part of the key config, but the Tor test needs it
+      const cfg = { ...toClientConfig(settings), proxy: settings.proxy || "" };
+      const res = await fetch("/api/ping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ service, cfg }) });
       const d = await res.json();
       setPings((p) => ({ ...p, [service]: { ok: !!d.ok, detail: String(d.detail || "") } }));
     } catch {
@@ -322,6 +324,37 @@ export default function OrbitBoard() {
 
   // On-demand image forensics: extract the maximum metadata (EXIF/GPS/camera/date) from
   // any image URL. If GPS is embedded, drop a precise location node onto the board.
+  // Open a specific hidden service and harvest the selectors published on it. A
+  // deliberate act, separate from the scan: it is recorded in the audit trail, and it
+  // is refused outright without Tor rather than attempted over the clearnet.
+  async function openOnion() {
+    const url = (window.prompt("Hidden service address (.onion) — retrieve through Tor and extract identifiers:") || "").trim();
+    if (!url) return;
+    if (!/\.onion(\/|:|$)/i.test(url.replace(/^https?:\/\//i, ""))) { flashMsg("a .onion address is required"); return; }
+    setScanMsg("retrieving through Tor…");
+    try {
+      const res = await fetch("/api/onion", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...tradecraftHeaders() },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setScanMsg(data?.detail || data?.error || "unreachable"); return; }
+      const page = data.page as { title: string; emails: string[]; onions: string[]; wallets: string[]; handles: string[]; pgp: boolean };
+      for (const s of (data.signals || [])) addNodeRef.current(s);
+      const found = [
+        page.emails.length ? `${page.emails.length} email(s)` : "",
+        page.wallets.length ? `${page.wallets.length} wallet(s)` : "",
+        page.handles.length ? `${page.handles.length} handle(s)` : "",
+        page.onions.length ? `${page.onions.length} linked onion(s)` : "",
+        page.pgp ? "public key block" : "",
+      ].filter(Boolean);
+      setScanMsg(`${page.title || url} · ${found.length ? found.join(" · ") : "no identifiers published"}`);
+    } catch {
+      setScanMsg("network unavailable");
+    }
+  }
+
   async function imageForensics() {
     const url = (window.prompt("Image URL — extract EXIF / GPS / camera metadata:") || "").trim();
     if (!url) return;
@@ -758,7 +791,10 @@ export default function OrbitBoard() {
       // honesty: if a source rate-limited us it did NOT say "no account" — say so,
       // otherwise the analyst reads an incomplete scan as a negative result.
       const warn = data?.health?.note ? ` · ⚠ ${data.health.note}` : "";
-      setScanMsg(`${sigs.length} real presence(s)` + (suppressed ? ` · ${suppressed} suppressed (your prior decisions)` : "") + warn);
+      // darkweb coverage is always partial — the caveat travels with the result, so a
+      // quiet onion search is never mistaken for "nothing on the darkweb".
+      const dw = data?.darkweb?.note ? ` · onion: ${data.darkweb.note}` : "";
+      setScanMsg(`${sigs.length} real presence(s)` + (suppressed ? ` · ${suppressed} suppressed (your prior decisions)` : "") + warn + dw);
     } catch {
       setScanMsg("network unavailable");
     } finally {
@@ -1110,6 +1146,7 @@ export default function OrbitBoard() {
                 <button className="menu-item" onClick={() => { setBarMenu(null); deepScan(); }}><b>Deep scan</b><span>3000+ sites via the collector worker</span></button>
                 <button className="menu-item" onClick={() => { setBarMenu(null); imageForensics(); }}><b>Image metadata</b><span>EXIF / GPS from a photo URL</span></button>
                 <button className="menu-item" disabled={faceBusy} onClick={() => { setBarMenu(null); faceMatch(); }}><b>Face match</b><span>Same person across different photos</span></button>
+                <button className="menu-item" onClick={() => { setBarMenu(null); openOnion(); }}><b>Open hidden service</b><span>Retrieve a .onion through Tor → emails, wallets, keys, handles</span></button>
                 <button className="menu-item" disabled={monitoring} onClick={() => { setBarMenu(null); runMonitor(); }}><b>Monitor changes</b><span>Re-scan and diff since last snapshot</span></button>
               </div>
             )}
@@ -1244,9 +1281,16 @@ export default function OrbitBoard() {
                   <input value={settings.caseId || ""} placeholder="op-2026-014" onChange={(e) => updateSettings({ caseId: e.target.value })} />
                 </label>
               </div>
-              <label className="add-field"><span>outbound proxy (http/socks5, incl. Tor)</span>
+              <label className="add-field"><span>outbound proxy — socks5:// for Tor and .onion, http:// otherwise</span>
                 <input value={settings.proxy || ""} placeholder="socks5://127.0.0.1:9050" onChange={(e) => updateSettings({ proxy: e.target.value })} />
               </label>
+              <div className="api-free"><span>Tor / hidden services</span> — Test asks check.torproject.org whether the request really left through Tor. <PingDot svc="tor" /></div>
+              <div className="api-note">
+                Without a SOCKS5 proxy, darkweb search still runs against the clearnet-reachable index (Ahmia) and the
+                onion-only engines are reported as <b>skipped</b>, never as &quot;nothing found&quot;. A <b>.onion</b> request is
+                refused rather than attempted: the DNS lookup alone would leak the address. If a proxy is set and cannot be
+                built, requests are blocked instead of quietly going out direct.
+              </div>
               <div className="add-cols">
                 <label className="add-field"><span>operator (audit)</span>
                   <input value={settings.operator || ""} placeholder="your identifier" onChange={(e) => updateSettings({ operator: e.target.value })} />
@@ -1386,6 +1430,24 @@ export default function OrbitBoard() {
               <li><b>Image metadata</b> — pull EXIF / GPS from any photo URL.</li>
               <li><b>Face match</b> — find the same person across different photos.</li>
               <li><b>Monitor changes</b> — re-scan and see what appeared, vanished or changed.</li>
+              <li><b>Open hidden service</b> — retrieve a .onion through Tor and harvest the emails, wallets, keys and handles published on it.</li>
+            </ul>
+
+            <div className="guide-sect">Darkweb and .onion</div>
+            <div className="guide-lead">
+              Darkweb search runs on every scan and needs nothing installed: the onion indexes reachable from
+              the clearnet are queried directly. What it finds are <b>mentions</b> — a selector appearing in an
+              index entry is never treated as attribution, only verbatim matches become nodes, and they stay at
+              WEAK until something independent corroborates them.
+            </div>
+            <ul className="guide-list">
+              <li><b>Without Tor</b> — Ahmia is queried; the onion-only engines are reported as <i>skipped</i>. The
+                scan message always states what was and was not covered, so quiet is never read as &quot;nothing there&quot;.</li>
+              <li><b>With Tor</b> — set a SOCKS5 proxy in the API panel (Tor: <b>socks5://127.0.0.1:9050</b>, Tor
+                Browser: <b>:9150</b>) and Test it. Torch and Haystak join in, Ahmia is reached through its onion
+                mirror, and you can open a specific hidden service to harvest addresses, keys and handles from it.</li>
+              <li><b>A .onion request without Tor is refused, not attempted</b> — the DNS lookup alone would tell
+                your resolver what you were looking for.</li>
             </ul>
 
             <div className="guide-sect">Add your own findings</div>

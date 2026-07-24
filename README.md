@@ -158,6 +158,14 @@ Finding nodes isn't the point; *identifying the person* is. The **DOSSIER** cons
 
 **Breach search (IntelX).** Set `INTELX_API_KEY` (freemium) on Vercel to enable the **Intelligence X** app — a scan then also searches leaks/pastes/darkweb for the identifier and adds ⚠ leak nodes (sensitive: use under a legal basis; credentials are never redistributed).
 
+**Darkweb / .onion.** Every scan queries the onion search indexes reachable from the clearnet (Ahmia), so darkweb discovery works with nothing installed. Configure a **SOCKS5 proxy** (Tor: `socks5://127.0.0.1:9050`, or `docker compose --profile tor up`) in the API panel or `OCTOPUS_PROXY`, and the onion-only engines (Torch, Haystak) join in, Ahmia is reached through its onion mirror, and **TOOLS → Open hidden service** retrieves a specific `.onion` to harvest the emails, wallets, keys and handles published on it.
+
+Three properties matter more than the coverage:
+
+- **Only verbatim matches become nodes**, never above **WEAK**, each carrying an explicit "attribution not established" caveat. An index mention is not evidence that the person owns, runs or visited a service.
+- **Coverage is stated, not implied.** The scan reports which engines answered and which were skipped for lack of Tor, so silence is never read as "nothing on the darkweb".
+- **A `.onion` request without Tor is refused, not attempted** — the DNS lookup alone would hand your resolver the address. Likewise, if a proxy is configured and cannot be used, requests are **blocked** rather than quietly sent direct. Node's `fetch` cannot use a proxy at all, so Octopus speaks SOCKS5/HTTP-CONNECT over its own socket (`lib/socks.ts`, `lib/proxyfetch.ts`), always resolving hostnames **at the proxy**.
+
 **Grounded LLM brief (optional).** In the dossier, **✦ SYNTHESIZE** produces a short intelligence brief from the evidence — provider-agnostic (OpenAI-compatible: Ollama, Groq, OpenRouter, Together…). Set `LLM_API_URL` (base, e.g. `http://host:11434/v1`), `LLM_MODEL`, and optionally `LLM_API_KEY`. The prompt enforces the anti-hallucination discipline (grounded to the collected evidence, every claim cited in `[brackets]`, doubt-biased, no invented facts) — see [`docs/llm-correlation.md`](docs/llm-correlation.md). Disabled gracefully when unset.
 
 Every brief is then **verified deterministically** (no second LLM): each `[citation]` is checked against the real sources on the board, and any email / @alias / phone the brief states is checked against the evidence. The dossier shows a verdict — **✓ grounded** (all citations valid, no unsupported facts) or **⚠ warnings** listing the unknown citations and the facts *not in evidence*. So even if a model drifts, a hallucinated name-source or invented email is caught and shown, not trusted.

@@ -9,12 +9,16 @@
 // This module fixes the three observable dimensions:
 //   WHO   — a realistic browser identity, STABLE per case (erratic UAs inside one case
 //           look more anomalous than a consistent one) but DIFFERENT across cases.
-//   WHERE — an outbound proxy (HTTP/SOCKS, incl. Tor for .onion), configurable per case.
+//   WHERE — an outbound proxy (HTTP CONNECT or SOCKS; SOCKS is what Tor speaks, and is
+//           therefore what makes .onion reachable), configurable per case. This module
+//           only decides WHETHER a proxy is usable; lib/proxyfetch does the transport.
 //   WHEN  — jitter, so requests do not arrive on a machine cadence.
 //
 // Plus a NO-TOUCH posture: in sensitive work you must be able to research a target
 // without ever contacting infrastructure the target can observe. `touchPolicy` blocks
 // direct requests to target-owned hosts and permits only third-party/archival sources.
+
+import { isSocksUrl, parseSocks } from "./socks";
 
 export type Posture = "direct" | "careful" | "no-touch";
 
@@ -127,6 +131,8 @@ const TARGET_OBSERVABLE = [
 const SAFE_SOURCES = [
   /(^|\.)rdap\.org$/i, /(^|\.)crt\.sh$/i, /(^|\.)dns\.google$/i, /(^|\.)archive\.org$/i,
   /(^|\.)hudsonrock\.com$/i, /(^|\.)intelx\.io$/i, /(^|\.)openstreetmap\.org$/i,
+  // onion index: a third-party crawl, so querying it tells the indexed service nothing
+  /(^|\.)ahmia\.fi$/i,
 ];
 
 export interface TouchVerdict { allowed: boolean; reason?: string }
@@ -155,31 +161,34 @@ export function archiveUrl(url: string): string {
   return `https://web.archive.org/web/2/${url}`;
 }
 
-// ---- proxy dispatcher -------------------------------------------------------
+// ---- proxy ------------------------------------------------------------------
 
-let dispatcherCache: { key: string; dispatcher: any } | null = null;
+export type ProxyKind = "none" | "socks" | "http" | "invalid";
 
 /**
- * Build an undici dispatcher for the configured proxy. Undici ships with Node and
- * Next, so this needs no dependency; if it is unavailable we degrade to direct
- * egress rather than failing the scan (and the caller is told, so posture is never
- * silently downgraded without a trace).
+ * Classify the configured proxy. Transport lives in lib/proxyfetch; this is only the
+ * question "what did the analyst ask for, and can we honour it".
  */
-export async function proxyDispatcher(proxy: string): Promise<any | null> {
-  if (!proxy) return null;
-  if (dispatcherCache?.key === proxy) return dispatcherCache.dispatcher;
-  try {
-    // undici ships inside Node/Next, but it is not a declared dependency — resolve it
-    // at runtime so a build without it still compiles and simply runs direct.
-    const undici: any = await import(/* webpackIgnore: true */ "undici" as any);
-    const ProxyAgent = undici?.ProxyAgent;
-    if (!ProxyAgent) return null;
-    const dispatcher = new ProxyAgent(proxy);
-    dispatcherCache = { key: proxy, dispatcher };
-    return dispatcher;
-  } catch {
-    return null;
+export function proxyKind(proxy: string): { kind: ProxyKind; error?: string } {
+  if (!proxy) return { kind: "none" };
+  if (isSocksUrl(proxy)) {
+    return parseSocks(proxy) ? { kind: "socks" } : { kind: "invalid", error: "unparsable SOCKS proxy URL" };
   }
+  try {
+    const u = new URL(proxy);
+    if (u.protocol === "http:" || u.protocol === "https:") return { kind: "http" };
+    return { kind: "invalid", error: `unsupported proxy scheme ${u.protocol}` };
+  } catch {
+    return { kind: "invalid", error: "unparsable proxy URL" };
+  }
+}
+
+/**
+ * True when the configured proxy can reach hidden services. Only SOCKS can: an HTTP
+ * CONNECT proxy has no way to resolve .onion, and Tor speaks SOCKS and nothing else.
+ */
+export function torCapable(proxy: string): boolean {
+  return proxyKind(proxy).kind === "socks";
 }
 
 export function jitter(ms: number): Promise<void> {

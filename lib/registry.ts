@@ -58,6 +58,7 @@ export const BUILTIN_APPS: AppDef[] = [
   { id: "geo", name: "Geo resolve", category: "Correlation", kind: "builtin", input: "both", status: "free", desc: "Geocode locations (Nominatim) + reward locations several sources agree on. Powers the map." },
   { id: "variants", name: "Handle variants", category: "Coverage", kind: "builtin", input: "username", status: "free", desc: "Also search plausible variants of the handle (separators, initials, trailing digits). Hits are scored strictly weaker than the exact match — the link stays unproven until corroborated." },
   { id: "corpus", name: "Local corpora", category: "Leaks", kind: "builtin", input: "both", status: "free", desc: "Silent search of datasets you already hold (breach dumps, archives). Nothing leaves the machine and the source is never told you looked. Credentials are redacted at ingest." },
+  { id: "darkweb", name: "Darkweb / .onion", category: "Leaks", kind: "builtin", input: "both", status: "free", desc: "Onion indexes (Ahmia clearnet; Torch/Haystak when a Tor SOCKS5 proxy is set in the API panel). Only verbatim matches become nodes, never above WEAK — an index mention is not attribution. A .onion request without Tor is refused, not attempted." },
   { id: "domain", name: "Domain / infra", category: "Infrastructure", kind: "builtin", input: "domain", status: "free", desc: "Domain enrichment (RDAP registrant, DNS, subdomains via crt.sh, hosting geo) that feeds the identity graph. Also enriches a personal site found in a profile." },
 ];
 
@@ -84,6 +85,8 @@ export const MANUAL_APPS: AppDef[] = [
   { id: "shodan", name: "Shodan", category: "Infra", kind: "manual", input: "domain", status: "freemium", url: "https://www.shodan.io/search?query={seed}", desc: "Exposed devices/services search." },
   { id: "crtsh", name: "crt.sh", category: "Infra", kind: "manual", input: "domain", status: "free", url: "https://crt.sh/?q={seed}", desc: "Certificate transparency → subdomains." },
   { id: "intelx", name: "Intelligence X", category: "Leaks", kind: "manual", input: "both", status: "freemium", url: "https://intelx.io/?s={seed}", desc: "Leaks, pastes, darkweb, historical data." },
+  { id: "ahmia", name: "Ahmia", category: "Leaks", kind: "manual", input: "both", status: "free", url: "https://ahmia.fi/search/?q={seed}", desc: "Onion-service search index, reachable from the clearnet." },
+  { id: "onionsearch", name: "Tor Browser", category: "Leaks", kind: "manual", input: "both", status: "free", url: "https://www.torproject.org/download/", desc: "Needed to open .onion results by hand; also provides the SOCKS5 port Octopus uses." },
 ];
 
 export const ALL_APPS: AppDef[] = [...BUILTIN_APPS, ...MANUAL_APPS];

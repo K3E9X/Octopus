@@ -3,6 +3,7 @@
 #
 #   docker compose up --build            # app + deep-scan collector
 #   docker compose --profile db up --build   # + a local Postgres for durable cases
+#   docker compose --profile tor up --build  # + a Tor daemon, so .onion actually works
 #
 # Then open http://localhost:3000
 #
@@ -28,6 +29,11 @@ services:
       LLM_API_URL: "${LLM_API_URL:-}"
       LLM_MODEL: "${LLM_MODEL:-}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
+      # OPSEC egress. With the tor profile up, this reaches the tor service below and
+      # hidden services become reachable; leave empty for direct egress. It can also be
+      # set per-case in the API panel, which overrides this.
+      OCTOPUS_PROXY: "${OCTOPUS_PROXY:-}"
+      OCTOPUS_POSTURE: "${OCTOPUS_POSTURE:-}"
     depends_on:
       - collector
     restart: unless-stopped
@@ -54,6 +60,17 @@ services:
       - "5432:5432"
     volumes:
       - octopus_pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # optional: a Tor daemon exposing a SOCKS5 port, which is what makes .onion
+  # reachable at all. Enable with:  docker compose --profile tor up
+  # then set the proxy to socks5://tor:9050 (in-compose) or socks5://127.0.0.1:9050
+  # (from the host) — env var above, or the API panel, where Test proves the circuit.
+  tor:
+    profiles: ["tor"]
+    image: dperson/torproxy:latest
+    ports:
+      - "9050:9050"
     restart: unless-stopped
 
 volumes:

@@ -11,7 +11,9 @@
 //    pivots stop re-fetching and stop burning rate limits.
 
 import { cacheStore } from "./cachestore";
-import { egressIdentity, egressHeaders, touchPolicy, proxyDispatcher, jitter, type EgressConfig, type Posture } from "./egress";
+import { egressIdentity, egressHeaders, touchPolicy, proxyKind, torCapable, jitter, type EgressConfig, type Posture } from "./egress";
+import { isOnion, onionVersion } from "./socks";
+import { proxyFetch } from "./proxyfetch";
 
 export type FetchOutcome = "ok" | "not-found" | "rate-limited" | "error" | "blocked-by-policy";
 
@@ -30,6 +32,10 @@ const DEFAULT_TTL = 120_000; // long enough for a multi-hop pivot, short enough 
 let AMBIENT: EgressConfig = {};
 export function setEgress(cfg: EgressConfig): void { AMBIENT = cfg || {}; }
 export function currentPosture(): Posture { return egressIdentity(AMBIENT).posture; }
+/** The proxy in force for this scan ("" = direct). */
+export function currentProxy(): string { return egressIdentity(AMBIENT).proxy; }
+/** True when this scan can reach hidden services (a SOCKS proxy is configured). */
+export function torActive(): boolean { return torCapable(currentProxy()); }
 
 export async function clearNetCache(): Promise<void> { await cacheStore().clear(); }
 
@@ -56,29 +62,69 @@ export interface FetchOpts {
   egress?: EgressConfig;
 }
 
+/**
+ * Can this request legally leave, given where it is going and what transport we have?
+ * Split out from rawFetch so the rules are testable without a socket.
+ *
+ * The .onion rules are the sharp ones. A hidden-service request with no SOCKS proxy
+ * cannot succeed — but far worse, attempting it performs a DNS lookup for the address,
+ * handing the analyst's resolver (and ISP) the exact thing they were trying to look at
+ * unobserved. So it fails closed, loudly, instead of "just failing".
+ */
+export function transportPolicy(url: string, proxy: string): { allowed: boolean; reason?: string } {
+  if (!isOnion(url)) return { allowed: true };
+  if (!torCapable(proxy)) {
+    return {
+      allowed: false,
+      reason: "hidden service requires a SOCKS5 proxy (Tor) — refusing to attempt it over the clearnet, the DNS lookup alone would leak the address",
+    };
+  }
+  if (onionVersion(url) === "v2") {
+    return { allowed: false, reason: "v2 onion address — the Tor network stopped supporting these in 2021, the service is unreachable by design" };
+  }
+  if (onionVersion(url) === "invalid") {
+    return { allowed: false, reason: "malformed onion address" };
+  }
+  return { allowed: true };
+}
+
 async function rawFetch(url: string, opts: FetchOpts): Promise<FetchResult<any>> {
   const id = egressIdentity(opts.egress || AMBIENT);
 
-  const verdict = touchPolicy(url, id.posture);
+  // Hidden services are exempt from the no-touch host rules but not from transport:
+  // reaching one THROUGH Tor tells its operator only that "someone via Tor" looked,
+  // which is precisely the anonymity no-touch is trying to buy.
+  const onion = isOnion(url);
+  const verdict = onion ? { allowed: true } : touchPolicy(url, id.posture);
   if (!verdict.allowed) {
     return { data: null, outcome: "blocked-by-policy", policyReason: verdict.reason };
   }
 
+  const transport = transportPolicy(url, id.proxy);
+  if (!transport.allowed) {
+    return { data: null, outcome: "blocked-by-policy", policyReason: transport.reason };
+  }
+
   await jitter(id.jitterMs);
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 6000);
-  try {
-    const init: any = {
-      signal: ctrl.signal,
-      headers: { ...egressHeaders(id, opts.accept === "html" ? "html" : "application/json"), ...(opts.headers || {}) },
-      cache: "no-store",
-      redirect: "follow",
-    };
-    const dispatcher = await proxyDispatcher(id.proxy);
-    if (dispatcher) init.dispatcher = dispatcher;
+  // Fail CLOSED on a misconfigured proxy. The analyst asked for that egress path for a
+  // reason; sending the request direct instead would leak from their real address.
+  const pk = proxyKind(id.proxy);
+  if (pk.kind === "invalid") {
+    return { data: null, outcome: "blocked-by-policy", policyReason: `proxy unusable (${pk.error}) — refusing to send this request direct` };
+  }
 
-    const res = await fetch(url, init);
+  const timeoutMs = opts.timeoutMs ?? 6000;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const headers = { ...egressHeaders(id, opts.accept === "html" ? "html" : "application/json"), ...(opts.headers || {}) };
+
+    // Two transports. Direct uses the platform fetch; proxied goes through our own
+    // HTTP-over-socket client, because Node's fetch has no way to use a proxy at all.
+    const res = pk.kind === "none"
+      ? await fetch(url, { signal: ctrl.signal, headers, cache: "no-store", redirect: "follow" })
+      : await proxyFetch(url, id.proxy, { headers, timeoutMs });
     if (isRateLimited(res)) return { data: null, outcome: "rate-limited", status: res.status };
     if (res.status === 404 || res.status === 410) return { data: null, outcome: "not-found", status: res.status };
     if (!res.ok) return { data: null, outcome: "error", status: res.status };

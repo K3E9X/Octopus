@@ -13,7 +13,7 @@ export type Tier = "verified" | "probable" | "possible" | "weak" | "contradicted
 // inference, or derivation ; contra = evidence AGAINST the link ; everything else =
 // soft (observed but not proof).
 const HARD_RE = /matching avatar|matching face|rare handle reused|declared|pgp|fingerprint|cross-link|commit email|breach|leak/i;
-const WEAK_RE = /presence detected|derived|near-match|account age|timezone|writing style|generated|candidate|partial|speculative|not a valid|name query|owner lookup|sensitive source|initials|age consistency|self-reported/i;
+const WEAK_RE = /presence detected|derived|near-match|account age|timezone|writing style|generated|candidate|partial|speculative|not a valid|name query|owner lookup|sensitive source|initials|age consistency|self-reported|darkweb mention|stale record/i;
 // A real investigation must be able to say NO. These lower the tier instead of raising it.
 const CONTRA_RE = /divergent|different face|contradict|inconsistent|mismatch|conflicting|incompatible|refuted|disproved/i;
 

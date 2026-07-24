@@ -15,7 +15,8 @@ import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { looksLikeDomain, enrichDomain } from "@/lib/domain";
 import { usernameVariants } from "@/lib/variants";
 import { sharedHandleEvidence, handleRarity } from "@/lib/rarity";
-import { newHealth, healthNote, setEgress } from "@/lib/netfetch";
+import { newHealth, healthNote, setEgress, torActive } from "@/lib/netfetch";
+import { darkwebSearch, darkwebSignals } from "@/lib/darkweb";
 import { recordQuery, minimizationReport } from "@/lib/audit";
 import { searchCorpus, corpusSignals } from "@/lib/corpus";
 import { scoreEvidence } from "@/lib/scoring";
@@ -342,6 +343,7 @@ export async function GET(req: NextRequest) {
   const variantsOn = !enabled || enabled.has("variants");
   const collectedAt = new Date().toISOString(); // chain of custody: one stamp per scan
   const health = newHealth(); // records rate-limits/failures so coverage stays honest
+  let darkwebNote = ""; // what the onion indexes did and did not cover
   try {
     let apiProfiles: RawProfile[];
     let wmnHits: RawProfile[];
@@ -523,6 +525,19 @@ export async function GET(req: NextRequest) {
         const hits = await searchCorpus(isEmail ? q : matchTarget);
         if (hits.length) signals.push(...corpusSignals(hits, collectedAt));
       } catch { /* corpus is optional */ }
+    }
+
+    // --- darkweb / hidden services ---
+    // Works without Tor (clearnet-reachable index), works better with it. Only verbatim
+    // matches become nodes, and never above WEAK: an index entry is a mention, not
+    // attribution. The coverage caveat is attached to the scan so the UI cannot imply
+    // "we searched the dark web".
+    if (!enabled || enabled.has("darkweb")) {
+      try {
+        const dw = await darkwebSearch(isEmail ? q : matchTarget, { tor: torActive() });
+        darkwebNote = dw.note;
+        signals.push(...darkwebSignals(dw, isEmail ? q : matchTarget, collectedAt));
+      } catch { /* onion indexes are best-effort by nature */ }
     }
 
     // OPTIONAL bonus: Recorded Future (enterprise) — only if a key is configured.
@@ -795,6 +810,9 @@ export async function GET(req: NextRequest) {
       // honesty: a rate-limited source did NOT report "no account" — it refused to
       // answer. Surfacing this is what stops a silent false negative.
       health: { rateLimited: health.rateLimited, failed: health.failed, blocked: health.blocked, note: healthNote(health) },
+      // darkweb coverage is always partial — say so rather than let silence read as
+      // "nothing is out there". Includes which engines were skipped for lack of Tor.
+      darkweb: darkwebNote ? { note: darkwebNote, tor: torActive() } : undefined,
       // minimization: how much of this graph is incidental third parties, which must
       // be access-limited and aged off rather than retained as ordinary intelligence
       minimization: minimizationReport(signals),

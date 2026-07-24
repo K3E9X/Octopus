@@ -17,6 +17,7 @@ export type LineageRoot =
   | "image"            // avatar bytes: pHash, EXIF and face all derive from ONE file
   | "registry"         // WHOIS/RDAP/DNS — authoritative registries
   | "breach"           // leak/infostealer corpora
+  | "darkweb"          // onion index entries / hidden-service pages
   | "platform-api"     // an official API answering about itself
   | "analyst"          // the human's own attestation
   | "derived"          // computed by us from other evidence (never independent)
@@ -35,6 +36,9 @@ export function lineageOf(name: string, source = ""): LineageRoot {
   if (/analyst|manual capture|evidence snapshot/.test(n + s)) return "analyst";
   if (/avatar|face|exif|gps in image|camera|photo taken|software/.test(n)) return "image";
   if (/declared|verified account|linked account/.test(n)) return "declared-link";
+  // darkweb before breach: onion indexes surface leak-site pages, and an index entry is
+  // its own kind of observation — mirrored across every engine that crawled it.
+  if (/onion|darkweb|hidden service/.test(n + s)) return "darkweb";
   if (/breach|leak|infostealer|credential exposure|compromis/.test(n + s)) return "breach";
   if (/rdap|whois|registrant|dns|subdomain|mail server|resolves to ip|hosting|certificate/.test(n + s)) return "registry";
   if (/timezone|activity/.test(n)) return "temporal";

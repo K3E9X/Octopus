@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveLLM, llmChat } from "@/lib/llmconfig";
+import { torCapable } from "@/lib/egress";
+import { proxyFetch } from "@/lib/proxyfetch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +55,24 @@ export async function POST(req: NextRequest) {
       const r = await withTimeout((s) => fetch(`${url}/health${tok}`, { signal: s, cache: "no-store" }), 15000);
       if (!r) return NextResponse.json({ ok: false, detail: "unreachable (cold start? retry)" });
       return NextResponse.json({ ok: r.ok, detail: r.ok ? "worker healthy" : `HTTP ${r.status}` });
+    }
+
+    // Tor: a real end-to-end proof, not a port check. We ask the Tor Project whether
+    // the request that just arrived came out of the Tor network. If IsTor is false, the
+    // proxy "works" but is not Tor — which an analyst must know before touching a
+    // hidden service.
+    if (service === "tor") {
+      const proxy = String(cfg.proxy || "");
+      if (!proxy) return NextResponse.json({ ok: false, detail: "set an outbound proxy first (Tor: socks5://127.0.0.1:9050)" });
+      if (!torCapable(proxy)) return NextResponse.json({ ok: false, detail: "not a SOCKS proxy — hidden services need socks5://, an http:// proxy cannot reach .onion" });
+      const r = await withTimeout(() => proxyFetch("https://check.torproject.org/api/ip", proxy, {
+        headers: { "User-Agent": UA }, timeoutMs: 30000,
+      }), 30000);
+      if (!r) return NextResponse.json({ ok: false, detail: "no answer through the proxy (is Tor running on that port?)" });
+      if (!r.ok) return NextResponse.json({ ok: false, detail: `HTTP ${r.status} through the proxy` });
+      const j: any = await r.json().catch(() => null);
+      if (j?.IsTor === true) return NextResponse.json({ ok: true, detail: `Tor circuit up · exit ${j.IP || "unknown"} · .onion reachable` });
+      return NextResponse.json({ ok: false, detail: `proxy works but this is NOT Tor (exit ${j?.IP || "unknown"}) — .onion will fail` });
     }
 
     if (service === "hudsonrock") {
