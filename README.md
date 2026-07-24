@@ -158,6 +158,8 @@ Finding nodes isn't the point; *identifying the person* is. The **DOSSIER** cons
 
 **Breach search (IntelX).** Set `INTELX_API_KEY` (freemium) on Vercel to enable the **Intelligence X** app — a scan then also searches leaks/pastes/darkweb for the identifier and adds ⚠ leak nodes (sensitive: use under a legal basis; credentials are never redistributed).
 
+**Local corpora (data you hold).** **DATA → Local corpora** loads datasets you already have — a breach dump, a forum archive, an exported Telegram channel — and every scan then searches them **silently**: nothing leaves the machine, and no source is told you looked. The format is detected (plain lines, CSV/TSV with a header, JSON, JSONL), credentials are redacted at ingest, ingestion is chunked so a large file goes through, and rows are written in blocks rather than one statement each. Search an exact selector to attribute, or `@domain.com` to sweep a domain — a sweep returns records about **different people**, so it is shown as a lead list and never becomes a node. Corpora persist with `POSTGRES_URL`; without it they live in memory for the session, and the panel says so.
+
 **Darkweb / .onion.** Every scan queries the onion search indexes reachable from the clearnet (Ahmia), so darkweb discovery works with nothing installed. Configure a **SOCKS5 proxy** (Tor: `socks5://127.0.0.1:9050`, or `docker compose --profile tor up`) in the API panel or `OCTOPUS_PROXY`, and the onion-only engines (Torch, Haystak) join in, Ahmia is reached through its onion mirror, and **TOOLS → Open hidden service** retrieves a specific `.onion` to harvest the emails, wallets, keys and handles published on it.
 
 Three properties matter more than the coverage:

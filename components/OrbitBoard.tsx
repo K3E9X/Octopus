@@ -85,6 +85,80 @@ export default function OrbitBoard() {
   const deepRef = useRef(false);
   const [deepStatus, setDeepStatus] = useState<string | null>(null);
 
+  // --- local corpora: datasets the analyst already holds ---
+  const [corpusOpen, setCorpusOpen] = useState(false);
+  const [corpusStats, setCorpusStats] = useState<{ corpora: { name: string; records: number }[]; total: number; persistent: boolean } | null>(null);
+  const [corpusName, setCorpusName] = useState("");
+  const [corpusText, setCorpusText] = useState("");
+  const [corpusBusy, setCorpusBusy] = useState(false);
+  const [corpusMsg, setCorpusMsg] = useState("");
+  const [corpusQuery, setCorpusQuery] = useState("");
+  const [corpusHits, setCorpusHits] = useState<{ hits: any[]; mode: string; note: string; signals: any[] } | null>(null);
+  const corpusFileRef = useRef<HTMLInputElement>(null);
+
+  async function loadCorpusStats() {
+    try {
+      const r = await fetch("/api/corpus");
+      setCorpusStats(await r.json());
+    } catch { setCorpusStats(null); }
+  }
+
+  // Ingestion is chunked: a dump can be tens of megabytes, and one giant request body
+  // is what makes a serverless deploy reject the whole thing.
+  async function ingestCorpusText() {
+    const name = corpusName.trim();
+    if (!name) { setCorpusMsg("name the corpus first — provenance is part of the evidence"); return; }
+    if (!corpusText.trim()) { setCorpusMsg("nothing to ingest"); return; }
+    setCorpusBusy(true);
+    setCorpusMsg("ingesting…");
+    try {
+      const structured = /^\s*[[{]/.test(corpusText);
+      // structured files must go whole (they are one document); line dumps are chunked
+      const chunks: string[] = [];
+      if (structured) chunks.push(corpusText);
+      else {
+        const lines = corpusText.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i += 4000) chunks.push(lines.slice(i, i + 4000).join("\n"));
+      }
+      let parsed = 0, stored = 0, note = "";
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await fetch("/api/corpus", {
+          method: "POST",
+          headers: { "content-type": "application/json", ...tradecraftHeaders() },
+          body: JSON.stringify({ corpus: name, text: chunks[i] }),
+        });
+        const d = await res.json();
+        if (!res.ok) { setCorpusMsg(d?.error || "ingest failed"); setCorpusBusy(false); return; }
+        parsed += d.parsed || 0; stored += d.stored || 0; note = d.note || note;
+        setCorpusMsg(`ingesting… ${i + 1}/${chunks.length} chunk(s), ${stored} record(s)`);
+      }
+      setCorpusText("");
+      setCorpusMsg(`${stored} record(s) indexed from ${parsed} parsed${note ? ` · ${note}` : ""}`);
+      loadCorpusStats();
+    } catch {
+      setCorpusMsg("ingest failed");
+    } finally {
+      setCorpusBusy(false);
+    }
+  }
+
+  async function searchCorpusUI() {
+    const q = corpusQuery.trim();
+    if (!q) return;
+    setCorpusBusy(true);
+    setCorpusHits(null);
+    try {
+      const r = await fetch(`/api/corpus?q=${encodeURIComponent(q)}&limit=100`, { headers: tradecraftHeaders() });
+      const d = await r.json();
+      setCorpusHits({ hits: d.hits || [], mode: d.mode || "exact", note: d.note || "", signals: d.signals || [] });
+      setCorpusMsg(`${d.count || 0} record(s) · ${d.mode} match`);
+    } catch {
+      setCorpusMsg("search failed");
+    } finally {
+      setCorpusBusy(false);
+    }
+  }
+
   async function deepScan() {
     if (deepRef.current) return;
     const q = seedRef.current.trim();
@@ -1163,6 +1237,7 @@ export default function OrbitBoard() {
                 <button className="menu-item" onClick={() => { setBarMenu(null); exportCurrent(); }}><b>Export JSON</b><span>Download the case file</span></button>
                 <button className="menu-item" onClick={() => { setBarMenu(null); exportGraphML(); }}><b>Export graph (GraphML)</b><span>Open in flowsint / Maltego / Gephi</span></button>
                 <button className="menu-item" onClick={() => { setBarMenu(null); fileRef.current?.click(); }}><b>Import JSON</b><span>Load a case file</span></button>
+                <button className="menu-item" onClick={() => { setBarMenu(null); setCorpusOpen(true); loadCorpusStats(); }}><b>Local corpora</b><span>Load and search datasets you hold — searched silently, offline</span></button>
               </div>
             )}
           </div>
@@ -1238,6 +1313,104 @@ export default function OrbitBoard() {
           </div>
           <div className="hint">Enter a seed (username, email, phone, name or domain) and press INVESTIGATE&nbsp;&nbsp;/&nbsp;&nbsp;click a node for its evidence&nbsp;&nbsp;/&nbsp;&nbsp;right-click to pivot&nbsp;&nbsp;/&nbsp;&nbsp;new here? open GUIDE</div>
         </>
+      )}
+
+      {corpusOpen && (
+        <div className="add-overlay" onClick={() => setCorpusOpen(false)}>
+          <div className="apicard" onClick={(e) => e.stopPropagation()}>
+            <button className="insp-close" onClick={() => setCorpusOpen(false)} aria-label="close">✕</button>
+            <div className="insp-plat">LOCAL CORPORA · data you hold</div>
+            <div className="add-sub">
+              Everything else in Octopus queries the live web, which tells the source you looked and vanishes when
+              the page does. A corpus is a dataset you already have — a breach dump, a forum archive, an exported
+              channel. Searching it is <b>silent</b>: nothing leaves this machine and no source is told you looked.
+              Credentials are redacted at ingest; hold this material only under a lawful basis, and never redistribute it.
+            </div>
+
+            <div className="guide-sect">Load a dataset</div>
+            <div className="add-cols">
+              <label className="add-field"><span>corpus name (provenance — part of the evidence)</span>
+                <input value={corpusName} placeholder="collection1-2019 / forum-x-archive" onChange={(e) => setCorpusName(e.target.value)} />
+              </label>
+              <div className="api-testcol">
+                <button className="ping-btn" onClick={() => corpusFileRef.current?.click()}>Choose file</button>
+              </div>
+            </div>
+            <input
+              ref={corpusFileRef} type="file" accept=".txt,.csv,.tsv,.json,.jsonl,.log,text/plain" style={{ display: "none" }}
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                if (!corpusName.trim()) setCorpusName(f.name.replace(/\.[a-z0-9]+$/i, ""));
+                setCorpusMsg(`reading ${f.name}…`);
+                const text = await f.text();
+                setCorpusText(text);
+                setCorpusMsg(`${f.name} loaded (${Math.round(text.length / 1024)} KB) — review, then Ingest`);
+                e.target.value = "";
+              }}
+            />
+            <label className="add-field"><span>or paste records — plain lines, CSV/TSV with a header, JSON or JSONL (Telegram exports included); the format is detected</span>
+              <textarea
+                className="api-textarea" rows={6} value={corpusText.slice(0, 20000)}
+                placeholder={"user@example.com:hunter2\n+33612345678\nalias_87"}
+                onChange={(e) => setCorpusText(e.target.value)}
+              />
+            </label>
+            <div className="add-cols">
+              <button className="ping-btn" disabled={corpusBusy} onClick={ingestCorpusText}>{corpusBusy ? "working…" : "Ingest"}</button>
+              <div className="api-testcol">{corpusMsg && <span className="ping-res">{corpusMsg}</span>}</div>
+            </div>
+
+            <div className="guide-sect">Held corpora</div>
+            {corpusStats ? (
+              corpusStats.total ? (
+                <ul className="guide-list">
+                  {corpusStats.corpora.map((c) => <li key={c.name}><b>{c.name}</b> — {c.records.toLocaleString()} record(s)</li>)}
+                </ul>
+              ) : <div className="api-note">Nothing held yet.</div>
+            ) : <div className="api-note">…</div>}
+            {corpusStats && !corpusStats.persistent && (
+              <div className="api-note">
+                No database configured — corpora live in memory for this session only. Set <b>POSTGRES_URL</b> to keep them.
+              </div>
+            )}
+
+            <div className="guide-sect">Search (silent)</div>
+            <div className="add-cols">
+              <label className="add-field"><span>selector — an exact email/handle/phone, or <b>@domain.com</b> to sweep a domain</span>
+                <input
+                  value={corpusQuery} placeholder="marie.dubois@example.com"
+                  onChange={(e) => setCorpusQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") searchCorpusUI(); }}
+                />
+              </label>
+              <div className="api-testcol"><button className="ping-btn" disabled={corpusBusy} onClick={searchCorpusUI}>Search</button></div>
+            </div>
+            {corpusHits && (
+              <div>
+                {corpusHits.note && <div className="api-note">{corpusHits.note}</div>}
+                {corpusHits.hits.length === 0 && <div className="api-note">No record for this selector in the held corpora.</div>}
+                {corpusHits.hits.length > 0 && (
+                  <ul className="guide-list">
+                    {corpusHits.hits.slice(0, 50).map((h: any, i: number) => (
+                      <li key={i}><b>{h.selector}</b> <span className="cx-meta">({h.selectorType} · {h.corpus}{h.recordDate ? ` · ${h.recordDate}` : ""})</span><br /><span className="cx-meta">{h.content}</span></li>
+                    ))}
+                  </ul>
+                )}
+                {corpusHits.signals.length > 0 && (
+                  <button className="ping-btn" onClick={() => { for (const s of corpusHits.signals) addNodeRef.current(s); setCorpusOpen(false); flashMsg(`${corpusHits.signals.length} corpus node(s) added`); }}>
+                    Add {corpusHits.signals.length} node(s) to the board
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="api-note">
+              A domain or prefix sweep returns records about <b>different people</b> — it is a lead list, not an
+              identity. Only an exact-selector hit becomes a node, and it stays PROBABLE until something independent
+              corroborates it.
+            </div>
+          </div>
+        </div>
       )}
 
       {apiOpen && (() => {
@@ -1432,6 +1605,15 @@ export default function OrbitBoard() {
               <li><b>Monitor changes</b> — re-scan and see what appeared, vanished or changed.</li>
               <li><b>Open hidden service</b> — retrieve a .onion through Tor and harvest the emails, wallets, keys and handles published on it.</li>
             </ul>
+
+            <div className="guide-sect">Your own data (DATA → Local corpora)</div>
+            <div className="guide-lead">
+              Load datasets you already hold — a breach dump, a forum archive, an exported channel — and every scan
+              searches them <b>silently</b>: nothing leaves the machine and no source is told you looked. Plain lines,
+              CSV/TSV with a header, JSON and JSONL (Telegram exports included) are detected automatically; credentials
+              are redacted at ingest. Search an exact selector to attribute, or <b>@domain.com</b> to sweep a domain —
+              a sweep is a lead list about different people, so it never becomes a node.
+            </div>
 
             <div className="guide-sect">Darkweb and .onion</div>
             <div className="guide-lead">

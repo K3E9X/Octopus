@@ -80,12 +80,35 @@ export async function ingestCorpus(records: CorpusRecord[]): Promise<number> {
     await ensureSchema();
     const q = sql();
     if (!q) return 0;
-    // insert in modest batches — a dump can be large and we must not blow the statement
+    // One statement per row means 50 000 round trips for one dump — over an HTTP-based
+    // Postgres driver that is minutes of latency for seconds of work. Insert in blocks
+    // by passing parallel arrays and expanding them server-side with unnest().
     let n = 0;
-    for (const r of clean) {
-      await q`INSERT INTO octopus_corpus (corpus, selector, selector_type, content, record_date, ingested_at)
-              VALUES (${r.corpus}, ${r.selector}, ${r.selectorType}, ${r.content}, ${r.recordDate || null}, ${at})`;
-      n++;
+    const BLOCK = 500;
+    for (let i = 0; i < clean.length; i += BLOCK) {
+      const slice = clean.slice(i, i + BLOCK);
+      try {
+        await q`INSERT INTO octopus_corpus (corpus, selector, selector_type, content, record_date, ingested_at)
+                SELECT n, s, t, c, NULLIF(d, ''), ${at}
+                FROM unnest(
+                  ${slice.map((r) => r.corpus)}::text[],
+                  ${slice.map((r) => r.selector)}::text[],
+                  ${slice.map((r) => r.selectorType)}::text[],
+                  ${slice.map((r) => r.content)}::text[],
+                  ${slice.map((r) => r.recordDate || "")}::text[]
+                ) AS x(n, s, t, c, d)`;
+        n += slice.length;
+      } catch {
+        // array binding is driver-dependent; fall back to row-at-a-time rather than
+        // losing the dump. Slower, but the data lands.
+        for (const r of slice) {
+          try {
+            await q`INSERT INTO octopus_corpus (corpus, selector, selector_type, content, record_date, ingested_at)
+                    VALUES (${r.corpus}, ${r.selector}, ${r.selectorType}, ${r.content}, ${r.recordDate || null}, ${at})`;
+            n++;
+          } catch { /* skip the bad row, keep the rest */ }
+        }
+      }
     }
     return n;
   } catch {
@@ -93,16 +116,52 @@ export async function ingestCorpus(records: CorpusRecord[]): Promise<number> {
   }
 }
 
-/** Exact-selector search. Silent: nothing leaves the machine. */
-export async function searchCorpus(selector: string, limit = 25): Promise<CorpusHit[]> {
+export type CorpusMode = "exact" | "domain" | "prefix";
+
+/**
+ * How should this selector be matched? Exact is the default and the only one that
+ * yields an identity-grade hit; the other two are SWEEPS, and are labelled as such so
+ * a "10 hits at @company.com" result is never mistaken for ten hits on one person.
+ *
+ *   exact  — the selector as given
+ *   domain — "@company.com" or "company.com": every email at that domain
+ *   prefix — "marie_dub": every selector starting with it (handle families)
+ */
+export function corpusMode(selector: string, requested?: CorpusMode): CorpusMode {
+  if (requested) return requested;
+  const sel = selector.trim().toLowerCase();
+  if (sel.startsWith("@") && sel.includes(".")) return "domain";
+  return "exact";
+}
+
+/**
+ * Search the held corpora. Silent: nothing leaves the machine, and the source is never
+ * told we looked — the property that makes a corpus worth holding in the first place.
+ */
+export async function searchCorpus(selector: string, limit = 25, mode?: CorpusMode): Promise<CorpusHit[]> {
   const sel = selector.trim().toLowerCase();
   if (!sel) return [];
-  if (!dbEnabled) return MEM.filter((r) => r.selector === sel).slice(0, limit);
+  const m = corpusMode(sel, mode);
+  // a domain sweep is written as a suffix match on the email's host part
+  const domain = m === "domain" ? (sel.startsWith("@") ? sel : "@" + sel) : "";
+
+  if (!dbEnabled) {
+    const pred = m === "exact"
+      ? (r: CorpusHit) => r.selector === sel
+      : m === "domain"
+        ? (r: CorpusHit) => r.selectorType === "email" && r.selector.endsWith(domain)
+        : (r: CorpusHit) => r.selector.startsWith(sel);
+    return MEM.filter(pred).slice(0, limit);
+  }
   try {
     await ensureSchema();
     const q = sql();
     if (!q) return [];
-    const rows = await q`SELECT * FROM octopus_corpus WHERE selector = ${sel} ORDER BY id DESC LIMIT ${limit}`;
+    const rows = m === "exact"
+      ? await q`SELECT * FROM octopus_corpus WHERE selector = ${sel} ORDER BY id DESC LIMIT ${limit}`
+      : m === "domain"
+        ? await q`SELECT * FROM octopus_corpus WHERE selector_type = 'email' AND selector LIKE ${"%" + domain} ORDER BY id DESC LIMIT ${limit}`
+        : await q`SELECT * FROM octopus_corpus WHERE selector LIKE ${sel + "%"} ORDER BY id DESC LIMIT ${limit}`;
     return (rows as any[]).map((r) => ({
       corpus: r.corpus, selector: r.selector, selectorType: r.selector_type,
       content: r.content, recordDate: r.record_date || undefined, ingestedAt: Number(r.ingested_at),
@@ -163,6 +222,132 @@ export function parseDump(text: string, corpus: string, max = 50_000): CorpusRec
     if (out.length >= max) break;
   }
   return out;
+}
+
+/**
+ * Detect the format and parse accordingly. Real material does not arrive as tidy
+ * `email:password` lines: it arrives as a Telegram export, a CSV with a header, a
+ * JSONL scrape, or a database dump pasted as text. Making the analyst pre-convert it
+ * is how a corpus feature ends up unused.
+ */
+export function parseCorpus(text: string, corpus: string, max = 50_000): CorpusRecord[] {
+  const head = text.slice(0, 4096).trim();
+  if (!head) return [];
+
+  // JSON: a Telegram/Discord export object, or an array of records
+  if (head[0] === "{" || head[0] === "[") {
+    const asJson = parseJsonCorpus(text, corpus, max);
+    if (asJson.length) return asJson;
+    // JSONL: one object per line
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().startsWith("{"));
+    if (lines.length > 1) {
+      const out: CorpusRecord[] = [];
+      for (const line of lines) {
+        try { out.push(...recordsFromObject(JSON.parse(line), corpus)); } catch { /* skip */ }
+        if (out.length >= max) break;
+      }
+      if (out.length) return out.slice(0, max);
+    }
+  }
+
+  // CSV/TSV with a header naming the columns
+  const firstLine = text.split(/\r?\n/, 1)[0] || "";
+  if (/[;,\t]/.test(firstLine) && /\b(email|e-mail|mail|username|user|login|phone|tel|msisdn)\b/i.test(firstLine)) {
+    const csv = parseDelimited(text, corpus, max);
+    if (csv.length) return csv;
+  }
+
+  return parseDump(text, corpus, max);
+}
+
+function parseJsonCorpus(text: string, corpus: string, max: number): CorpusRecord[] {
+  let data: any;
+  try { data = JSON.parse(text); } catch { return []; }
+  const out: CorpusRecord[] = [];
+  // Telegram desktop export: { messages: [ { from, from_id, text, date } ] }
+  const rows: any[] = Array.isArray(data) ? data
+    : Array.isArray(data?.messages) ? data.messages
+    : Array.isArray(data?.records) ? data.records
+    : Array.isArray(data?.data) ? data.data
+    : [];
+  for (const row of rows) {
+    out.push(...recordsFromObject(row, corpus));
+    if (out.length >= max) break;
+  }
+  return out.slice(0, max);
+}
+
+const FIELD_MAP: { keys: RegExp; type: CorpusRecord["selectorType"] }[] = [
+  { keys: /^(e-?mail|mail|email_address)$/i, type: "email" },
+  { keys: /^(user(name)?|login|handle|nick(name)?|from|author|screen_?name)$/i, type: "username" },
+  { keys: /^(phone|tel|telephone|mobile|msisdn|number)$/i, type: "phone" },
+  { keys: /^(domain|host|site)$/i, type: "domain" },
+  { keys: /^(wallet|address|btc|eth)$/i, type: "wallet" },
+  { keys: /^(hash|password_hash|md5|sha1|sha256)$/i, type: "hash" },
+];
+
+/** Pull every recognisable selector out of one structured record. */
+function recordsFromObject(obj: any, corpus: string): CorpusRecord[] {
+  if (!obj || typeof obj !== "object") return [];
+  const out: CorpusRecord[] = [];
+  const date = String(obj.date || obj.timestamp || obj.created_at || "").slice(0, 32) || undefined;
+  // the record's own text, kept verbatim for custody but bounded
+  const body = typeof obj.text === "string" ? obj.text
+    : Array.isArray(obj.text) ? obj.text.map((p: any) => (typeof p === "string" ? p : p?.text || "")).join("")
+    : JSON.stringify(obj);
+  const content = body.length > 300 ? body.slice(0, 300) + "…" : body;
+
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v !== "string" && typeof v !== "number") continue;
+    const val = String(v).trim();
+    if (!val || val.length > 200) continue;
+    const hit = FIELD_MAP.find((f) => f.keys.test(k));
+    if (!hit) continue;
+    // a "from" field holding a display name is not a selector — require selector shape
+    if (hit.type === "username" && !/^[a-z0-9._-]{3,40}$/i.test(val)) continue;
+    if (hit.type === "email" && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(val)) continue;
+    out.push({ corpus, selector: val, selectorType: hit.type, content: redactIfCredential(content), recordDate: date });
+  }
+  return out;
+}
+
+/** CSV/TSV with a header row: index every column that names a selector. */
+function parseDelimited(text: string, corpus: string, max: number): CorpusRecord[] {
+  const lines = text.split(/\r?\n/);
+  const header = lines[0];
+  const delim = header.includes("\t") ? "\t" : header.includes(";") ? ";" : ",";
+  const cols = header.split(delim).map((c) => c.trim().replace(/^"|"$/g, ""));
+  const wanted = cols.map((c) => FIELD_MAP.find((f) => f.keys.test(c))?.type || null);
+  if (!wanted.some(Boolean)) return [];
+
+  const out: CorpusRecord[] = [];
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue;
+    const cells = line.split(delim);
+    for (let i = 0; i < cells.length && i < wanted.length; i++) {
+      const type = wanted[i];
+      if (!type) continue;
+      const val = cells[i].trim().replace(/^"|"$/g, "");
+      if (!val || val.length > 200) continue;
+      if (type === "email" && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(val)) continue;
+      out.push({
+        corpus, selector: val, selectorType: type,
+        content: redactIfCredential(line.length > 300 ? line.slice(0, 300) + "…" : line),
+      });
+    }
+    if (out.length >= max) break;
+  }
+  return out.slice(0, max);
+}
+
+/**
+ * Redact only what looks like a credential. Blanket redaction destroys the value of a
+ * message archive — "hey, call me on 06…" is intelligence, not a secret — so we mask
+ * only when the tail after the delimiter is a single unbroken token, which is what a
+ * password or hash looks like and a sentence does not.
+ */
+function redactIfCredential(line: string): string {
+  return /^[^\s:;,\t|]+[:;,\t|]\S{3,}$/.test(line) ? redactSecrets(line) : line;
 }
 
 /** Mask anything after the first delimiter — that is where credentials live. */
