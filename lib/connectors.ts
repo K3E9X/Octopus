@@ -8,6 +8,7 @@
 
 import type { ImageMeta } from "./metadata";
 import { fetchJSON, noteOutcome, type SourceHealth } from "./netfetch";
+import { SOCIAL_CONNECTOR_DEFS } from "./connectors-social";
 
 export interface ProfileLink {
   /** service identifier, e.g. "twitter", "github", "reddit" */
@@ -257,14 +258,18 @@ export const CONNECTOR_DEFS: Array<{ id: string; fn: (u: string) => Promise<RawP
   { id: "wikipedia", fn: wikipedia },
 ];
 
-export const CONNECTOR_IDS = CONNECTOR_DEFS.map((d) => d.id);
+// Non-developer platforms live in their own module (see the note there on why
+// Instagram/TikTok/Facebook are deliberately absent).
+export const ALL_CONNECTOR_DEFS = [...CONNECTOR_DEFS, ...SOCIAL_CONNECTOR_DEFS];
+
+export const CONNECTOR_IDS = ALL_CONNECTOR_DEFS.map((d) => d.id);
 
 /** Run the enabled connectors for a username; never throws — failed ones drop to null.
  *  `enabled` = allowlist of connector ids; omit to run all.
  *  `health` (optional) collects rate-limit / failure notes so the caller can report
  *  honestly that coverage was incomplete rather than implying "nothing found". */
 export async function scanUsername(username: string, enabled?: Set<string>, health?: SourceHealth): Promise<RawProfile[]> {
-  const defs = enabled ? CONNECTOR_DEFS.filter((d) => enabled.has(d.id)) : CONNECTOR_DEFS;
+  const defs = enabled ? ALL_CONNECTOR_DEFS.filter((d) => enabled.has(d.id)) : ALL_CONNECTOR_DEFS;
   const prev = CURRENT_HEALTH;
   if (health) CURRENT_HEALTH = health;
   try {
