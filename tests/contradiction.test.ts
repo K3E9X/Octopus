@@ -10,9 +10,17 @@ test("contradictions are classified, and beat hard/soft matching", () => {
 });
 
 test("a contradiction demotes instead of adding", () => {
-  const positive = scoreEvidence([{ name: "Public name" }, { name: "Public bio" }]);
+  // two INDEPENDENT soft signals (profile page + registry) legitimately reach probable
+  const positive = scoreEvidence([
+    { name: "Public name", source: "api.github.com" },
+    { name: "Registrant organisation", source: "RDAP" },
+  ]);
   assert.equal(positive.tier, "probable");
-  const conflicted = scoreEvidence([{ name: "Public name" }, { name: "Public bio" }, { name: "Different face" }]);
+  const conflicted = scoreEvidence([
+    { name: "Public name", source: "api.github.com" },
+    { name: "Registrant organisation", source: "RDAP" },
+    { name: "Different face", source: "face recognition" },
+  ]);
   assert.equal(conflicted.tier, "contradicted");
   assert.equal(conflicted.contradictions, 1);
   assert.ok(conflicted.confidence < positive.confidence);

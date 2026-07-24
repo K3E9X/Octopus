@@ -4,6 +4,8 @@
 // (how many independent supporting signals). The numeric confidence is derived
 // transparently from the classes — it is secondary to the tier.
 
+import { assessIndependence } from "./lineage";
+
 export type EvidenceClass = "hard" | "soft" | "weak" | "contra";
 export type Tier = "verified" | "probable" | "possible" | "weak" | "contradicted";
 
@@ -26,12 +28,15 @@ export function classify(name: string): EvidenceClass {
 export interface Scored {
   tier: Tier;
   confidence: number;
-  corroboration: number; // independent supporting signals (hard + soft)
+  /** distinct INDEPENDENT observations, not raw evidence count (see lib/lineage) */
+  corroboration: number;
   /** independent signals AGAINST the link */
   contradictions: number;
+  /** true when the evidence list is longer than the number of real observations */
+  inflated?: boolean;
 }
 
-export function scoreEvidence(evidence: { name: string }[]): Scored {
+export function scoreEvidence(evidence: { name: string; source?: string }[]): Scored {
   let hard = 0, soft = 0, weak = 0, contra = 0;
   for (const e of evidence) {
     const c = classify(e.name);
@@ -51,11 +56,21 @@ export function scoreEvidence(evidence: { name: string }[]): Scored {
     else tier = tier === "verified" ? "possible" : "weak";
   }
 
-  const corroboration = hard + soft;
+  // Corroboration must count INDEPENDENT observations. Three evidence items read off
+  // one profile page are one sighting, not three — counting them separately is how
+  // confidence silently inflates.
+  const ind = assessIndependence(evidence);
+  const corroboration = Math.min(hard + soft, Math.max(ind.independent, hard > 0 ? 1 : 0));
+
+  // A "probable" built from two soft signals is only justified if those signals are
+  // genuinely independent; if they share a root, demote it back to possible.
+  if (tier === "probable" && ind.independent < 2) tier = "possible";
+
   let confidence = 18 + Math.min(2, hard) * 34 + Math.min(3, soft) * 12 + Math.min(3, weak) * 4;
   confidence -= Math.min(3, contra) * 22; // a contradiction is worth more than a soft signal
+  if (ind.inflated) confidence -= 6;      // pay for the illusion of breadth
   confidence = Math.max(5, Math.min(97, Math.round(confidence)));
-  return { tier, confidence, corroboration, contradictions: contra };
+  return { tier, confidence, corroboration, contradictions: contra, inflated: ind.inflated };
 }
 
 export const TIER_LABEL: Record<Tier, string> = {

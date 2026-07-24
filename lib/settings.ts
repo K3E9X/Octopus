@@ -14,6 +14,17 @@ export interface OctopusSettings {
   llmModel?: string;
   llmKey?: string;
   llmWeb?: boolean;
+  // --- tradecraft ---
+  /** OPSEC posture: direct | careful | no-touch */
+  posture?: string;
+  /** outbound proxy (http(s):// or socks5://, incl. Tor) */
+  proxy?: string;
+  /** case id — anchors the egress fingerprint so cases are not correlatable */
+  caseId?: string;
+  /** operator identity recorded in the audit trail */
+  operator?: string;
+  /** why this collection is lawful — recorded with every query */
+  legalBasis?: string;
 }
 
 const KEY = "octopus:settings:v1";
@@ -49,6 +60,18 @@ function b64(str: string): string {
 export function cfgHeaders(): Record<string, string> {
   const cfg = toClientConfig(loadSettings());
   try { return { "x-octopus-cfg": b64(JSON.stringify(cfg)) }; } catch { return {}; }
+}
+
+/** Headers carrying OPSEC posture and audit identity for every collection request. */
+export function tradecraftHeaders(): Record<string, string> {
+  const s = loadSettings();
+  const h: Record<string, string> = {};
+  if (s.posture) h["x-octopus-posture"] = s.posture;
+  if (s.proxy) h["x-octopus-proxy"] = s.proxy;
+  if (s.caseId) h["x-octopus-case"] = s.caseId;
+  if (s.operator) h["x-octopus-operator"] = s.operator;
+  if (s.legalBasis) h["x-octopus-legal-basis"] = s.legalBasis;
+  return h;
 }
 
 /** True if the LLM is configured in the UI (base URL + model at minimum). */

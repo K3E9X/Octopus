@@ -57,6 +57,7 @@ export const BUILTIN_APPS: AppDef[] = [
   { id: "network", name: "Network graph", category: "Correlation", kind: "builtin", input: "username", status: "free", desc: "GitHub followers / following / orgs → related people + activity-based timezone." },
   { id: "geo", name: "Geo resolve", category: "Correlation", kind: "builtin", input: "both", status: "free", desc: "Geocode locations (Nominatim) + reward locations several sources agree on. Powers the map." },
   { id: "variants", name: "Handle variants", category: "Coverage", kind: "builtin", input: "username", status: "free", desc: "Also search plausible variants of the handle (separators, initials, trailing digits). Hits are scored strictly weaker than the exact match — the link stays unproven until corroborated." },
+  { id: "corpus", name: "Local corpora", category: "Leaks", kind: "builtin", input: "both", status: "free", desc: "Silent search of datasets you already hold (breach dumps, archives). Nothing leaves the machine and the source is never told you looked. Credentials are redacted at ingest." },
   { id: "domain", name: "Domain / infra", category: "Infrastructure", kind: "builtin", input: "domain", status: "free", desc: "Domain enrichment (RDAP registrant, DNS, subdomains via crt.sh, hosting geo) that feeds the identity graph. Also enriches a personal site found in a profile." },
 ];
 

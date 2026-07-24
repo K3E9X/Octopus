@@ -7,6 +7,7 @@
 // graceful. This is what flowsint doesn't do: bridge infra → identity.
 
 import type { Signal, Evidence } from "./signals";
+import { fingerprintSite, infraSignals } from "./infrapivot";
 
 const UA = "Octopus-OSINT/0.1 (+https://github.com/K3E9X/Tusna)";
 
@@ -162,6 +163,23 @@ export async function enrichDomain(domain: string, collectedAt: string, personId
     }
     if (subs.size) domEvidence.push({ name: "Attack surface", detail: `${subs.size} subdomain(s) via certificate transparency.`, source: "crt.sh", weight: 36 });
   }
+
+  // --- infrastructure fingerprint: analytics account IDs + favicon hash ---
+  // The strongest owner links available from one page fetch: an analytics ID is
+  // per-account, so any other site carrying it belongs to the same operator.
+  try {
+    const fp = await fingerprintSite(d);
+    const inf = infraSignals(d, fp, collectedAt);
+    for (const s of inf.signals) add(s);
+    for (const [a, b] of inf.edges) link(a, b);
+    if (fp.analytics.length) {
+      domEvidence.push({
+        name: "Analytics account",
+        detail: `${fp.analytics.map((a) => a.id).join(", ")} — pivot these to find sibling sites owned by the same operator.`,
+        source: "page source", weight: 70,
+      });
+    }
+  } catch { /* infra fingerprint is a bonus, never fatal */ }
 
   return { signals, edges };
 }

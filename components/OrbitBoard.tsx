@@ -16,7 +16,7 @@ import { loadDecisions, saveDecision, applyDecisionsFiltered, suppressedIds } fr
 import { shouldWipeBeforeScan } from "@/lib/board";
 import { looksLikeName } from "@/lib/name";
 import { buildTimeline } from "@/lib/timeline";
-import { loadSettings, saveSettings, cfgHeaders, toClientConfig, type OctopusSettings } from "@/lib/settings";
+import { loadSettings, saveSettings, cfgHeaders, tradecraftHeaders, toClientConfig, type OctopusSettings } from "@/lib/settings";
 import { migrateLegacyStorage } from "@/lib/migrate";
 import { toGraphML } from "@/lib/graphexport";
 import { Logo } from "./Logo";
@@ -123,7 +123,7 @@ export default function OrbitBoard() {
     setLlmBusy(true); setNarrative(null); setVerification(null);
     try {
       const res = await fetch("/api/synthesize", {
-        method: "POST", headers: { "content-type": "application/json", ...cfgHeaders() },
+        method: "POST", headers: { "content-type": "application/json", ...cfgHeaders(), ...tradecraftHeaders() },
         body: JSON.stringify({ signals: currentSignals() }),
       });
       const data = await res.json();
@@ -167,7 +167,7 @@ export default function OrbitBoard() {
     if (!sigs.length) { flashMsg("scan something first, then ask the assistant"); return; }
     setAssistBusy(true); setAssist(null); setAssistVerdict(null); setBarMenu(null);
     try {
-      const res = await fetch("/api/assist", { method: "POST", headers: { "content-type": "application/json", ...cfgHeaders() }, body: JSON.stringify({ signals: sigs }) });
+      const res = await fetch("/api/assist", { method: "POST", headers: { "content-type": "application/json", ...cfgHeaders(), ...tradecraftHeaders() }, body: JSON.stringify({ signals: sigs }) });
       const d = await res.json();
       if (!d.configured) { setAssist({ conclusion: "LLM not configured. Open API (top-right) and set a provider + key — free options: OpenRouter, z.ai, Qwen.", pivots: [], falsePositives: [], uncertainties: [], confidence: "low" }); return; }
       if (d.error || !d.result) { flashMsg(d.error || "assistant failed"); return; }
@@ -185,7 +185,7 @@ export default function OrbitBoard() {
     setScanning(true); setScanMsg(`chasing ${query}…`);
     try {
       const cids = [...enabledRef.current].join(",");
-      const res = await fetch(`/api/scan?username=${encodeURIComponent(query)}&connectors=${encodeURIComponent(cids)}`, { headers: cfgHeaders() });
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(query)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
       const data = await res.json().catch(() => null);
       const added = data?.signals?.length ? mergeRef.current(data.signals, "assist:" + normId(query), normId(query)) : 0;
       setScanMsg(added ? `+${added} from ${query}` : "nothing new");
@@ -712,7 +712,7 @@ export default function OrbitBoard() {
       const cids = [...enabledRef.current].join(",");
       for (const { q } of pick) {
         chainedRef.current.add("h:" + normId(q)); chainedRef.current.add("n:" + normId(q)); chainedRef.current.add("x:" + normId(q));
-        const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: cfgHeaders() });
+        const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
         const data = await res.json().catch(() => null);
         if (data?.signals?.length) added += mergeRef.current(data.signals, node.id, normId(q));
       }
@@ -740,7 +740,7 @@ export default function OrbitBoard() {
     setScanning(true); setScanMsg("scanning…");
     try {
       const cids = [...enabledRef.current].join(",");
-      const res = await fetch(`/api/scan?username=${encodeURIComponent(u)}&connectors=${encodeURIComponent(cids)}`, { headers: cfgHeaders() });
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(u)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
       const data = await res.json();
       if (!res.ok) { setScanMsg(data?.error || "scan failed"); return; }
       lastScanRef.current = u;
@@ -780,7 +780,7 @@ export default function OrbitBoard() {
     setMonitoring(true); setScanMsg("monitoring · re-scanning…");
     try {
       const cids = [...enabledRef.current].join(",");
-      const res = await fetch(`/api/scan?username=${encodeURIComponent(u)}&connectors=${encodeURIComponent(cids)}`, { headers: cfgHeaders() });
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(u)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
       const data = await res.json();
       if (!res.ok || !data.signals) { setScanMsg("monitor scan failed"); return; }
       let sigs = data.signals as Signal[];
@@ -822,7 +822,7 @@ export default function OrbitBoard() {
     setScanning(true); setScanMsg(`pivoting on ${q}…`);
     try {
       const cids = [...enabledRef.current].join(",");
-      const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: cfgHeaders() });
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
       const data = await res.json();
       if (!res.ok || !data.signals?.length) { setScanMsg("nothing new to pivot"); return; }
       mergeRef.current(data.signals, node.id, normId(q));
@@ -841,7 +841,7 @@ export default function OrbitBoard() {
     const visited = new Set<string>();
     const scanOne = async (q: string, originId: string): Promise<number> => {
       const cids = [...enabledRef.current].join(",");
-      const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: cfgHeaders() });
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.signals?.length) return 0;
       return mergeRef.current(data.signals, originId, normId(q));
@@ -1220,9 +1220,44 @@ export default function OrbitBoard() {
               <div className="insp-plat">API · keys &amp; connections</div>
               <div className="add-sub">Keys are stored in your browser only, sent per request — never saved on the server. Every field has a live Test (ping/pong). Scroll for all sections:</div>
               <div className="api-nav">
+                <button onClick={() => document.getElementById("api-opsec")?.scrollIntoView({ behavior: "smooth" })}>Tradecraft · OPSEC</button>
                 <button onClick={() => document.getElementById("api-llm")?.scrollIntoView({ behavior: "smooth" })}>LLM assistant</button>
                 <button onClick={() => document.getElementById("api-leak")?.scrollIntoView({ behavior: "smooth" })}>Leak sources · IntelX · RF</button>
                 <button onClick={() => document.getElementById("api-collector")?.scrollIntoView({ behavior: "smooth" })}>Collector</button>
+              </div>
+
+              <div className="guide-sect" id="api-opsec">Tradecraft — how you look, and what gets logged</div>
+              <div className="api-sub">
+                By default a collector announces itself from one address, which tells the target you looked and makes
+                all your cases correlatable. Set a <b>case id</b> and Octopus adopts a browser-realistic identity that is
+                consistent within the case and different across cases.
+              </div>
+              <div className="add-cols">
+                <label className="add-field"><span>posture</span>
+                  <select className="api-select" value={settings.posture || "direct"} onChange={(e) => updateSettings({ posture: e.target.value })}>
+                    <option value="direct">direct — fastest, loudest</option>
+                    <option value="careful">careful — browser-shaped, jittered</option>
+                    <option value="no-touch">no-touch — never contact the target</option>
+                  </select>
+                </label>
+                <label className="add-field"><span>case id (egress anchor)</span>
+                  <input value={settings.caseId || ""} placeholder="op-2026-014" onChange={(e) => updateSettings({ caseId: e.target.value })} />
+                </label>
+              </div>
+              <label className="add-field"><span>outbound proxy (http/socks5, incl. Tor)</span>
+                <input value={settings.proxy || ""} placeholder="socks5://127.0.0.1:9050" onChange={(e) => updateSettings({ proxy: e.target.value })} />
+              </label>
+              <div className="add-cols">
+                <label className="add-field"><span>operator (audit)</span>
+                  <input value={settings.operator || ""} placeholder="your identifier" onChange={(e) => updateSettings({ operator: e.target.value })} />
+                </label>
+                <label className="add-field"><span>legal basis (audit)</span>
+                  <input value={settings.legalBasis || ""} placeholder="tasking ref / consent / own-data" onChange={(e) => updateSettings({ legalBasis: e.target.value })} />
+                </label>
+              </div>
+              <div className="api-note">
+                Every selector query is written to an append-only, hash-chained audit trail with these fields (needs a
+                database). <b>no-touch</b> refuses any host the target can observe and falls back to archival sources.
               </div>
 
               <div className="guide-sect" id="api-llm">Investigation assistant (LLM)</div>

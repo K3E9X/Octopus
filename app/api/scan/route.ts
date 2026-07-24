@@ -15,7 +15,9 @@ import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { looksLikeDomain, enrichDomain } from "@/lib/domain";
 import { usernameVariants } from "@/lib/variants";
 import { sharedHandleEvidence, handleRarity } from "@/lib/rarity";
-import { newHealth, healthNote } from "@/lib/netfetch";
+import { newHealth, healthNote, setEgress } from "@/lib/netfetch";
+import { recordQuery, minimizationReport } from "@/lib/audit";
+import { searchCorpus, corpusSignals } from "@/lib/corpus";
 import { scoreEvidence } from "@/lib/scoring";
 import { resolveIdentities, type ResolveNode } from "@/lib/resolve";
 import { githubNetwork, blueskyNetwork, mastodonNetwork, type NetworkResult } from "@/lib/relations";
@@ -240,6 +242,21 @@ function correlate(matchTarget: string, profiles: RawProfile[]): Signal[] {
 export async function GET(req: NextRequest) {
   const clientCfg = readClientConfig(req); // keys from the API panel (override env)
   const q = (req.nextUrl.searchParams.get("username") || "").trim();
+
+  // --- OPSEC: set the egress posture for every request this scan makes ---
+  // Identity is stable per case (consistent looks less anomalous than erratic) and
+  // differs across cases, so our targets are not correlatable with each other.
+  const caseId = req.nextUrl.searchParams.get("case") || req.headers.get("x-octopus-case") || undefined;
+  const posture = (req.nextUrl.searchParams.get("posture") || req.headers.get("x-octopus-posture") || undefined) as any;
+  setEgress({ caseId, posture, proxy: req.headers.get("x-octopus-proxy") || undefined });
+
+  // --- AUDIT: every selector query is recorded with its legal basis ---
+  const operator = req.headers.get("x-octopus-operator") || "unknown";
+  const legalBasis = req.headers.get("x-octopus-legal-basis") || "unspecified";
+  if (q) {
+    // fire-and-forget: the trail must never slow or break collection
+    recordQuery({ operator, kind: "scan", selector: q, legalBasis, caseId, posture: posture || "direct" }).catch(() => {});
+  }
   const depth = clamp(parseInt(req.nextUrl.searchParams.get("depth") || "120", 10) || 120, 1, 300);
   if (!q || q.length > 128) {
     return NextResponse.json({ error: "invalid input" }, { status: 400 });
@@ -496,6 +513,16 @@ export async function GET(req: NextRequest) {
     if (!enabled || enabled.has("hudsonrock")) {
       const hr = isEmail ? await hudsonRockEmail(q) : await hudsonRockUsername(matchTarget);
       signals.push(...hr);
+    }
+
+    // --- local corpora: SILENT search of datasets we already hold ---
+    // Nothing leaves the machine, the source is never told we looked, and the data
+    // does not vanish when a page does. Often where the decisive material actually is.
+    if (!enabled || enabled.has("corpus")) {
+      try {
+        const hits = await searchCorpus(isEmail ? q : matchTarget);
+        if (hits.length) signals.push(...corpusSignals(hits, collectedAt));
+      } catch { /* corpus is optional */ }
     }
 
     // OPTIONAL bonus: Recorded Future (enterprise) — only if a key is configured.
@@ -767,7 +794,10 @@ export async function GET(req: NextRequest) {
       coverage: { checked, available: totalSites, capped: checked < totalSites },
       // honesty: a rate-limited source did NOT report "no account" — it refused to
       // answer. Surfacing this is what stops a silent false negative.
-      health: { rateLimited: health.rateLimited, failed: health.failed, note: healthNote(health) },
+      health: { rateLimited: health.rateLimited, failed: health.failed, blocked: health.blocked, note: healthNote(health) },
+      // minimization: how much of this graph is incidental third parties, which must
+      // be access-limited and aged off rather than retained as ordinary intelligence
+      minimization: minimizationReport(signals),
     });
   } catch (e) {
     return NextResponse.json({ error: "scan failed", detail: String(e) }, { status: 500 });
