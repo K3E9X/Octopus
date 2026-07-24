@@ -20,6 +20,7 @@ import { loadSettings, saveSettings, cfgHeaders, toClientConfig, type OctopusSet
 import { migrateLegacyStorage } from "@/lib/migrate";
 import { toGraphML } from "@/lib/graphexport";
 import { Logo } from "./Logo";
+import { handleRarity } from "@/lib/rarity";
 import { LLM_PRESETS } from "@/lib/llmconfig";
 import type { AssistResult } from "@/lib/assist";
 
@@ -278,7 +279,7 @@ export default function OrbitBoard() {
       const { ensureFaceModels, matchFaces } = await import("@/lib/face");
       const ok = await ensureFaceModels();
       if (!ok) { setScanMsg("face model missing — run: npm run fetch-face-models"); return; }
-      const { matches, described, scanned } = await matchFaces(items, (d, t) => setScanMsg(`analysing faces ${d}/${t}…`));
+      const { matches, described, scanned, mismatches } = await matchFaces(items, (d, t) => setScanMsg(`analysing faces ${d}/${t}…`));
       let applied = 0;
       for (const m of matches) {
         const A = nodesRef.current.find((n) => n.id === m.a);
@@ -292,8 +293,25 @@ export default function OrbitBoard() {
         for (const N of [A, B]) { const r = scoreEvidence(N.evidence); N.tier = r.tier; N.confidence = r.confidence; }
         applied++;
       }
+      // a face detected in BOTH photos that is clearly a different person is evidence
+      // AGAINST the link — record it so the tier gets demoted, not silently ignored.
+      let contra = 0;
+      for (const m of mismatches) {
+        const A = nodesRef.current.find((n) => n.id === m.a);
+        const B = nodesRef.current.find((n) => n.id === m.b);
+        if (!A || !B) continue;
+        for (const [x, y] of [[A, B], [B, A]] as const) {
+          x.evidence = [...x.evidence, {
+            name: "Different face",
+            detail: `A face was detected in both photos and they do not match ${y.platform} (descriptor distance ${m.distance.toFixed(2)}) — evidence against the same person.`,
+            source: "face recognition · local model", weight: 72,
+          }];
+          const r = scoreEvidence(x.evidence); x.tier = r.tier; x.confidence = r.confidence;
+        }
+        contra++;
+      }
       setDataVersion((v) => v + 1);
-      setScanMsg(`${applied} same-face link(s) · ${described}/${scanned} faces read`);
+      setScanMsg(`${applied} same-face link(s)${contra ? ` · ${contra} different-face contradiction(s)` : ""} · ${described}/${scanned} faces read`);
     } catch {
       setScanMsg("face matching failed");
     } finally {
@@ -737,7 +755,10 @@ export default function OrbitBoard() {
         sigs = r.signals; suppressed = r.suppressed;
       } catch { /* none */ }
       rebuildRef.current(sigs, true);
-      setScanMsg(`${sigs.length} real presence(s)` + (suppressed ? ` · ${suppressed} suppressed (your prior decisions)` : ""));
+      // honesty: if a source rate-limited us it did NOT say "no account" — say so,
+      // otherwise the analyst reads an incomplete scan as a negative result.
+      const warn = data?.health?.note ? ` · ⚠ ${data.health.note}` : "";
+      setScanMsg(`${sigs.length} real presence(s)` + (suppressed ? ` · ${suppressed} suppressed (your prior decisions)` : "") + warn);
     } catch {
       setScanMsg("network unavailable");
     } finally {
@@ -838,11 +859,23 @@ export default function OrbitBoard() {
           visited.add(qk);
           total += await scanOne(f.q, f.id);
         }
-        // next hop: newly discovered email/alias identifiers not yet pivoted
+        // next hop: rank the newly discovered identifiers by INVESTIGATIVE VALUE, so
+        // the scan budget goes to what actually advances the case (an email opens
+        // breach + account lookups; a rare handle is far more identifying than a
+        // common one; a contradicted node is a dead end).
         frontier = nodesRef.current
           .filter((n) => n.kind === "email" || n.kind === "alias")
-          .map((n) => ({ id: n.id, q: n.handle.replace(/^@/, "").trim() }))
-          .filter((f) => f.q && !visited.has(normId(f.q)))
+          .map((n) => {
+            const q = n.handle.replace(/^@/, "").trim();
+            const rarity = handleRarity(q).score;
+            const kindWeight = n.kind === "email" ? 1.0 : 0.55;       // an email unlocks more
+            const tierWeight = n.tier === "verified" ? 1.0 : n.tier === "probable" ? 0.85
+              : n.tier === "contradicted" ? 0.1 : n.tier === "weak" ? 0.4 : 0.6;
+            const statusWeight = n.status === "confirmed" ? 1.15 : n.status === "rejected" ? 0 : 1;
+            return { id: n.id, q, score: kindWeight * tierWeight * statusWeight * (0.45 + rarity) };
+          })
+          .filter((f) => f.q && f.score > 0 && !visited.has(normId(f.q)))
+          .sort((a, b) => b.score - a.score)
           .slice(0, BREADTH);
         if (!frontier.length) break;
       }
@@ -937,7 +970,7 @@ export default function OrbitBoard() {
       </div>
 
       {view === "table" && (() => {
-        const tierRank: Record<string, number> = { verified: 0, probable: 1, possible: 2, weak: 3 };
+        const tierRank: Record<string, number> = { verified: 0, probable: 1, possible: 2, weak: 3, contradicted: 4 };
         const rows = currentSignals()
           .map((s) => ({ s, tier: s.tier || scoreEvidence(s.evidence).tier, corr: scoreEvidence(s.evidence).corroboration }))
           .filter((r) => {
@@ -1291,6 +1324,7 @@ export default function OrbitBoard() {
             <div className="guide-sect">Read the graph</div>
             <ol className="guide-steps">
               <li><b>Click any node</b> to open the inspector: its evidence, sources, and honest tier (VERIFIED / PROBABLE / POSSIBLE / WEAK — derived from evidence, not a fake percentage).</li>
+              <li><b>Read the tier honestly</b>: it is derived from evidence, and a handle counts for as much as it is <b>rare</b> — a shared &quot;alex&quot; proves nothing, a shared &quot;xk9_zulu_42&quot; almost proves it. <b>CONTRADICTED</b> means Octopus found evidence <em>against</em> the link (a different face, an incompatible activity timezone) — treat it as a conflict, not a weak yes.</li>
               <li><b>Judge it</b>: CONFIRM, REVIEW or REJECT. <b>Confirming a lead chains the investigation</b> — Octopus takes its new identifiers (a different username, a real name, a linked email) and searches from them, adding the leads for you to review. <b>Rejecting or removing a node suppresses it</b>: it is never proposed again on this seed.</li>
               <li><b>Right-click a node</b> to Pivot, Auto-expand, set it as the new seed, or focus its sub-graph.</li>
             </ol>

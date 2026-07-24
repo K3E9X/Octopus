@@ -7,6 +7,7 @@
 // pivots" catalogue (cipher387), not to automated connectors.
 
 import type { ImageMeta } from "./metadata";
+import { fetchJSON, noteOutcome, type SourceHealth } from "./netfetch";
 
 export interface ProfileLink {
   /** service identifier, e.g. "twitter", "github", "reddit" */
@@ -42,30 +43,28 @@ export interface RawProfile {
   derived?: boolean;
   /** true when this node was created from another account's declared/verified link */
   declared?: boolean;
+  /** set when the profile was found via a VARIANT of the seed handle, not the seed
+   *  itself — a weaker link that must be scored (and shown) as such */
+  variantOf?: string;
+  variantRule?: string;
   /** short provenance, e.g. "api.github.com · public API" */
   source: string;
 }
 
 const UA = "Octopus-OSINT/0.1 (+https://github.com/K3E9X/Tusna)";
 
+// Health of the current scan — connectors record here when a source rate-limits or
+// fails, so the response can say "incomplete" instead of implying "nothing found".
+let CURRENT_HEALTH: SourceHealth | null = null;
+
 async function getJSON(url: string, timeoutMs = 6000): Promise<any | null> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("json")) return null;
-    return await res.json();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
+  const r = await fetchJSON(url, { timeoutMs, headers: { "User-Agent": UA, Accept: "application/json" } });
+  if (CURRENT_HEALTH && r.outcome !== "ok" && r.outcome !== "not-found") {
+    let host = "source";
+    try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* keep */ }
+    noteOutcome(CURRENT_HEALTH, host, r.outcome);
   }
+  return r.data;
 }
 
 const enc = encodeURIComponent;
@@ -261,11 +260,19 @@ export const CONNECTOR_DEFS: Array<{ id: string; fn: (u: string) => Promise<RawP
 export const CONNECTOR_IDS = CONNECTOR_DEFS.map((d) => d.id);
 
 /** Run the enabled connectors for a username; never throws — failed ones drop to null.
- *  `enabled` = allowlist of connector ids; omit to run all. */
-export async function scanUsername(username: string, enabled?: Set<string>): Promise<RawProfile[]> {
+ *  `enabled` = allowlist of connector ids; omit to run all.
+ *  `health` (optional) collects rate-limit / failure notes so the caller can report
+ *  honestly that coverage was incomplete rather than implying "nothing found". */
+export async function scanUsername(username: string, enabled?: Set<string>, health?: SourceHealth): Promise<RawProfile[]> {
   const defs = enabled ? CONNECTOR_DEFS.filter((d) => enabled.has(d.id)) : CONNECTOR_DEFS;
-  const settled = await Promise.allSettled(defs.map((d) => d.fn(username)));
-  return settled
-    .map((s) => (s.status === "fulfilled" ? s.value : null))
-    .filter((x): x is RawProfile => x != null);
+  const prev = CURRENT_HEALTH;
+  if (health) CURRENT_HEALTH = health;
+  try {
+    const settled = await Promise.allSettled(defs.map((d) => d.fn(username)));
+    return settled
+      .map((s) => (s.status === "fulfilled" ? s.value : null))
+      .filter((x): x is RawProfile => x != null);
+  } finally {
+    CURRENT_HEALTH = prev;
+  }
 }

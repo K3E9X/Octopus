@@ -55,11 +55,19 @@ export interface FaceMatch { a: string; b: string; distance: number; strong: boo
 const MATCH = 0.6;
 const STRONG = 0.45;
 
-/** Describe every avatar, then pair up the ones whose faces match. */
+// Clearly a different person. Well above the same-person threshold, so we only claim
+// a contradiction when a face WAS detected in both images and they are far apart.
+const MISMATCH = 0.85;
+
+/**
+ * Describe every avatar, then pair them up. Returns both matches (same person) and
+ * MISMATCHES — two detected faces that are clearly different people. The mismatch is
+ * real negative evidence: an investigation has to be able to say no, not only yes.
+ */
 export async function matchFaces(
   items: FaceItem[],
   onProgress?: (done: number, total: number) => void,
-): Promise<{ matches: FaceMatch[]; described: number; scanned: number }> {
+): Promise<{ matches: FaceMatch[]; mismatches: FaceMatch[]; described: number; scanned: number }> {
   const descs: { id: string; d: Float32Array }[] = [];
   let done = 0;
   for (const it of items) {
@@ -68,11 +76,15 @@ export async function matchFaces(
     onProgress?.(++done, items.length);
   }
   const matches: FaceMatch[] = [];
+  const mismatches: FaceMatch[] = [];
   for (let i = 0; i < descs.length; i++) {
     for (let j = i + 1; j < descs.length; j++) {
       const dist = faceDistance(descs[i].d, descs[j].d);
-      if (dist <= MATCH) matches.push({ a: descs[i].id, b: descs[j].id, distance: dist, strong: dist <= STRONG });
+      const pair = { a: descs[i].id, b: descs[j].id, distance: dist, strong: dist <= STRONG };
+      if (dist <= MATCH) matches.push(pair);
+      else if (dist >= MISMATCH) mismatches.push(pair);
+      // the band between MATCH and MISMATCH is genuinely inconclusive — say nothing
     }
   }
-  return { matches, described: descs.length, scanned: items.length };
+  return { matches, mismatches, described: descs.length, scanned: items.length };
 }

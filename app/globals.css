@@ -457,3 +457,9 @@ body {
 .api-nav button { background: var(--void-2); border: 1px solid var(--line); color: var(--ink-2);
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em; padding: 5px 9px; border-radius: 12px; cursor: pointer; }
 .api-nav button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* contradicted tier — a link with evidence AGAINST it must read as a conflict,
+   not as a weak positive */
+.da-tier.t-contradicted { color: var(--reject); border-color: color-mix(in srgb, var(--reject) 55%, transparent); }
+.tier-badge.t-contradicted { color: var(--reject); border-color: var(--reject); }
+.assist-conf.c-contradicted { color: var(--reject); border-color: color-mix(in srgb, var(--reject) 45%, transparent); }

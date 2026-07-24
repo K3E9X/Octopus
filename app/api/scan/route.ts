@@ -13,6 +13,9 @@ import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
 import { looksLikePhone, phoneIntel, type PhoneIntel } from "@/lib/phone";
 import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { looksLikeDomain, enrichDomain } from "@/lib/domain";
+import { usernameVariants } from "@/lib/variants";
+import { sharedHandleEvidence, handleRarity } from "@/lib/rarity";
+import { newHealth, healthNote } from "@/lib/netfetch";
 import { scoreEvidence } from "@/lib/scoring";
 import { resolveIdentities, type ResolveNode } from "@/lib/resolve";
 import { githubNetwork, blueskyNetwork, mastodonNetwork, type NetworkResult } from "@/lib/relations";
@@ -135,12 +138,34 @@ function correlate(matchTarget: string, profiles: RawProfile[]): Signal[] {
         source: p.source,
         weight: 50,
       });
-    } else {
+    } else if (p.variantOf) {
+      // found via a VARIANT of the seed handle — the account exists, but that it
+      // belongs to the same person is unproven. Deliberately weak.
       evidence.push({
-        name: exact ? "Exact username" : "Near-match username",
-        detail: `${p.handle} ${exact ? "=" : "≈"} target "${matchTarget}", public account exists.`,
+        name: "Handle variant (unconfirmed)",
+        detail: `${p.handle} on ${p.platform} — a ${p.variantRule} variant of "${p.variantOf}". The account exists; the link to this person is NOT established.`,
         source: p.source,
-        weight: exact ? 74 : 58,
+        weight: 42,
+      });
+      const r = handleRarity(p.handle);
+      if (r.band === "unique" || r.band === "distinctive") {
+        evidence.push({
+          name: "Rare handle reused",
+          detail: `"${p.handle}" is ${r.band} (rarity ${r.score}) — a variant this distinctive is unlikely to be an unrelated person.`,
+          source: "handle rarity · deterministic",
+          weight: r.band === "unique" ? 80 : 66,
+        });
+      }
+    } else {
+      // an EXACT handle match is only as strong as the handle is rare: "alex" says
+      // nothing, "xk9_zulu_42" is near-proof. This is the main false-positive guard.
+      const r = handleRarity(p.handle);
+      const w = exact ? (r.band === "unique" ? 86 : r.band === "distinctive" ? 76 : r.band === "moderate" ? 62 : 46) : 52;
+      evidence.push({
+        name: exact ? (r.band === "unique" ? "Rare handle reused" : "Exact username") : "Near-match username",
+        detail: `${p.handle} ${exact ? "=" : "≈"} target "${matchTarget}", public account exists. Handle is ${r.band} (rarity ${r.score}${r.reason ? " · " + r.reason : ""})${r.band === "common" ? " — a shared common handle is weak on its own." : "."}`,
+        source: p.source,
+        weight: w,
       });
     }
 
@@ -297,7 +322,9 @@ export async function GET(req: NextRequest) {
   const networkOn = !enabled || enabled.has("network");
   const geoOn = !enabled || enabled.has("geo");
   const domainOn = !enabled || enabled.has("domain");
+  const variantsOn = !enabled || enabled.has("variants");
   const collectedAt = new Date().toISOString(); // chain of custody: one stamp per scan
+  const health = newHealth(); // records rate-limits/failures so coverage stays honest
   try {
     let apiProfiles: RawProfile[];
     let wmnHits: RawProfile[];
@@ -314,11 +341,31 @@ export async function GET(req: NextRequest) {
       email = { handle: r.handle, mxValid: r.mxValid };
     } else {
       const [api, wmn] = await Promise.all([
-        scanUsername(q, enabled ?? undefined),
+        scanUsername(q, enabled ?? undefined, health),
         wmnOn ? scanWmn(q, depth) : Promise.resolve({ hits: [] as RawProfile[], checked: 0, total: 0 }),
       ]);
       apiProfiles = api; wmnHits = wmn.hits;
       checked = wmn.checked; totalSites = wmn.total;
+
+      // --- username variants: people rarely keep the exact same handle everywhere.
+      // Scan plausible variants (separators, initials, trailing digits) and mark the
+      // hits as variant-derived so they score strictly WEAKER than the exact match.
+      if (variantsOn) {
+        const vars = usernameVariants(q, 5);
+        const have = new Set(apiProfiles.map((p) => norm(p.platform) + "|" + norm(p.handle)));
+        const results = await Promise.all(vars.map((v) => scanUsername(v.handle, enabled ?? undefined, health).then((ps) => ({ v, ps })).catch(() => ({ v, ps: [] as RawProfile[] }))));
+        for (const { v, ps } of results) {
+          for (const p of ps) {
+            const key = norm(p.platform) + "|" + norm(p.handle);
+            if (have.has(key)) continue;
+            have.add(key);
+            p.id = "var:" + v.handle + ":" + p.id;
+            p.variantOf = q;
+            p.variantRule = v.rule;
+            apiProfiles.push(p);
+          }
+        }
+      }
     }
 
     // deep collection via the Maigret worker (rich profile data + discovered
@@ -488,6 +535,7 @@ export async function GET(req: NextRequest) {
       const results = await Promise.all(fetchers.map((f) => f.run().catch(empty)));
       const have = new Set(signals.map((s) => s.id));
       const connSets: { sig: Signal; handles: Set<string> }[] = [];
+      const tzByNode: { sig: Signal; offset: number; label: string; src: string }[] = [];
       results.forEach((net, i) => {
         const { sig, src } = fetchers[i];
         if (net.nodes.length) {
@@ -507,6 +555,7 @@ export async function GET(req: NextRequest) {
             detail: `Public activity peaks consistent with ${tz.label} (from ${tz.samples} events on ${src}, confidence ${(tz.confidence * 100).toFixed(0)}%).`,
             source: "temporal analysis · deterministic", weight: Math.round(40 + tz.confidence * 25),
           });
+          if (tz.confidence >= 0.45) tzByNode.push({ sig, offset: tz.offset, label: tz.label, src });
         }
 
         // --- content mining (#1): read WHAT they wrote, not just when ---
@@ -542,6 +591,29 @@ export async function GET(req: NextRequest) {
           }
         }
       });
+
+      // --- contradiction detector: incompatible activity timezones ---
+      // Two accounts claimed as one person whose confident activity clocks sit hours
+      // apart is real evidence AGAINST the link. An investigation must be able to say
+      // no — this demotes the tier instead of quietly adding another "signal".
+      for (let i = 0; i < tzByNode.length; i++) {
+        for (let j = i + 1; j < tzByNode.length; j++) {
+          const a = tzByNode[i], b = tzByNode[j];
+          let diff = Math.abs(a.offset - b.offset);
+          if (diff > 12) diff = 24 - diff; // wrap around the clock
+          if (diff >= 6) {
+            for (const [x, y] of [[a, b], [b, a]] as const) {
+              x.sig.evidence.push({
+                name: "Incompatible timezone",
+                detail: `Activity clock ${x.label} (${x.src}) conflicts with ${y.label} (${y.src}) — ${diff}h apart. Hard to reconcile as one person.`,
+                source: "temporal analysis · contradiction", weight: 70,
+              });
+              const rescored = scoreEvidence(x.sig.evidence);
+              x.sig.tier = rescored.tier; x.sig.confidence = rescored.confidence;
+            }
+          }
+        }
+      }
 
       // --- mutual-connection analysis (#2): who links the accounts together ---
       if (connSets.length) {
@@ -693,6 +765,9 @@ export async function GET(req: NextRequest) {
       sources: { api: apiProfiles.length, web: wmnHits.length },
       // coverage transparency — never silently truncate
       coverage: { checked, available: totalSites, capped: checked < totalSites },
+      // honesty: a rate-limited source did NOT report "no account" — it refused to
+      // answer. Surfacing this is what stops a silent false negative.
+      health: { rateLimited: health.rateLimited, failed: health.failed, note: healthNote(health) },
     });
   } catch (e) {
     return NextResponse.json({ error: "scan failed", detail: String(e) }, { status: 500 });

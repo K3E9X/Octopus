@@ -67,7 +67,7 @@ export interface Signal {
   /** real/display name from the profile, when known (used by the dossier) */
   displayName?: string;
   /** qualitative correlation tier (honest headline; confidence is secondary) */
-  tier?: "verified" | "probable" | "possible" | "weak";
+  tier?: "verified" | "probable" | "possible" | "weak" | "contradicted";
   /** entity-resolution cluster this node belongs to (accounts of one identity) */
   clusterId?: string;
   clusterTier?: "verified" | "probable" | "possible";

@@ -53,7 +53,8 @@ export function buildDossier(signals: Signal[]): Dossier {
   }
   const namesRanked = [...nameScore.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
 
-  const tierRank: Record<Tier, number> = { verified: 0, probable: 1, possible: 2, weak: 3 };
+  // contradicted sorts last — a conflicted link belongs at the bottom of the dossier
+  const tierRank: Record<Tier, number> = { verified: 0, probable: 1, possible: 2, weak: 3, contradicted: 4 };
   const tierOf = (s: Signal): Tier => s.tier || scoreEvidence(s.evidence).tier;
   const accounts: DossierAccount[] = accountsSig
     .filter((s) => s.status !== "rejected")

@@ -7,6 +7,7 @@
 // sticky note — with chain of custody attached.
 
 import { extractFromText } from "./extract";
+import { sharedHandleEvidence } from "./rarity";
 import type { Signal, Evidence } from "./signals";
 
 export interface ManualInput {
@@ -91,10 +92,14 @@ export function correlateManual(manual: Signal, input: ManualInput, existing: Si
 
   for (const s of existing) {
     if (s.id === manual.id) continue;
-    // 1) same handle across platforms — a real cross-account signal
+    // 1) same handle across platforms — but ONLY when the handle is rare enough to
+    // mean something. Linking on a common handle ("alex") manufactures false positives.
     if (hN && hN.length >= 3 && norm(stripHandle(s.handle)) === hN) {
-      link(s.id);
-      addEvidence.push({ name: "Same handle", detail: `Handle "${manual.handle}" also present on ${s.platform}.`, source: "cross-source correlation", weight: 72 });
+      const ev = sharedHandleEvidence(manual.handle);
+      if (ev) {
+        link(s.id);
+        addEvidence.push({ name: ev.name, detail: `${ev.detail} Also present on ${s.platform}.`, source: "cross-source correlation · handle rarity", weight: ev.weight });
+      }
     }
     // 2) same public name
     else if (nameN && s.displayName && norm(s.displayName) === nameN) {

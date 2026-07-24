@@ -16,12 +16,20 @@ test("buildManualSignal carries custody + seed match", () => {
   assert.ok(s.evidence.some((e) => e.name === "Matches the seed"));
 });
 
-test("correlateManual links by shared handle across platforms", () => {
-  const existing = [mk("github", "GITHUB", "johndoe"), mk("reddit", "REDDIT", "u/johndoe")];
-  const manual = buildManualSignal({ platform: "Instagram", handle: "johndoe" }, at);
-  const r = correlateManual(manual, { platform: "Instagram", handle: "johndoe" }, existing);
+test("correlateManual links by shared handle when the handle is DISTINCTIVE", () => {
+  const h = "xk9_zulu_42";
+  const existing = [mk("github", "GITHUB", h), mk("reddit", "REDDIT", "u/" + h)];
+  const manual = buildManualSignal({ platform: "Instagram", handle: h }, at);
+  const r = correlateManual(manual, { platform: "Instagram", handle: h }, existing);
   assert.ok(r.matched >= 2, `expected >=2 links, got ${r.matched}`);
-  assert.ok(r.addEvidence.some((e) => e.name === "Same handle"));
+  assert.ok(r.addEvidence.some((e) => /handle/i.test(e.name)));
+});
+
+test("correlateManual REFUSES to link on a common handle (false-positive guard)", () => {
+  const existing = [mk("github", "GITHUB", "alex"), mk("reddit", "REDDIT", "u/alex")];
+  const manual = buildManualSignal({ platform: "Instagram", handle: "alex" }, at);
+  const r = correlateManual(manual, { platform: "Instagram", handle: "alex" }, existing);
+  assert.equal(r.matched, 0, "a shared common handle must NOT create a link");
 });
 
 test("correlateManual links by matching display name", () => {
