@@ -20,7 +20,7 @@ import {
 } from "@/lib/casefile";
 import type { Signal } from "@/lib/signals";
 
-const CARD_W = 210;
+const CARD_W = 232;
 
 interface Props {
   file: Casefile;
@@ -29,18 +29,21 @@ interface Props {
   signals: Signal[];
   /** push a card's identifier through the correlation engine */
   onCorrelate: (card: BoardCard) => void;
+  /** relaunch a full investigation FROM this card's identifier */
+  onInvestigate: (card: BoardCard) => void;
   /** select a graph node (used when a pinned card is opened) */
   onSelectSignal: (id: string) => void;
   busyCardId?: string | null;
 }
 
-export default function CaseBoard({ file, onChange, signals, onCorrelate, onSelectSignal, busyCardId }: Props) {
+export default function CaseBoard({ file, onChange, signals, onCorrelate, onInvestigate, onSelectSignal, busyCardId }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [editing, setEditing] = useState<string | null>(null);
   const [linkFrom, setLinkFrom] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<{ from: string; to: string } | null>(null);
   const [addKind, setAddKind] = useState<CardKind>("lead");
+  const [editLink, setEditLink] = useState<string | null>(null);
   const dragRef = useRef<{ id: string | null; ox: number; oy: number; px: number; py: number } | null>(null);
 
   const byId = useMemo(() => new Map(signals.map((s) => [s.id, s])), [signals]);
@@ -49,7 +52,7 @@ export default function CaseBoard({ file, onChange, signals, onCorrelate, onSele
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      setLinkFrom(null); setPendingLink(null); setEditing(null);
+      setLinkFrom(null); setPendingLink(null); setEditing(null); setEditLink(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -58,9 +61,12 @@ export default function CaseBoard({ file, onChange, signals, onCorrelate, onSele
   function onBackgroundDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
     // Pan capture must never swallow a control. Capturing the pointer on the canvas
-    // retargets the following click to the canvas, so a button inside it (the link-kind
-    // picker) would never receive its own click — the link was silently lost.
-    if ((e.target as HTMLElement).closest(".bc-card, .bl-picker, button, a, input, textarea, select")) return;
+    // retargets the following click to the canvas, so anything inside it would never
+    // receive its own click — that silently ate the link-kind picker, and then the link
+    // edit handles. A blocklist of tag names missed SVG entirely, so every interactive
+    // element now carries data-ui and this is an allowlist.
+    const t = e.target as Element;
+    if (t.closest?.(".bc-card, .bl-picker, [data-ui]")) return;
     setEditing(null);
     dragRef.current = { id: null, ox: e.clientX, oy: e.clientY, px: pan.x, py: pan.y };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -143,19 +149,6 @@ export default function CaseBoard({ file, onChange, signals, onCorrelate, onSele
         )}
 
         <div className="bplane" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
-          <svg className="blinks" aria-hidden="true">
-            {file.links.map((l) => {
-              const a = anchor(l.from), b = anchor(l.to);
-              const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-              return (
-                <g key={l.id} className={"bl bl-" + l.kind}>
-                  <path d={`M${a.x},${a.y} L${b.x},${b.y}`} />
-                  <text x={mx} y={my - 5} textAnchor="middle">{LINK_KINDS.find((k) => k.id === l.kind)?.label}</text>
-                </g>
-              );
-            })}
-          </svg>
-
           {file.cards.map((c) => {
             const sig = c.ref ? byId.get(c.ref) : undefined;
             const t = c.kind === "hypothesis" ? tally(file, c.id) : null;
@@ -221,18 +214,57 @@ export default function CaseBoard({ file, onChange, signals, onCorrelate, onSele
                 {t && <div className={"bc-tally" + (t.contradicts ? " conflict" : "")}>{t.verdict}</div>}
 
                 <div className="bc-actions">
-                  <button onClick={(e) => { e.stopPropagation(); setLinkFrom(linkFrom === c.id ? null : c.id); }}>Link</button>
                   <button
                     disabled={!corr.ok || busyCardId === c.id}
-                    title={corr.ok ? "run this identifier through the correlation engine" : corr.reason}
+                    title={corr.ok ? "run a full scan from this identifier and link what it finds to this card" : corr.reason}
+                    onClick={(e) => { e.stopPropagation(); onInvestigate(c); }}
+                  >{busyCardId === c.id ? "working…" : "Investigate"}</button>
+                  <button
+                    disabled={!corr.ok || busyCardId === c.id}
+                    title={corr.ok ? "correlate this identifier against the current graph, without a new scan" : corr.reason}
                     onClick={(e) => { e.stopPropagation(); onCorrelate(c); }}
-                  >{busyCardId === c.id ? "…" : "Correlate"}</button>
+                  >Correlate</button>
+                  <button className={linkFrom === c.id ? "on" : ""} onClick={(e) => { e.stopPropagation(); setLinkFrom(linkFrom === c.id ? null : c.id); }}>Link</button>
                   {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Open</a>}
                   <button className="bc-del" onClick={(e) => { e.stopPropagation(); onChange(removeCard(file, c.id)); }}>Remove</button>
                 </div>
               </div>
             );
           })}
+          <svg className="blinks">
+            {file.links.map((l) => {
+              const a = anchor(l.from), b = anchor(l.to);
+              const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+              const label = LINK_KINDS.find((k) => k.id === l.kind)?.label;
+              return (
+                <g key={l.id} className={"bl bl-" + l.kind + (editLink === l.id ? " on" : "")}>
+                  <path d={`M${a.x},${a.y} L${b.x},${b.y}`} />
+                  {/* a fat invisible path gives the hairline a real hit area — a 1px
+                      line you have to hit exactly is a line you cannot edit */}
+                  <path
+                    className="bl-hit" data-ui="link" d={`M${a.x},${a.y} L${b.x},${b.y}`}
+                    onClick={(e) => { e.stopPropagation(); setEditLink(editLink === l.id ? null : l.id); }}
+                  />
+                  <text x={mx} y={my - 5} textAnchor="middle" data-ui="link"
+                    onClick={(e) => { e.stopPropagation(); setEditLink(editLink === l.id ? null : l.id); }}
+                  >{label}</text>
+                  {editLink === l.id && (
+                    <g className="bl-tools" transform={`translate(${mx}, ${my + 12})`}>
+                      <text x={-22} y={0} textAnchor="middle" className="bl-retype" data-ui="link"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const order = LINK_KINDS.map((k) => k.id);
+                          onChange(linkCards(file, l.from, l.to, order[(order.indexOf(l.kind) + 1) % order.length]));
+                        }}>retype</text>
+                      <text x={22} y={0} textAnchor="middle" className="bl-del" data-ui="link"
+                        onClick={(e) => { e.stopPropagation(); onChange(removeLink(file, l.id)); setEditLink(null); }}>remove</text>
+                    </g>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+
         </div>
 
         {pendingLink && (

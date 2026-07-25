@@ -691,8 +691,11 @@ body::after {
 .bcanvas { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; }
 .bcanvas:active { cursor: grabbing; }
 .bplane { position: absolute; inset: 0; }
-.blinks { position: absolute; left: -4000px; top: -4000px; width: 9000px; height: 9000px; overflow: visible; pointer-events: none; }
-.blinks > g { transform: translate(4000px, 4000px); }
+/* An SVG with overflow:visible draws outside its own box, so the layer needs no size
+   and no compensating translate — the -4000px/+4000px pair it used to carry put the
+   whole layer 550px off once the element moved in the DOM, and the links became
+   unclickable while still looking correct. */
+.blinks { position: absolute; inset: 0; overflow: visible; pointer-events: none; z-index: 2; }
 .bl path { fill: none; stroke-width: 1.2; }
 .bl text { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; fill: var(--ink-3); }
 .bl-supports path { stroke: var(--confirm); }
@@ -871,3 +874,33 @@ body::after {
 .ot-hint { color: var(--ink-3); }
 .legend { color: var(--ink-2); }
 .legend .tick { background: var(--ink-3); }
+
+/* ---- the mark ----------------------------------------------------------------
+   It was a 22px glyph tucked above the rail, smaller than the buttons under it.
+   The product's own metaphor should be the first thing you see. */
+.rail-brand { margin: 2px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft);
+  width: 40px; display: grid; place-items: center; opacity: 1; }
+.rail-brand svg { display: block; filter: drop-shadow(0 0 10px var(--accent-dim)); }
+.chrome .wordmark { gap: 7px; }
+.chrome .wordmark b { font-weight: 400; font-size: 13px; letter-spacing: .32em; color: var(--ink); }
+.chrome .wordmark small { letter-spacing: .26em; font-size: 8.5px; color: var(--ink-3); }
+
+/* ---- board: links you can actually edit, actions that look like actions ------- */
+.blinks { pointer-events: none; }
+.bl path, .bl text { pointer-events: auto; }
+.bl-hit { stroke: transparent; stroke-width: 14px; cursor: pointer; }
+.bl.on path:not(.bl-hit) { stroke-width: 2.2; }
+.bl text { cursor: pointer; }
+.bl-tools text { font-size: 8px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; paint-order: stroke fill; stroke: var(--void); stroke-width: 3px; }
+.bl-retype { fill: var(--ctl); }
+.bl-retype:hover { fill: var(--accent); }
+.bl-del { fill: var(--ctl); }
+.bl-del:hover { fill: var(--reject); }
+
+.bc-actions { gap: 5px; }
+.bc-actions button, .bc-actions a { border: 1px solid var(--ctl-bd); border-radius: 3px; padding: 3px 7px; }
+.bc-actions button:hover:not(:disabled), .bc-actions a:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--ctl-bg); }
+.bc-actions button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.bc-actions .bc-del:hover { border-color: color-mix(in srgb, var(--reject) 55%, transparent); }
+.bc-card { width: 232px; }

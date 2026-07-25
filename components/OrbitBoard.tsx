@@ -19,6 +19,7 @@ import { looksLikeName } from "@/lib/name";
 import { buildTimeline } from "@/lib/timeline";
 import { loadSettings, saveSettings, cfgHeaders, tradecraftHeaders, toClientConfig, type OctopusSettings } from "@/lib/settings";
 import { migrateLegacyStorage } from "@/lib/migrate";
+import { saveSession, loadSession, clearSession, sessionAge } from "@/lib/session";
 import { toGraphML } from "@/lib/graphexport";
 import { Logo } from "./Logo";
 import { loadCasefile, saveCasefile, addCard, updateCard, correlatable, emptyCasefile, sanitizeCasefile, type Casefile, type BoardCard, type OrbitLayout } from "@/lib/casefile";
@@ -223,6 +224,7 @@ export default function OrbitBoard() {
     { group: "Data", label: "Export JSON", hint: "Download the case file", run: exportCurrent },
     { group: "Data", label: "Export graph (GraphML)", hint: "Open in flowsint / Maltego / Gephi", run: exportGraphML },
     { group: "Data", label: "Import JSON", hint: "Load a case file", run: () => fileRef.current?.click() },
+    { group: "Data", label: "Start fresh", hint: "Drop the restored session and clear the board", run: startFresh },
     { group: "Configure", label: "Sources & apps", hint: "Connectors to run, manual pivots to open", run: (e2?: any) => setRail({ id: "sources", top: 90 }) },
     { group: "Configure", label: "API keys & tradecraft", hint: "LLM, leak sources, collector, OPSEC posture, proxy / Tor", run: () => setApiOpen(true) },
     { group: "Configure", label: "Usage guide", hint: "Where to start and how to run an investigation", run: () => setGuideOpen(true) },
@@ -260,7 +262,15 @@ export default function OrbitBoard() {
         setPalQuery(""); setPalIndex(0); setPalette((p) => !p);
         return;
       }
-      if (e.key === "Escape") { setPalette(false); setRail(null); return; }
+      if (e.key === "Escape") {
+        // Escape has to close whatever is in front of you. The dossier had no key at
+        // all and its overlay swallows every click behind it, so the only way out was
+        // to find the ✕.
+        setPalette(false); setRail(null); setMenu(null);
+        setDossier(null); setApiOpen(false); setGuideOpen(false); setCorpusOpen(false);
+        setAddForm(null); setAssist(null); setMonitor(null); setNarrative(null);
+        return;
+      }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "/") { e.preventDefault(); seedInputRef.current?.focus(); seedInputRef.current?.select(); return; }
       if (e.key === "f" || e.key === "F") { fitRef.current(); return; }
@@ -337,6 +347,47 @@ export default function OrbitBoard() {
       flashMsg("network unavailable — the card is kept, nothing was correlated");
     } finally {
       setCardBusy(null);
+    }
+  }
+
+  /**
+   * Relaunch the whole investigation from a card. This is the difference between a
+   * notepad and an investigative surface: what you wrote down becomes the next seed,
+   * the scan runs on it, and everything it finds is attached back to the card that
+   * started it — so the chain is visible instead of remembered.
+   */
+  async function investigateCard(card: BoardCard) {
+    const c = correlatable(card);
+    if (!c.ok || cardBusy || scanning) { if (!c.ok) flashMsg(c.reason || "not investigable"); return; }
+    const target = (c.handle || "").trim();
+    if (!target) return;
+    setCardBusy(card.id);
+    // stay on the board: "board" is the ORBIT view id, and sending the analyst to the
+    // graph mid-action is precisely the context loss this feature exists to avoid
+    setView("case");
+    setScanMsg(`investigating "${target}" from the board…`);
+    try {
+      const cids = [...enabledRef.current].join(",");
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(target)}&connectors=${encodeURIComponent(cids)}`, {
+        headers: { ...cfgHeaders(), ...tradecraftHeaders() },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.signals?.length) { flashMsg(data?.error || `nothing found for "${target}"`); return; }
+      clearDemoState();
+      // merge onto the existing graph rather than replacing it: the card is a branch of
+      // the current investigation, not a new one
+      const added = mergeRef.current(data.signals as Signal[], card.ref || "", "card:" + card.id);
+      const produced = (data.signals as Signal[]).map((x) => x.id);
+      applyCasefile(updateCard(casefileRef.current, card.id, {
+        produced,
+        body: (card.body ? card.body + "\n" : "") + `investigated ${new Date().toISOString().slice(0, 10)}: ${data.signals.length} node(s)`,
+      }));
+      setScanMsg(`"${target}" → ${added} new node(s) merged onto the graph` + (data.health?.note ? ` · ⚠ ${data.health.note}` : ""));
+    } catch {
+      flashMsg("network unavailable");
+    } finally {
+      setCardBusy(null);
+      setTimeout(() => setScanMsg(null), 6000);
     }
   }
 
@@ -1205,6 +1256,48 @@ export default function OrbitBoard() {
     };
   }, []);
 
+  // ---- session restore -------------------------------------------------------
+  // Declared after the canvas effect on purpose: effects run in source order, so the
+  // graph has been built from the demo data by the time this replaces it.
+  useEffect(() => {
+    const prev = loadSession();
+    if (!prev) return;
+    setSeed(prev.seed);
+    seedRef.current = prev.seed;
+    lastScanRef.current = prev.seed;
+    clearDemoState();
+    rebuildRef.current(prev.signals, false);
+    loadBoardFor(prev.seed);
+    setScanMsg(`resumed "${prev.seed}" — ${prev.signals.length} node(s), last worked on ${sessionAge(prev.savedAt)}`);
+    setTimeout(() => setScanMsg(null), 6000);
+  }, []);
+
+  // Save continuously. dataVersion changes on every node added, removed or re-judged,
+  // which is exactly the granularity that matters — and it is debounced so a physics
+  // frame never triggers a write.
+  useEffect(() => {
+    if (demoRef.current) return; // never persist the sample graph over real work
+    const t = setTimeout(() => {
+      saveSession({ seed: seedRef.current, mode: seedRef.current.includes("@") ? "email" : "username", signals: currentSignals(), view });
+    }, 900);
+    return () => clearTimeout(t);
+  }, [dataVersion, view]);
+
+  /** Drop the live session and go back to a clean board. */
+  function startFresh() {
+    clearSession();
+    demoRef.current = true;
+    setIsDemo(true);
+    setSeed(SEED);
+    seedRef.current = SEED;
+    lastScanRef.current = "";
+    suppressedRef.current = new Set();
+    chainedRef.current = new Set();
+    rebuildRef.current(SIGNALS, false);
+    loadBoardFor(SEED);
+    flashMsg("session cleared — sample data restored");
+  }
+
   function escapeHtml(s: string) {
     return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
   }
@@ -1637,13 +1730,14 @@ export default function OrbitBoard() {
           onChange={applyCasefile}
           signals={currentSignals()}
           onCorrelate={correlateCard}
+          onInvestigate={investigateCard}
           onSelectSignal={(id) => { setSelectedId(id); setView("board"); }}
           busyCardId={cardBusy}
         />
       )}
 
       <nav className="rail" aria-label="workspace">
-        <div className="wordmark rail-brand"><Logo size={22} /></div>
+        <div className="rail-brand" title="Octopus"><Logo size={34} /></div>
         {RAIL.map((g) => (
           <button
             key={g.id}
@@ -1750,6 +1844,7 @@ export default function OrbitBoard() {
           <button className="menu-item" onClick={() => { setRail(null); exportCurrent(); }}><b>Export JSON</b><span>Download the case file</span></button>
           <button className="menu-item" onClick={() => { setRail(null); exportGraphML(); }}><b>Export graph (GraphML)</b><span>Open in flowsint / Maltego / Gephi</span></button>
           <button className="menu-item" onClick={() => { setRail(null); fileRef.current?.click(); }}><b>Import JSON</b><span>Load a case file</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); startFresh(); }}><b>Start fresh</b><span>Drop the restored session and clear the board</span></button>
         </div>
       )}
 
@@ -1765,7 +1860,7 @@ export default function OrbitBoard() {
       <input ref={fileRef} type="file" accept="application/json,.json" onChange={importFile} style={{ display: "none" }} />
 
       <div className="chrome">
-        <div className="wordmark">OCTOPUS <small>ORBIT</small></div>
+        <div className="wordmark"><b>OCTOPUS</b><small>ORBIT</small></div>
         <div className="cmdbar">
           <label htmlFor="seed-input">seed</label>
           <input

@@ -102,18 +102,15 @@ function newId(prefix: string): string {
 export function freeSpot(cards: BoardCard[], w = 230, h = 130): { x: number; y: number } {
   const clash = (x: number, y: number) =>
     cards.some((c) => Math.abs(c.x - x) < w && Math.abs(c.y - y) < h);
-  let x = 60, y = 60;
-  for (let ring = 0; ring < 40; ring++) {
-    for (let i = 0; i <= ring; i++) {
-      const cand: [number, number][] = [
-        [60 + i * w, 60 + ring * h],
-        [60 + ring * w, 60 + i * h],
-      ];
-      for (const [cx, cy] of cand) if (!clash(cx, cy)) return { x: cx, y: cy };
-    }
-    x = 60 + ring * w; y = 60 + ring * h;
+  // fill ROWS first: a board is wider than it is tall, and stacking cards in a column
+  // makes every link between neighbours run straight through them
+  const perRow = 5;
+  for (let i = 0; i < 200; i++) {
+    const x = 60 + (i % perRow) * w;
+    const y = 60 + Math.floor(i / perRow) * h;
+    if (!clash(x, y)) return { x, y };
   }
-  return { x, y };
+  return { x: 60, y: 60 };
 }
 
 export function addCard(file: Casefile, card: Partial<BoardCard> & { kind: CardKind }): Casefile {
