@@ -34,7 +34,10 @@ export function lineageOf(name: string, source = ""): LineageRoot {
   const s = source.toLowerCase();
 
   if (/analyst|manual capture|evidence snapshot/.test(n + s)) return "analyst";
-  if (/avatar|face|exif|gps in image|camera|photo taken|software/.test(n)) return "image";
+  // Only a COMPARISON of image bytes is an independent observation. "Avatar present"
+  // merely restates the profile page it was read from — counting it separately let a
+  // single sighting look like two, which is how a guessed handle reached PROBABLE.
+  if (/matching avatar|avatar match|matching face|same photo|exif|gps in image|camera|photo taken|software/.test(n)) return "image";
   if (/declared|verified account|linked account/.test(n)) return "declared-link";
   // darkweb before breach: onion indexes surface leak-site pages, and an index entry is
   // its own kind of observation — mirrored across every engine that crawled it.

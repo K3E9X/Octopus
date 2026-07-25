@@ -42,6 +42,8 @@ export interface RawProfile {
   unverified?: boolean;
   /** true when the account was found via a handle derived from an email (weaker person-link) */
   derived?: boolean;
+  /** which derivation rule produced it — the evidence must say how indirect the link is */
+  derivedFrom?: string;
   /** true when this node was created from another account's declared/verified link */
   declared?: boolean;
   /** set when the profile was found via a VARIANT of the seed handle, not the seed

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scanUsername, type RawProfile } from "@/lib/connectors";
 import { scanWmn } from "@/lib/wmn";
-import { scanEmail } from "@/lib/email";
+import { scanEmail, emailShapeEvidence, type EmailScan } from "@/lib/email";
 import { dHashFromBuffer, fetchImageBuffer, avatarMatch } from "@/lib/phash";
 import { metaFromBuffer, metaEvidence } from "@/lib/metadata";
 import { extractFromText, normId } from "@/lib/extract";
@@ -12,6 +12,7 @@ import { readClientConfig } from "@/lib/reqconfig";
 import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
 import { looksLikePhone, phoneIntel, type PhoneIntel } from "@/lib/phone";
 import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
+import { namePairFromHandle, matchName, nameMatchEvidence } from "@/lib/namematch";
 import { looksLikeDomain, enrichDomain } from "@/lib/domain";
 import { usernameVariants } from "@/lib/variants";
 import { sharedHandleEvidence, handleRarity } from "@/lib/rarity";
@@ -137,7 +138,7 @@ function correlate(matchTarget: string, profiles: RawProfile[]): Signal[] {
     } else if (p.derived) {
       evidence.push({
         name: "Handle derived from email",
-        detail: `${p.handle} obtained by deriving the handle from the email — public account exists, link to the person to be confirmed.`,
+        detail: `${p.handle} on ${p.platform}, from ${p.derivedFrom || "the address local part"}. The account exists; that it belongs to the owner of this address is NOT established — a local part is a guess at a handle, not a link to a person.`,
         source: p.source,
         weight: 50,
       });
@@ -215,6 +216,16 @@ function correlate(matchTarget: string, profiles: RawProfile[]): Signal[] {
       for (const l of p.links.slice(0, 4)) {
         evidence.push({ name: "Declared linked account", detail: l.label + (l.url ? ` → ${l.url}` : ""), source: `${p.source} · declared link`, weight: 85 });
       }
+    }
+
+    // A handle we GUESSED, on a profile that shows a name, has to be checked against
+    // the name we were looking for. "marie.dubois@" → variant "mdubois" → a real
+    // account belonging to Matthieu Dubois: same surname, different person. Without
+    // this the tool read a name and an avatar off that page and called it PROBABLE.
+    if ((p.derived || p.variantOf) && p.displayName) {
+      const expected = namePairFromHandle(matchTarget);
+      const ev = nameMatchEvidence(matchName(expected, p.displayName), p.source);
+      if (ev) evidence.push(ev);
     }
 
     // honest, evidence-driven score: qualitative tier + derived confidence
@@ -350,14 +361,38 @@ export async function GET(req: NextRequest) {
     let checked = 0, totalSites = 0;
     let matchTarget = q;
     let email: { handle: string; mxValid: boolean } | undefined;
+    let emailScan: EmailScan | undefined;
 
     if (isEmail) {
-      const r = await scanEmail(q, depth, enabled ?? undefined);
+      // health is threaded through so a rate-limited Gravatar is reported as
+      // "not checked", never as "no profile"
+      const r = await scanEmail(q, depth, enabled ?? undefined, health);
       apiProfiles = r.profiles;
       wmnHits = r.wmnHits;
       checked = r.wmnChecked; totalSites = r.wmnTotal;
       matchTarget = r.handle || q;
       email = { handle: r.handle, mxValid: r.mxValid };
+      emailScan = r;
+
+      // The variant generator was username-only, so an email got exactly one handle
+      // tried. Now the primary candidate is expanded the same way — this is where most
+      // of the missing email recall was.
+      if (variantsOn && r.handle) {
+        const vars = usernameVariants(r.handle, 5);
+        const have = new Set(apiProfiles.map((p) => norm(p.platform) + "|" + norm(p.handle)));
+        const results = await Promise.all(vars.map((v) => scanUsername(v.handle, enabled ?? undefined, health).then((ps) => ({ v, ps })).catch(() => ({ v, ps: [] as RawProfile[] }))));
+        for (const { v, ps } of results) {
+          for (const p of ps) {
+            const key = norm(p.platform) + "|" + norm(p.handle);
+            if (have.has(key)) continue;
+            have.add(key);
+            p.id = "var:" + v.handle + ":" + p.id;
+            p.variantOf = r.handle;
+            p.variantRule = v.rule + ", from the email";
+            apiProfiles.push(p);
+          }
+        }
+      }
     } else {
       const [api, wmn] = await Promise.all([
         scanUsername(q, enabled ?? undefined, health),
@@ -525,6 +560,42 @@ export async function GET(req: NextRequest) {
         const hits = await searchCorpus(isEmail ? q : matchTarget);
         if (hits.length) signals.push(...corpusSignals(hits, collectedAt));
       } catch { /* corpus is optional */ }
+    }
+
+    // --- the address itself, and the organisation behind it ---
+    // Two things the email path never surfaced. First the SHAPE of the address, which
+    // is mostly negative intelligence: a role mailbox is an organisation and must not
+    // be attributed to a person, a dead domain contradicts a live address. Second the
+    // DOMAIN: for a corporate address it names the employer, which is often the single
+    // most useful fact of the scan, and it costs DNS + RDAP with no contact to the target.
+    if (emailScan) {
+      const sh = emailScan.shape;
+      signals.push({
+        id: "attr:email:" + norm(sh.normalized),
+        platform: "EMAIL",
+        handle: sh.normalized,
+        disc: "EM",
+        kind: "email",
+        confidence: 50,
+        status: "review",
+        collectedAt,
+        evidence: emailShapeEvidence(sh, emailScan.domainIntel),
+      });
+      // score it through the same model as everything else — it was the one node
+      // shipping without a tier, which reads in the UI as "no assessment"
+      const en = signals[signals.length - 1];
+      const es = scoreEvidence(en.evidence);
+      en.tier = es.tier; en.confidence = es.confidence;
+
+      if (!sh.isFreemail && !sh.isDisposable && looksLikeDomain(sh.domain) && (!enabled || enabled.has("domain"))) {
+        try {
+          const dres = await enrichDomain(sh.domain, collectedAt, "attr:email:" + norm(sh.normalized));
+          const have = new Set(signals.map((x) => x.id));
+          for (const d of dres.signals) if (!have.has(d.id)) signals.push(d);
+          for (const [a, b] of dres.edges) addEdge(a, b);
+          addEdge("attr:email:" + norm(sh.normalized), "domain:" + norm(sh.domain));
+        } catch { /* domain enrichment is best effort */ }
+      }
     }
 
     // --- darkweb / hidden services ---
