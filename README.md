@@ -158,6 +158,21 @@ Finding nodes isn't the point; *identifying the person* is. The **DOSSIER** cons
 
 **Breach search (IntelX).** Set `INTELX_API_KEY` (freemium) on Vercel to enable the **Intelligence X** app — a scan then also searches leaks/pastes/darkweb for the identifier and adds ⚠ leak nodes (sensitive: use under a legal basis; credentials are never redistributed).
 
+## The investigator's board
+
+An investigation is not only what a scanner returns. You read a thread, get a tip, recognise a name, form a theory you are trying to kill — and if there is nowhere to put that, it ends up in a text file next to the tool, where it correlates with nothing. **BOARD** is that place, on the same case as the graph.
+
+Cards (lead, source, person, evidence, hypothesis, question) are free-form and draggable; links between them are **typed** — supports, contradicts, leads to, same as — because a board where everything is merely "related" cannot tell you when your own theory is in trouble. Two rules keep it honest:
+
+- **A card is your claim until it is corroborated.** `Correlate` pushes a card whose title is a handle, email or URL through the same engine a scan uses; it becomes real graph nodes scored by the same rules, not by how confidently it was written. Conversely, any graph node can be pinned to the board from its right-click menu, and the card keeps showing what the engine currently says.
+- **A hypothesis never gets a probability.** It gets a tally — what is confirmed for it, what is confirmed against it, what is still open — and a plain verdict. Confirmed evidence on both sides reads as *in conflict*, not as an average.
+
+The board and the graph arrangement are saved per seed and travel inside the exported case file (an imported board is sanitised, never trusted).
+
+## Shaping the graph
+
+Orbit is malleable: wheel zooms about the cursor, dragging the void pans, `F` frames everything. **Dragging a node pins it** — an arrangement the physics undoes was never an arrangement — and double-clicking releases it. Four layouts: *Orbit* (distance from the seed **is** the confidence), *Clusters* (accounts resolved to one identity sit together), *By type*, and *Free*. Outside Orbit the legend states that distance no longer encodes confidence, so the picture cannot quietly lie about the evidence.
+
 ## Interface
 
 One rule: the graph gets the screen, the tools get a place. Everything is reachable two ways — a **rail** on the left grouping tools by intent (Investigate, Enrich, Sources, Cases, Data, Configure), and a **command palette** (`⌘K` / `Ctrl K`) that searches every action in one list. `/` focuses the seed, `1-4` switch view, `Esc` closes. Light and dark are both first-class: the theme follows your system until you choose one, and the choice is resolved before first paint so there is no flash. The art direction is unchanged — void ground, one hairline, one accent, monospace, no fills, no icons that aren't geometry.

@@ -21,6 +21,7 @@ import { loadSettings, saveSettings, cfgHeaders, tradecraftHeaders, toClientConf
 import { migrateLegacyStorage } from "@/lib/migrate";
 import { toGraphML } from "@/lib/graphexport";
 import { Logo } from "./Logo";
+import { loadCasefile, saveCasefile, addCard, updateCard, correlatable, emptyCasefile, sanitizeCasefile, type Casefile, type BoardCard, type OrbitLayout } from "@/lib/casefile";
 import { Glyph, type GlyphName } from "./Glyph";
 import { handleRarity } from "@/lib/rarity";
 import { LLM_PRESETS } from "@/lib/llmconfig";
@@ -28,10 +29,22 @@ import type { AssistResult } from "@/lib/assist";
 
 // Leaflet touches window on import — load the map only in the browser.
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
+const CaseBoard = dynamic(() => import("./CaseBoard"), { ssr: false });
 
 interface WorkNode extends Signal {
   x: number; y: number; vx: number; vy: number; op: number; a: number;
+  /** frozen where the analyst put it — physics stops touching it */
+  pinned?: boolean;
 }
+
+/** How the graph arranges itself. The analyst chooses; the physics obeys. */
+export type OrbitMode = "orbit" | "cluster" | "type" | "free";
+const ORBIT_MODES: { id: OrbitMode; label: string; hint: string }[] = [
+  { id: "orbit", label: "Orbit", hint: "distance from the seed IS the confidence" },
+  { id: "cluster", label: "Clusters", hint: "accounts resolved to one identity sit together" },
+  { id: "type", label: "By type", hint: "platforms, emails, people, leaks in their own sectors" },
+  { id: "free", label: "Free", hint: "no gravity — arrange it yourself" },
+];
 
 type RailId = "investigate" | "enrich" | "sources" | "cases" | "data" | "configure";
 
@@ -61,6 +74,15 @@ export default function OrbitBoard() {
   const mergeRef = useRef<(sigs: Signal[], originId: string, qkey: string) => number>(() => 0);
   const removeNodeRef = useRef<(id: string) => void>(() => {});
   const focusRef = useRef<string | null>(null);
+  // viewport (pan/zoom) and layout mode live in refs: the animation loop reads them
+  // every frame and must never be the reason React re-renders
+  const viewRef = useRef({ x: 0, y: 0, z: 1 });
+  const modeRef = useRef<OrbitMode>("orbit");
+  const fitRef = useRef<() => void>(() => {});
+  const layoutRef = useRef<(m: OrbitMode) => void>(() => {});
+  // the animation loop cannot read React state, so the casefile bridge is a pair of refs
+  const saveLayoutRef = useRef<(l: OrbitLayout) => void>(() => {});
+  const readLayoutRef = useRef<() => OrbitLayout | null>(() => null);
 
   const [seed, setSeed] = useState(SEED);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -80,7 +102,7 @@ export default function OrbitBoard() {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [dossier, setDossier] = useState<Dossier | null>(null);
-  const [view, setView] = useState<"board" | "table" | "timeline" | "map">("board");
+  const [view, setView] = useState<"board" | "case" | "table" | "timeline" | "map">("board");
   const [monitor, setMonitor] = useState<MonitorDiff | null>(null);
   const [monitoring, setMonitoring] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -104,6 +126,7 @@ export default function OrbitBoard() {
   const deepRef = useRef(false);
   const [deepStatus, setDeepStatus] = useState<string | null>(null);
   const seedInputRef = useRef<HTMLInputElement>(null);
+  const [orbitMode, setOrbitModeState] = useState<OrbitMode>("orbit");
   const [palQuery, setPalQuery] = useState("");
   const [palIndex, setPalIndex] = useState(0);
   const [modKey, setModKey] = useState("Ctrl ");
@@ -117,6 +140,19 @@ export default function OrbitBoard() {
       try { out[c.id] = (await listSnapshots(c.id)).length; } catch { /* local fallback */ }
     }));
     setSnapCounts(out);
+  }
+
+  function setOrbitMode(m: OrbitMode) {
+    setOrbitModeState(m);
+    layoutRef.current(m);
+  }
+
+  /** Release every pin: the graph re-forms itself under the current layout. */
+  function unpinAll() {
+    for (const n of nodesRef.current) n.pinned = false;
+    for (const el of Object.values(elsRef.current)) el.classList.remove("pinned");
+    saveLayoutRef.current({ positions: {}, pinned: [], mode: orbitMode });
+    flashMsg("all nodes released");
   }
 
   function openRail(e: React.MouseEvent<HTMLButtonElement>, id: RailId) {
@@ -164,9 +200,16 @@ export default function OrbitBoard() {
     { group: "Enrich", label: "Open hidden service", hint: "Retrieve a .onion through Tor — emails, wallets, keys, handles", run: openOnion },
     { group: "Enrich", label: "Add a finding", hint: "Your manual discovery, run through the same engine", run: () => openAddForm() },
     { group: "View", label: "Orbit", hint: "The correlation graph — confidence as gravity", run: () => setView("board"), key: "1" },
-    { group: "View", label: "Table", hint: "Every node, sortable and filterable", run: () => setView("table"), key: "2" },
-    { group: "View", label: "Timeline", hint: "The chronology of the footprint", run: () => setView("timeline"), key: "3" },
-    { group: "View", label: "Map", hint: "Resolved locations and where they converge", run: () => setView("map"), key: "4" },
+    { group: "View", label: "Investigator's board", hint: "Your own cards, links and theories, correlated with the graph", run: () => setView("case"), key: "2" },
+    { group: "View", label: "Table", hint: "Every node, sortable and filterable", run: () => setView("table"), key: "3" },
+    { group: "View", label: "Timeline", hint: "The chronology of the footprint", run: () => setView("timeline"), key: "4" },
+    { group: "View", label: "Map", hint: "Resolved locations and where they converge", run: () => setView("map"), key: "5" },
+    { group: "Graph", label: "Fit the graph to the view", hint: "Frame every node currently on the board", run: () => { setView("board"); fitRef.current(); }, key: "F" },
+    { group: "Graph", label: "Layout: orbit", hint: "Distance from the seed IS the confidence", run: () => { setView("board"); setOrbitMode("orbit"); } },
+    { group: "Graph", label: "Layout: clusters", hint: "Accounts resolved to one identity sit together", run: () => { setView("board"); setOrbitMode("cluster"); } },
+    { group: "Graph", label: "Layout: by type", hint: "Platforms, emails, people and leaks in their own sectors", run: () => { setView("board"); setOrbitMode("type"); } },
+    { group: "Graph", label: "Layout: free", hint: "No gravity — arrange the graph yourself", run: () => { setView("board"); setOrbitMode("free"); } },
+    { group: "Graph", label: "Release all pins", hint: "Let the graph re-form itself", run: unpinAll },
     { group: "Data", label: "Local corpora", hint: "Load and search datasets you hold — silent, offline", run: () => { setCorpusOpen(true); loadCorpusStats(); } },
     { group: "Data", label: "Save the case", hint: "Append an immutable snapshot", run: saveCurrent },
     { group: "Data", label: "Export JSON", hint: "Download the case file", run: exportCurrent },
@@ -212,13 +255,101 @@ export default function OrbitBoard() {
       if (e.key === "Escape") { setPalette(false); setRail(null); return; }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "/") { e.preventDefault(); seedInputRef.current?.focus(); seedInputRef.current?.select(); return; }
-      const views = { "1": "board", "2": "table", "3": "timeline", "4": "map" } as const;
+      if (e.key === "f" || e.key === "F") { fitRef.current(); return; }
+      const views = { "1": "board", "2": "case", "3": "table", "4": "timeline", "5": "map" } as const;
       const v = views[e.key as keyof typeof views];
       if (v) setView(v);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // --- the investigator's board: the analyst's own material, per seed ---
+  const [casefile, setCasefile] = useState<Casefile>(() => emptyCasefile(SEED));
+  const [cardBusy, setCardBusy] = useState<string | null>(null);
+  const casefileRef = useRef<Casefile>(casefile);
+
+  function applyCasefile(f: Casefile) {
+    casefileRef.current = f;
+    setCasefile(f);
+    saveCasefile(f);
+  }
+
+  // The Orbit arrangement is stored with the board: both are the analyst's layout of
+  // the same case, and they should travel together on export.
+  // Load the stored board BEFORE the canvas effect runs its first rebuild — effects
+  // fire in declaration order, and rebuild() restores the saved arrangement from
+  // casefileRef. Without this the board (and every pin) was lost on reload.
+  useEffect(() => { loadBoardFor(seedRef.current); }, []);
+
+  useEffect(() => {
+    saveLayoutRef.current = (orbit: OrbitLayout) => {
+      const f = { ...casefileRef.current, orbit };
+      casefileRef.current = f;
+      setCasefile(f);
+      saveCasefile(f);
+    };
+    readLayoutRef.current = () => casefileRef.current.orbit || null;
+  }, []);
+
+  /** Load the board that belongs to a seed (each investigation keeps its own). */
+  function loadBoardFor(seed: string) {
+    const f = loadCasefile(seed);
+    casefileRef.current = f;
+    setCasefile(f);
+  }
+
+  // Push a card's identifier through the SAME correlation engine a scan uses. The
+  // card does not become a node by being written — it becomes one by being correlated
+  // and scored like everything else.
+  async function correlateCard(card: BoardCard) {
+    const c = correlatable(card);
+    if (!c.ok || cardBusy) { if (!c.ok) flashMsg(c.reason || "not correlatable"); return; }
+    setCardBusy(card.id);
+    try {
+      const platform = card.kind === "person" ? "PERSON" : (card.url ? hostLabel(card.url) : "MANUAL");
+      const res = await fetch("/api/correlate", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          input: {
+            platform, handle: c.handle, url: card.url || "",
+            via: "investigator board", note: card.body || "",
+          },
+          signals: currentSignals(),
+          seed: seedRef.current.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.manual) { flashMsg(data?.error || "correlation failed"); return; }
+      ingestRef.current(data.manual as Signal, (data.extracted || []) as Signal[], (data.links || []) as [string, string][]);
+      const produced = [data.manual.id, ...((data.extracted || []) as Signal[]).map((e) => e.id)];
+      applyCasefile(updateCard(casefileRef.current, card.id, { produced, ref: card.ref || data.manual.id }));
+      flashMsg(data.summary || `card correlated → ${produced.length} node(s)`);
+    } catch {
+      flashMsg("network unavailable — the card is kept, nothing was correlated");
+    } finally {
+      setCardBusy(null);
+    }
+  }
+
+  function hostLabel(url: string): string {
+    try { return new URL(url).hostname.replace(/^www\./, "").toUpperCase().slice(0, 24); } catch { return "SOURCE"; }
+  }
+
+  /** Pin a graph node onto the board so it can be reasoned about by hand. */
+  function pinToBoard(n: Signal) {
+    const f = casefileRef.current;
+    if (f.cards.some((c) => c.ref === n.id)) { flashMsg("already on the board"); setView("case"); return; }
+    applyCasefile(addCard(f, {
+      kind: "evidence",
+      title: n.handle,
+      body: `${n.platform} · ${(n.tier || n.status).toUpperCase()}` + (n.evidence[0] ? ` — ${n.evidence[0].name}` : ""),
+      url: n.url,
+      ref: n.id,
+    }));
+    flashMsg(`pinned "${n.handle}" to the board`);
+    setView("case");
+  }
 
   // --- local corpora: datasets the analyst already holds ---
   const [corpusOpen, setCorpusOpen] = useState(false);
@@ -631,7 +762,6 @@ export default function OrbitBoard() {
     function resize() {
       W = window.innerWidth; H = window.innerHeight;
       cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + "px"; cv.style.height = H + "px";
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       // the graph centres on the space it actually has: the rail owns the left edge,
       // so a naive W/2 would push the seed permanently off-centre
       const rail = parseInt(cssv("--rail-w")) || 0;
@@ -653,17 +783,61 @@ export default function OrbitBoard() {
         active = true; draggingRef.current = d; moved = false;
         el.classList.add("drag"); pid = e.pointerId; el.setPointerCapture(pid);
         ox = e.clientX; oy = e.clientY; px = d.x; py = d.y; d.vx = 0; d.vy = 0; e.preventDefault();
+        e.stopPropagation(); // do not start a canvas pan underneath
       });
       el.addEventListener("pointermove", (e) => {
         if (!active) return;
-        const mx = e.clientX - ox, my = e.clientY - oy;
+        // screen delta ÷ zoom = world delta, or the node lags the cursor when zoomed
+        const mx = (e.clientX - ox) / viewRef.current.z, my = (e.clientY - oy) / viewRef.current.z;
         if (Math.abs(mx) + Math.abs(my) > 3) moved = true;
         d.x = px + mx; d.y = py + my;
       });
-      const end = () => { if (!active) return; active = false; el.classList.remove("drag"); draggingRef.current = null; setTimeout(() => { moved = false; }, 40); };
+      const end = () => {
+        if (!active) return;
+        active = false; el.classList.remove("drag"); draggingRef.current = null;
+        // Moving a node is a statement about where it belongs. Honour it: pin it, or
+        // the springs drag it back and the arrangement was theatre.
+        if (moved) { d.pinned = true; el.classList.add("pinned"); persistLayout(); }
+        setTimeout(() => { moved = false; }, 40);
+      };
       el.addEventListener("pointerup", end);
       el.addEventListener("pointercancel", end);
       el.addEventListener("click", () => { if (!moved) setSelectedId(d.id); });
+      el.addEventListener("dblclick", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        d.pinned = !d.pinned;
+        el.classList.toggle("pinned", !!d.pinned);
+        persistLayout();
+      });
+    }
+
+    /** Remember the arrangement with the case — it is analytic work, not decoration. */
+    function persistLayout() {
+      const nodes = nodesRef.current;
+      const positions: Record<string, [number, number]> = {};
+      const pinned: string[] = [];
+      for (const n of nodes) {
+        if (!n.pinned) continue;
+        positions[n.id] = [Math.round(n.x - cx), Math.round(n.y - cy)];
+        pinned.push(n.id);
+      }
+      saveLayoutRef.current({ positions, pinned, mode: modeRef.current });
+    }
+
+    /** Re-apply a saved arrangement after a rebuild. */
+    function restoreLayout() {
+      const l = readLayoutRef.current();
+      if (!l) return;
+      modeRef.current = l.mode || "orbit";
+      const pins = new Set(l.pinned || []);
+      for (const n of nodesRef.current) {
+        const p = l.positions?.[n.id];
+        if (p) { n.x = cx + p[0]; n.y = cy + p[1]; n.op = 1; }
+        if (pins.has(n.id)) {
+          n.pinned = true;
+          elsRef.current[n.id]?.classList.add("pinned");
+        }
+      }
     }
 
     function makeEl(d: WorkNode) {
@@ -696,6 +870,7 @@ export default function OrbitBoard() {
         makeEl(d);
         if (spawn) setTimeout(() => { const a = Math.random() * Math.PI * 2; const edge = Math.max(W, H) * 0.7; d.x = cx + Math.cos(a) * edge; d.y = cy + Math.sin(a) * edge; d.op = 0; }, i * 110);
       });
+      restoreLayout();
       setSelectedId(null);
       setDataVersion((v) => v + 1);
     }
@@ -796,15 +971,56 @@ export default function OrbitBoard() {
     }
     removeNodeRef.current = removeNode;
 
+    /**
+     * Where a node wants to sit, per layout mode. Orbit is the honest default —
+     * distance from the seed IS the confidence, so the picture cannot lie about it.
+     * The others trade that reading for a different one, and say so in the legend.
+     */
+    function anchorFor(d: WorkNode, groups: Map<string, number>, groupCount: number): { ax: number; ay: number; k: number } | null {
+      const mode = modeRef.current;
+      if (mode === "free") return null;
+      if (mode === "orbit") return null; // handled by the radial spring below
+      const key = mode === "cluster"
+        ? (d.clusterId || "unclustered")
+        : (d.kind || "platform");
+      const idx = groups.get(key) ?? 0;
+      const ang = -Math.PI / 2 + (idx / Math.max(1, groupCount)) * Math.PI * 2;
+      const r = baseR * 0.26;
+      return { ax: cx + Math.cos(ang) * r, ay: cy + Math.sin(ang) * r, k: 0.014 };
+    }
+
     function step() {
       const nodes = nodesRef.current;
       const K_RAD = 0.02, K_REP = 1400, DAMP = 0.86;
+      const mode = modeRef.current;
+
+      // group index, recomputed per frame: cheap for graph-sized data, and always
+      // correct after a node arrives or is re-clustered
+      const groups = new Map<string, number>();
+      if (mode === "cluster" || mode === "type") {
+        for (const n of nodes) {
+          const key = mode === "cluster" ? (n.clusterId || "unclustered") : (n.kind || "platform");
+          if (!groups.has(key)) groups.set(key, groups.size);
+        }
+      }
+
       for (let i = 0; i < nodes.length; i++) {
         const d = nodes[i];
         if (d === draggingRef.current) continue;
-        const dx = d.x - cx, dy = d.y - cy, dist = Math.hypot(dx, dy) || 0.001;
-        const f = (targetRadius(d) - dist) * K_RAD;
-        let fx = (dx / dist) * f, fy = (dy / dist) * f;
+        // a pinned node stays exactly where it was put — that is the whole contract
+        if (d.pinned) { if (d.op < 1) d.op = Math.min(1, d.op + 0.02); continue; }
+
+        let fx = 0, fy = 0;
+        const anchor = anchorFor(d, groups, groups.size);
+        if (anchor) {
+          fx += (anchor.ax - d.x) * anchor.k;
+          fy += (anchor.ay - d.y) * anchor.k;
+        } else if (mode === "orbit") {
+          const dx = d.x - cx, dy = d.y - cy, dist = Math.hypot(dx, dy) || 0.001;
+          const f = (targetRadius(d) - dist) * K_RAD;
+          fx += (dx / dist) * f; fy += (dy / dist) * f;
+        }
+
         for (let j = 0; j < nodes.length; j++) {
           if (i === j) continue;
           const o = nodes[j];
@@ -823,7 +1039,13 @@ export default function OrbitBoard() {
 
     function draw() {
       const nodes = nodesRef.current;
+      const v = viewRef.current;
+      // one transform for both layers: the canvas gets it in the matrix, the DOM node
+      // layer gets the identical CSS transform, so they can never drift apart
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.clearRect(0, 0, W, H);
+      ctx.setTransform(DPR * v.z, 0, 0, DPR * v.z, DPR * v.x, DPR * v.y);
+      bodiesEl.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.z})`;
       const selId = selectedRef.current;
       // focus mode: dim everything not linked to the focused node
       let keep: Set<string> | null = null;
@@ -902,6 +1124,62 @@ export default function OrbitBoard() {
       });
     }
 
+    // ---- viewport: wheel to zoom about the cursor, drag the void to pan ----
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const v = viewRef.current;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const z = Math.max(0.25, Math.min(3, v.z * factor));
+      // keep the point under the cursor fixed — anything else feels broken
+      v.x = e.clientX - ((e.clientX - v.x) * z) / v.z;
+      v.y = e.clientY - ((e.clientY - v.y) * z) / v.z;
+      v.z = z;
+    }
+
+    let panning = false, pox = 0, poy = 0, pvx = 0, pvy = 0;
+    function onDown(e: PointerEvent) {
+      if (e.button !== 0) return;
+      panning = true; pox = e.clientX; poy = e.clientY;
+      pvx = viewRef.current.x; pvy = viewRef.current.y;
+      cv.setPointerCapture(e.pointerId);
+      cv.style.cursor = "grabbing";
+    }
+    function onMove(e: PointerEvent) {
+      if (!panning) return;
+      viewRef.current.x = pvx + (e.clientX - pox);
+      viewRef.current.y = pvy + (e.clientY - poy);
+    }
+    function onUp() { panning = false; cv.style.cursor = ""; }
+
+    /** Frame everything currently on the graph. */
+    function fit() {
+      const nodes = nodesRef.current;
+      const v = viewRef.current;
+      if (!nodes.length) { v.x = 0; v.y = 0; v.z = 1; return; }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const n of nodes) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); }
+      const pad = 90;
+      const rail = parseInt(cssv("--rail-w")) || 0;
+      const availW = W - rail - pad * 2, availH = H - 120 - pad;
+      const z = Math.max(0.25, Math.min(2, Math.min(availW / Math.max(1, x1 - x0), availH / Math.max(1, y1 - y0))));
+      v.z = z;
+      v.x = rail + pad + availW / 2 - ((x0 + x1) / 2) * z;
+      v.y = 90 + availH / 2 - ((y0 + y1) / 2) * z;
+    }
+    fitRef.current = fit;
+    layoutRef.current = (m: OrbitMode) => {
+      modeRef.current = m;
+      // switching layout releases the springs but never the analyst's own pins
+      for (const n of nodesRef.current) { n.vx = 0; n.vy = 0; }
+      persistLayout();
+    };
+
+    cv.addEventListener("wheel", onWheel, { passive: false });
+    cv.addEventListener("pointerdown", onDown);
+    cv.addEventListener("pointermove", onMove);
+    cv.addEventListener("pointerup", onUp);
+    cv.addEventListener("pointercancel", onUp);
+
     resize();
     rebuild(SIGNALS, false);
     step();
@@ -909,6 +1187,11 @@ export default function OrbitBoard() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      cv.removeEventListener("wheel", onWheel);
+      cv.removeEventListener("pointerdown", onDown);
+      cv.removeEventListener("pointermove", onMove);
+      cv.removeEventListener("pointerup", onUp);
+      cv.removeEventListener("pointercancel", onUp);
       themeObs.disconnect();
       bodiesEl.innerHTML = "";
     };
@@ -994,6 +1277,7 @@ export default function OrbitBoard() {
       const data = await res.json();
       if (!res.ok) { setScanMsg(data?.error || "scan failed"); return; }
       lastScanRef.current = u;
+      loadBoardFor(u); // each investigation carries its own board
       if (!data.signals?.length) { setScanMsg("no public presence found"); return; }
       // feedback loop: drop what the analyst rejected/removed, re-apply confirmations
       let suppressed = 0;
@@ -1163,6 +1447,7 @@ export default function OrbitBoard() {
     lastScanRef.current = c.seed;
     clearDemoState();
     rebuildRef.current(c.signals, true);
+    loadBoardFor(c.seed);
     setRail(null);
     flashMsg(`loaded "${c.name}"`);
   }
@@ -1177,7 +1462,9 @@ export default function OrbitBoard() {
     if (!sigs.length) return;
     const s = seedRef.current.trim() || "case";
     const c: Case = { id: "export", name: s, seed: s, mode: s.includes("@") ? "email" : "username", savedAt: Date.now(), signals: sigs };
-    const blob = new Blob([caseToJSON(c)], { type: "application/json" });
+    // the analyst's own board travels with the case — it is half the investigation
+    const payload = JSON.stringify({ ...JSON.parse(caseToJSON(c)), casefile: casefileRef.current });
+    const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `octopus-case-${s.replace(/[^\w.@-]/g, "_")}.json`;
@@ -1211,8 +1498,16 @@ export default function OrbitBoard() {
     lastScanRef.current = c.seed;
     clearDemoState();
     rebuildRef.current(c.signals, true);
+    // a board in an imported file is untrusted input: keep only what we understand
+    let board: Casefile | null = null;
+    try {
+      const raw = JSON.parse(text);
+      if (raw?.casefile) board = sanitizeCasefile(raw.casefile, c.seed);
+    } catch { /* the case itself already parsed */ }
+    if (board && (board.cards.length || board.links.length)) applyCasefile(board);
+    else loadBoardFor(c.seed);
     setRail(null);
-    flashMsg(`imported "${c.name}"`);
+    flashMsg(`imported "${c.name}"` + (board?.cards.length ? ` · ${board.cards.length} board card(s)` : ""));
   }
 
   return (
@@ -1327,6 +1622,17 @@ export default function OrbitBoard() {
       })()}
 
       {view === "map" && <MapView signals={currentSignals()} onSelect={(id) => setSelectedId(id)} />}
+
+      {view === "case" && (
+        <CaseBoard
+          file={casefile}
+          onChange={applyCasefile}
+          signals={currentSignals()}
+          onCorrelate={correlateCard}
+          onSelectSignal={(id) => { setSelectedId(id); setView("board"); }}
+          busyCardId={cardBusy}
+        />
+      )}
 
       <nav className="rail" aria-label="workspace">
         <div className="wordmark rail-brand"><Logo size={22} /></div>
@@ -1471,12 +1777,13 @@ export default function OrbitBoard() {
           {/* the strip never wraps, so the full text lives in the tooltip — a truncated
               "sources unreachable" warning that cannot be read is not a warning */}
           {(deepStatus || scanMsg) && <span className="st-msg" title={deepStatus || scanMsg || ""}>{deepStatus || scanMsg}</span>}
-          {isDemo && <span className="demo-tag hide-md">sample data — scan a seed to start</span>}
+          {isDemo && !scanMsg && !deepStatus && <span className="demo-tag hide-md">sample data — scan a seed to start</span>}
           <span className="hide-md"><span className="dotpulse" /><b>{total}</b> signals</span>
           <span className="hide-md"><b style={{ color: "var(--confirm)" }}>{confirmedCount}</b> confirmed</span>
         </div>
         <div className="viewtoggle">
           <button className={view === "board" ? "on" : ""} onClick={() => setView("board")}>ORBIT</button>
+          <button className={view === "case" ? "on" : ""} onClick={() => setView("case")}>BOARD</button>
           <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>TABLE</button>
           <button className={view === "timeline" ? "on" : ""} onClick={() => setView("timeline")}>TIMELINE</button>
           <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>MAP</button>
@@ -1517,15 +1824,43 @@ export default function OrbitBoard() {
 
       {view === "board" && (
         <>
+          <div className="orbit-tools">
+            <div className="ot-modes">
+              {ORBIT_MODES.map((m) => (
+                <button
+                  key={m.id} className={orbitMode === m.id ? "on" : ""} title={m.hint}
+                  onClick={() => setOrbitMode(m.id)}
+                >{m.label}</button>
+              ))}
+            </div>
+            <div className="ot-row">
+              <button className="ot-act" onClick={() => fitRef.current()}>Fit</button>
+              <button className="ot-act" onClick={unpinAll}>Release pins</button>
+              <span className="ot-hint">wheel zooms · drag the void pans · drag a node pins it · double-click un-pins</span>
+            </div>
+          </div>
+
           <div className="legend">
-            {BAND_ORDER.map((k) => (
-              <div className="l" key={k}><span className="tick" />{BANDS[k].label}</div>
-            ))}
+            {/* The legend has to describe the layout actually on screen. In clusters or
+                by-type, distance no longer encodes confidence, and a legend that kept
+                claiming it did would be the picture lying about the evidence. */}
+            {orbitMode === "orbit" ? (
+              BAND_ORDER.map((k) => (
+                <div className="l" key={k}><span className="tick" />{BANDS[k].label}</div>
+              ))
+            ) : (
+              <>
+                <div className="l"><span className="tick" />
+                  {orbitMode === "cluster" ? "grouped by resolved identity" : orbitMode === "type" ? "grouped by node type" : "free arrangement"}
+                </div>
+                <div className="l ot-warn">distance no longer means confidence — read the tier on the node</div>
+              </>
+            )}
           </div>
           <div className="hint">
             Type a seed and press <b>Enter</b>&nbsp;&nbsp;/&nbsp;&nbsp;click a node for its evidence, right-click to pivot
             &nbsp;&nbsp;/&nbsp;&nbsp;<b>{modKey}K</b> for every command&nbsp;&nbsp;/&nbsp;&nbsp;<b>/</b> to focus the seed,
-            <b> 1-4</b> to switch view&nbsp;&nbsp;/&nbsp;&nbsp;new here? the rail ends with the guide
+            <b> 1-5</b> to switch view&nbsp;&nbsp;/&nbsp;&nbsp;new here? the rail ends with the guide
           </div>
         </>
       )}
@@ -1843,6 +2178,34 @@ export default function OrbitBoard() {
               a sweep is a lead list about different people, so it never becomes a node.
             </div>
 
+            <div className="guide-sect">Shaping the graph (Orbit)</div>
+            <ul className="guide-list">
+              <li><b>Wheel</b> zooms about the cursor, <b>dragging the void</b> pans, <b>F</b> frames everything.</li>
+              <li><b>Drag a node</b> and it stays where you put it — moving it pins it, because an arrangement the
+                physics undoes was never an arrangement. <b>Double-click</b> releases it.</li>
+              <li>Four layouts: <b>Orbit</b> (distance from the seed IS the confidence), <b>Clusters</b> (accounts
+                resolved to one identity sit together), <b>By type</b>, and <b>Free</b> (no gravity at all). Outside
+                Orbit the legend says so — distance stops meaning confidence, and the picture must not pretend otherwise.</li>
+              <li>Your arrangement is saved with the case and comes back with it.</li>
+            </ul>
+
+            <div className="guide-sect">Your side of it (BOARD)</div>
+            <div className="guide-lead">
+              You are also working by hand — reading a thread, taking a tip, forming a theory. <b>BOARD</b> is where
+              that goes, on the same case as the graph instead of in a file next to it.
+            </div>
+            <ul className="guide-list">
+              <li><b>Add card</b> — a lead, a source, a person, a piece of evidence, a hypothesis, a question.</li>
+              <li><b>Link</b> two cards and say what the link <b>means</b>: supports, contradicts, leads to, same as.
+                A theory you cannot contradict is not a theory.</li>
+              <li>A <b>hypothesis</b> card shows a tally, never a probability — what is confirmed for it, what is
+                confirmed against it, what is still open.</li>
+              <li><b>Correlate</b> pushes a card whose title is a handle, email or URL through the same engine a scan
+                uses. It becomes real graph nodes, scored by the same rules — not by how sure you felt writing it.</li>
+              <li>Right-click any graph node to <b>pin it to the board</b>; the card keeps showing what the engine
+                currently says about it.</li>
+            </ul>
+
             <div className="guide-sect">Darkweb and .onion</div>
             <div className="guide-lead">
               Darkweb search runs on every scan and needs nothing installed: the onion indexes reachable from
@@ -2028,6 +2391,7 @@ export default function OrbitBoard() {
               {n.url && <button onClick={() => { window.open(n.url, "_blank", "noopener,noreferrer"); setMenu(null); }}>Open profile</button>}
               <button onClick={() => { seedRef.current = q; setSeed(q); setMenu(null); runScan(); }}>Set as seed &amp; rescan</button>
               <button onClick={() => { setFocusId((f) => (f === n.id ? null : n.id)); setMenu(null); }}>Focus sub-graph</button>
+              <button onClick={() => { setMenu(null); pinToBoard(n); }}>Pin to the board</button>
               <button className="ctx-danger" onClick={() => { removeNodeRef.current(n.id); setMenu(null); }}>✕ Remove</button>
             </div>
           </>

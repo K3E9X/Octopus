@@ -677,3 +677,134 @@ body::after {
 .apicard .insp-plat { margin-bottom: 12px; }
 .apicard .add-sub { margin-bottom: 14px; }
 .grounded-ind { margin-top: 7px; color: var(--ink-4); }
+
+/* ============================================================================
+   INVESTIGATOR'S BOARD
+   Cards are paper in behaviour only — the same hairline, the same accent, no
+   fills, no skeuomorphism. What carries meaning is the LINK, so links are the
+   only place colour is spent.
+   ========================================================================== */
+
+.bwrap { position: fixed; left: var(--rail-w); right: 0; top: var(--bar-h); bottom: 0; z-index: 15;
+  display: flex; flex-direction: column; background: var(--void); }
+.board-toolbar { display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-bottom: 1px solid var(--line-soft); }
+.bc-kind { width: auto; max-width: 320px; font-size: 11px; padding: 6px 9px; }
+.board-count { font-size: 10px; letter-spacing: .06em; color: var(--ink-3); }
+.board-mode { font-size: 10px; letter-spacing: .1em; color: var(--accent); }
+
+.bcanvas { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; }
+.bcanvas:active { cursor: grabbing; }
+.bplane { position: absolute; inset: 0; }
+.blinks { position: absolute; left: -4000px; top: -4000px; width: 9000px; height: 9000px; overflow: visible; pointer-events: none; }
+.blinks > g { transform: translate(4000px, 4000px); }
+.bl path { fill: none; stroke-width: 1.2; }
+.bl text { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; fill: var(--ink-3); }
+.bl-supports path { stroke: var(--confirm); }
+.bl-supports text { fill: var(--confirm); }
+.bl-contradicts path { stroke: var(--reject); stroke-dasharray: 5 4; }
+.bl-contradicts text { fill: var(--reject); }
+.bl-leads-to path { stroke: var(--accent); stroke-dasharray: 2 5; }
+.bl-same-as path { stroke: var(--accent); }
+.bl-related path { stroke: var(--ink-4); stroke-dasharray: 1 5; }
+
+.bc-card { position: absolute; width: 210px; background: var(--void-2); border: 1px solid var(--line);
+  border-left: 2px solid var(--ink-4); border-radius: 4px; padding: 9px 11px 8px; cursor: grab;
+  font-family: var(--mono); transition: border-color .18s var(--ease), box-shadow .18s var(--ease), transform .18s var(--ease); }
+.bc-card:hover { border-color: var(--ink-3); box-shadow: var(--shadow-pop); transform: translateY(-1px); }
+.bc-card.open { border-color: var(--accent); box-shadow: var(--shadow-pop); cursor: default; }
+.bc-card.linking { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.bc-card.k-hypothesis { border-left-color: var(--type-person); }
+.bc-card.k-evidence { border-left-color: var(--confirm); }
+.bc-card.k-person { border-left-color: var(--type-alias); }
+.bc-card.k-source { border-left-color: var(--type-location); }
+.bc-card.k-question { border-left-color: var(--type-email); }
+.bc-card.s-confirmed { border-color: color-mix(in srgb, var(--confirm) 50%, transparent); }
+.bc-card.s-refuted { opacity: .55; border-color: color-mix(in srgb, var(--reject) 50%, transparent); }
+.bc-card.s-parked { opacity: .5; }
+
+.bc-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 5px; }
+.bc-kind { font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.bc-status { background: transparent; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-3);
+  font-family: var(--mono); font-size: 8px; letter-spacing: .08em; padding: 1px 6px; cursor: pointer; }
+.bc-status:hover { border-color: var(--accent); color: var(--accent); }
+.s-confirmed .bc-status { color: var(--confirm); border-color: color-mix(in srgb, var(--confirm) 45%, transparent); }
+.s-refuted .bc-status { color: var(--reject); border-color: color-mix(in srgb, var(--reject) 45%, transparent); }
+
+.bc-title { font-size: 12px; color: var(--ink); word-break: break-word; line-height: 1.4; }
+.bc-title i { color: var(--ink-4); font-style: normal; }
+.bc-body { font-size: 10px; color: var(--ink-2); line-height: 1.5; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+.bc-title-in, .bc-body-in { width: 100%; background: var(--void); border: 1px solid var(--line); border-radius: 3px;
+  color: var(--ink); font-family: var(--mono); font-size: 11.5px; padding: 5px 7px; outline: none; margin-bottom: 5px; }
+.bc-body-in { font-size: 10.5px; line-height: 1.5; resize: vertical; }
+.bc-url-in { font-size: 10px; color: var(--accent); }
+.bc-title-in:focus, .bc-body-in:focus { border-color: var(--accent); }
+
+.bc-ref { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--line-soft);
+  margin-top: 6px; padding: 5px 0 0; color: var(--accent); font-family: var(--mono); font-size: 9px; letter-spacing: .06em; cursor: pointer; }
+.bc-ref.gone { color: var(--ink-4); cursor: default; }
+.bc-tally { margin-top: 6px; padding: 5px 7px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 3px; font-size: 9.5px; line-height: 1.45; color: var(--accent); }
+.bc-tally.conflict { color: var(--reject); border-color: color-mix(in srgb, var(--reject) 45%, transparent); }
+
+.bc-actions { display: flex; gap: 8px; margin-top: 7px; flex-wrap: wrap; }
+.bc-actions button, .bc-actions a { background: transparent; border: 0; padding: 0; color: var(--ink-3);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; text-decoration: none; }
+.bc-actions button:hover, .bc-actions a:hover { color: var(--accent); }
+.bc-actions button:disabled { opacity: .4; cursor: default; }
+.bc-actions .bc-del:hover { color: var(--reject); }
+
+.bl-picker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: 300px;
+  background: var(--panel); backdrop-filter: var(--glass); border: 1px solid var(--accent); border-radius: 5px;
+  padding: 6px; box-shadow: var(--shadow-pop); animation: sheet-in .18s var(--ease); }
+
+.board-empty { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(560px, 84vw);
+  text-align: center; color: var(--ink-3); font-size: 12px; line-height: 1.75; pointer-events: none; }
+.board-empty b { color: var(--ink); font-weight: 400; }
+.board-empty p { margin: 12px 0; }
+.board-empty-note { font-size: 10px; color: var(--ink-4); }
+
+.blist { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 18px; border-top: 1px solid var(--line-soft); max-height: 84px; overflow-y: auto; }
+.blist-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 12px;
+  padding: 3px 5px 3px 10px; font-size: 9.5px; color: var(--ink-2); max-width: 340px; }
+.blist-chip em { font-style: normal; color: var(--ink-4); }
+.blist-chip.bl-supports em { color: var(--confirm); }
+.blist-chip.bl-contradicts em { color: var(--reject); }
+.blist-chip button { background: transparent; border: 0; color: var(--ink-4); cursor: pointer; font-family: var(--mono); font-size: 10px; }
+.blist-chip button:hover { color: var(--reject); }
+
+@media (max-width: 720px) { .blist { display: none; } }
+
+/* ---- orbit controls ---------------------------------------------------------- */
+.orbit-tools { position: fixed; left: calc(var(--rail-w) + 18px); bottom: 108px; z-index: 20;
+  display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
+.ot-modes { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: color-mix(in srgb, var(--void) 70%, transparent); backdrop-filter: blur(6px); }
+.ot-modes button { background: transparent; border: 0; border-left: 1px solid var(--line-soft); color: var(--ink-3);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; padding: 6px 10px; cursor: pointer; transition: .15s var(--ease); }
+.ot-modes button:first-child { border-left: 0; }
+.ot-modes button:hover { color: var(--ink); background: var(--void-2); }
+.ot-modes button.on { color: var(--accent); background: var(--accent-dim); }
+.ot-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ot-act { background: transparent; border: 1px solid var(--line); border-radius: 3px; color: var(--ink-3);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 5px 9px; cursor: pointer; }
+.ot-act:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ot-hint { font-size: 9px; letter-spacing: .04em; color: var(--ink-4); }
+.legend .ot-warn { color: var(--type-email); letter-spacing: .06em; }
+
+/* a pinned node reads as frozen: solid ring, no dash, a fixed marker */
+.body.pinned .disc { border-style: solid; box-shadow: inset 0 0 0 1px var(--accent-dim); }
+.body.pinned::after { content: ""; position: absolute; top: -2px; right: 12px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--accent); }
+#stage canvas { cursor: grab; }
+
+@media (max-width: 900px) { .orbit-tools .ot-hint { display: none; } }
+@media (max-width: 720px) { .orbit-tools { display: none; } }
+
+/* Five views now: the bar has to give the switcher room before the status text.
+   Measured at 1440px, where TIMELINE and MAP were being pushed off the edge. */
+.statusline { min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.st-msg { max-width: 40ch; }
+.viewtoggle button { padding: 7px 9px; font-size: 9.5px; letter-spacing: .13em; }
+@media (max-width: 1200px) { .statusline .demo-tag { display: none; } }
+
+/* the link label must knock the line out from under itself, or it reads as struck through */
+.bl text { paint-order: stroke fill; stroke: var(--void); stroke-width: 3px; stroke-linejoin: round; }
