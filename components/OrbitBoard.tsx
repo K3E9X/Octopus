@@ -178,8 +178,16 @@ export default function OrbitBoard() {
     let stored: string | null = null;
     try { stored = window.localStorage.getItem("octopus:theme"); } catch { /* private mode */ }
     if (stored === "light" || stored === "dark") { setTheme(stored); return; }
-    setTheme(mq.matches ? "light" : "dark");
-    const onSys = (ev: MediaQueryListEvent) => setTheme(ev.matches ? "light" : "dark");
+    const sys = mq.matches ? "light" : "dark";
+    setTheme(sys);
+    document.documentElement.setAttribute("data-theme", sys);
+    // keep following the system until the analyst actually chooses — the attribute is
+    // now the single switch the whole stylesheet reads, so it has to stay in step
+    const onSys = (ev: MediaQueryListEvent) => {
+      const next = ev.matches ? "light" : "dark";
+      setTheme(next);
+      document.documentElement.setAttribute("data-theme", next);
+    };
     mq.addEventListener("change", onSys);
     return () => mq.removeEventListener("change", onSys);
   }, []);
@@ -1817,7 +1825,11 @@ export default function OrbitBoard() {
                 </div>
               ))}
             </div>
-            <div className="pal-foot"><span>↑↓ move</span><span>⏎ run</span><span>esc close</span></div>
+            <div className="pal-foot">
+              <span><b className="keycap">↑↓</b> move</span>
+              <span><b className="keycap">⏎</b> run</span>
+              <span><b className="keycap">esc</b> close</span>
+            </div>
           </div>
         </div>
       )}
@@ -1858,9 +1870,11 @@ export default function OrbitBoard() {
             )}
           </div>
           <div className="hint">
-            Type a seed and press <b>Enter</b>&nbsp;&nbsp;/&nbsp;&nbsp;click a node for its evidence, right-click to pivot
-            &nbsp;&nbsp;/&nbsp;&nbsp;<b>{modKey}K</b> for every command&nbsp;&nbsp;/&nbsp;&nbsp;<b>/</b> to focus the seed,
-            <b> 1-5</b> to switch view&nbsp;&nbsp;/&nbsp;&nbsp;new here? the rail ends with the guide
+            Type a seed and press <b className="keycap">Enter</b>&nbsp;&nbsp;/&nbsp;&nbsp;click a node for its evidence,
+            right-click to pivot&nbsp;&nbsp;/&nbsp;&nbsp;<b className="keycap">{modKey}K</b> for every command
+            &nbsp;&nbsp;/&nbsp;&nbsp;<b className="keycap">/</b> focuses the seed,
+            <b className="keycap">1</b>–<b className="keycap">5</b> switch view
+            &nbsp;&nbsp;/&nbsp;&nbsp;new here? the rail ends with the guide
           </div>
         </>
       )}

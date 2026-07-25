@@ -19,8 +19,13 @@ export const viewport: Viewport = {
 // Resolve the theme BEFORE first paint. Reading localStorage from React would happen
 // after hydration and the page would show the wrong ground for a frame — on a
 // void-black interface that is a white strobe, not a detail.
+// It also RESOLVES the system preference into the attribute, so the light palette can
+// be declared exactly once in CSS instead of a second time inside a media query — the
+// duplicate had already drifted out of step with the original.
 const THEME_BOOT =
-  '(function(){try{var t=localStorage.getItem("octopus:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})()';
+  '(function(){var t;try{t=localStorage.getItem("octopus:theme")}catch(e){}' +
+  'if(t!=="light"&&t!=="dark"){try{t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}catch(e){t="dark"}}' +
+  'document.documentElement.setAttribute("data-theme",t)})()';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

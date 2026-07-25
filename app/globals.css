@@ -1,12 +1,12 @@
 :root {
   --void: #0B0B0D;
   --void-2: #0e0e12;
-  --line: rgba(255, 255, 255, .09);
+  --line: rgba(255, 255, 255, .12);
   --line-soft: rgba(255, 255, 255, .045);
   --ink: #ECECEF;
   --ink-2: #9A9AA4;
-  --ink-3: #5A5A64;
-  --ink-4: #4B4B54;
+  --ink-3: #7C7C88;
+  --ink-4: #6A6A74;
   --accent: #8FD6D0;
   --accent-dim: rgba(143, 214, 208, .14);
   --confirm: #B7D9B0;
@@ -18,22 +18,26 @@
   --type-leak: #D69090;
   --type-person: #E6DFA0;
   --panel: rgba(18, 18, 22, .72);
+  /* Controls get their own tokens. Everything clickable used --ink-3, which measures
+     2.89:1 on the void — a button the eye has to hunt for. Bolding it would not have
+     changed that: contrast is contrast. */
+  --ctl: #C4C4CE;          /* 11.4:1 — the idle label of anything interactive */
+  --ctl-bd: rgba(255, 255, 255, .20);
+  --ctl-bg: rgba(255, 255, 255, .05);
   --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+/* The light palette is declared ONCE. The boot script in the layout resolves the
+   system preference into data-theme before first paint, so there is no second copy
+   inside a media query to drift out of step with this one — it already had, twice. */
 :root[data-theme="light"] {
-  --void: #F7F7F5; --void-2: #F0F0EE; --line: rgba(20, 20, 25, .12); --line-soft: rgba(20, 20, 25, .06);
-  --ink: #17171B; --ink-2: #4E4E58; --ink-3: #70707A; --ink-4: #8E8E98;
-  --accent: #1C8C84; --accent-dim: rgba(28, 140, 132, .10);
-  --confirm: #3f8a4e; --reject: #b25757; --panel: rgba(255, 255, 255, .78);
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --void: #F7F7F5; --void-2: #F0F0EE; --line: rgba(20, 20, 25, .12); --line-soft: rgba(20, 20, 25, .06);
-    --ink: #17171B; --ink-2: #4E4E58; --ink-3: #70707A; --ink-4: #8E8E98;
-    --accent: #1C8C84; --accent-dim: rgba(28, 140, 132, .10);
-    --confirm: #3f8a4e; --reject: #b25757; --panel: rgba(255, 255, 255, .78);
-  }
+  --void: #F7F7F5; --void-2: #F0F0EE; --line: rgba(20, 20, 25, .14); --line-soft: rgba(20, 20, 25, .06);
+  --ink: #17171B; --ink-2: #4E4E58; --ink-3: #70707A; --ink-4: #7A7A84;
+  /* the accent measured 3.81:1 here — the same cyan taken one step deeper, so a 10px
+     label on it is readable without changing the identity */
+  --accent: #12726B; --accent-dim: rgba(18, 114, 107, .11);
+  --confirm: #2f7a3e; --reject: #a34a4a; --panel: rgba(255, 255, 255, .82);
+  --ctl: #2E2E38; --ctl-bd: rgba(20, 20, 25, .26); --ctl-bg: rgba(20, 20, 25, .05);
 }
 
 * { box-sizing: border-box; }
@@ -443,19 +447,14 @@ body {
   --shadow-pop: 0 18px 50px rgba(0, 0, 0, .45);
   --glass: blur(16px) saturate(1.15);
 }
-:root[data-theme="light"], :root:not([data-theme="dark"]) { --shadow-pop: 0 18px 44px rgba(20, 20, 30, .14); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --shadow-pop: 0 18px 50px rgba(0, 0, 0, .45); } }
+:root[data-theme="light"] { --shadow-pop: 0 18px 44px rgba(20, 20, 30, .14); }
 
 /* A vignette gives the void depth without adding a single visible element. */
 body::after {
   content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
   background: radial-gradient(120% 90% at 50% 45%, transparent 55%, color-mix(in srgb, var(--void) 78%, black) 100%);
 }
-:root[data-theme="light"] body::after,
-:root:not([data-theme="dark"]) body::after { background: radial-gradient(120% 90% at 50% 45%, transparent 60%, rgba(20, 20, 30, .05) 100%); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body::after { background: radial-gradient(120% 90% at 50% 45%, transparent 55%, color-mix(in srgb, var(--void) 78%, black) 100%); }
-}
+:root[data-theme="light"] body::after { background: radial-gradient(120% 90% at 50% 45%, transparent 60%, rgba(20, 20, 30, .05) 100%); }
 
 /* Keyboard focus is a first-class state, not an afterthought: this interface is
    meant to be driven from the keyboard. */
@@ -658,9 +657,6 @@ body::after {
 
 /* in light mode the rail needs its own ground, or it dissolves into the canvas */
 :root[data-theme="light"] .rail { background: color-mix(in srgb, var(--void-2) 92%, transparent); border-right-color: var(--line); }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .rail { background: color-mix(in srgb, var(--void-2) 92%, transparent); border-right-color: var(--line); }
-}
 
 /* ---- measured fixes ----------------------------------------------------------
    Each of these was a defect seen on screen, not a preference. */
@@ -804,7 +800,74 @@ body::after {
 .statusline { min-width: 0; flex: 0 1 auto; overflow: hidden; }
 .st-msg { max-width: 40ch; }
 .viewtoggle button { padding: 7px 9px; font-size: 9.5px; letter-spacing: .13em; }
-@media (max-width: 1200px) { .statusline .demo-tag { display: none; } }
+@media (max-width: 1560px) { .statusline .demo-tag { display: none; } }
 
 /* the link label must knock the line out from under itself, or it reads as struck through */
 .bl text { paint-order: stroke fill; stroke: var(--void); stroke-width: 3px; stroke-linejoin: round; }
+
+/* ============================================================================
+   CONTROL LAYER
+   The complaint was that buttons and features do not read as buttons and
+   features. Measured, the cause was one token: everything interactive drew its
+   idle label from --ink-3, which is 2.89:1 on the void. Bold text at 2.89:1 is
+   still 2.89:1, so the fix is contrast and a visible edge, not weight.
+
+   One rule for the whole interface: anything you can click is --ctl on a
+   --ctl-bd edge, and turns accent on hover. Anything you can only read stays
+   --ink-2 / --ink-3. That difference is now the affordance.
+   ========================================================================== */
+
+.btn, .kbd, .ping-btn, .ot-act, .api-nav button,
+.ot-modes button, .viewtoggle button, .rail-item, .app-add,
+.bc-actions button, .bc-actions a, .bc-status, .case-del, .app-open,
+.pal-item, .menu-item, .ctx-menu button, .verb, .mini-link, .rel-chip {
+  color: var(--ctl);
+}
+.btn, .kbd, .ot-act, .api-nav button, .app-add, .bc-status, .rel-chip { border-color: var(--ctl-bd); }
+.ot-modes, .viewtoggle { border-color: var(--ctl-bd); }
+
+.btn:hover, .kbd:hover, .ot-act:hover, .api-nav button:hover, .rel-chip:hover {
+  color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--ctl-bg);
+}
+.viewtoggle button:hover, .ot-modes button:hover, .menu-item:hover, .pal-item:hover, .ctx-menu button:hover {
+  background: var(--ctl-bg); color: var(--accent);
+}
+.rail-item:hover { color: var(--accent); background: var(--ctl-bg); }
+.bc-actions button:hover, .bc-actions a:hover, .app-open:hover { color: var(--accent); }
+.verb:hover { color: var(--ink); }
+
+/* the primary action must not be a button among buttons */
+.go { font-weight: 400; letter-spacing: .18em; border-width: 1px;
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.ping-btn { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent); }
+.ping-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+
+/* menu rows: the label is the control, the description is prose */
+.menu-item b, .pal-item b { color: var(--ctl); }
+.menu-item span, .pal-item small { color: var(--ink-3); }
+.menu-item:hover b, .pal-item.on b { color: var(--accent); }
+
+/* the rail is the primary navigation — it cannot be the dimmest thing on screen */
+.rail-item { color: var(--ctl); }
+.rail { border-right-color: var(--ctl-bd); }
+.rail-item.on { color: var(--accent); }
+
+/* selects and inputs are controls too */
+.api-select, .add-field input, .api-textarea, .table-filter, .bc-title-in, .bc-body-in {
+  border-color: var(--ctl-bd);
+}
+.add-field span { color: var(--ink-2); }
+
+/* card actions were 9px of --ink-3: legible only if you knew they were there */
+.bc-actions button, .bc-actions a { font-size: 9.5px; letter-spacing: .08em; }
+
+/* keys are drawn as keys — the shortcuts were prose in the dimmest ink we have */
+.keycap { display: inline-block; border: 1px solid var(--ctl-bd); border-radius: 3px;
+  padding: 1px 5px; margin: 0 1px; color: var(--ctl); font-size: .95em; font-weight: 400; line-height: 1.5; }
+.hint { color: var(--ink-3); }
+.hint b { color: var(--ctl); }
+.pal-foot { color: var(--ink-3); }
+.ot-hint { color: var(--ink-3); }
+.legend { color: var(--ink-2); }
+.legend .tick { background: var(--ink-3); }
