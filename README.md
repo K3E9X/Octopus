@@ -90,7 +90,7 @@ The **seed** accepts a **username, email, phone number, or full name** (auto-det
 
 **Name mode** — a full name ("Jean Dupont") has no free resolver, so name mode generates **candidate handles** (jeandupont, jean.dupont, jdupont, dupontjean…) as pivot-ready nodes around a ◆ person node, and exposes the **Name pivots** (Google exact-search, LinkedIn, people-search) pre-filled. Pivot / auto-expand the candidates → real accounts → the dossier confirms the name.
 
-**Broad layer — WhatsMyName.** On top of the 13 APIs, the scan queries the **official WhatsMyName dataset** (600+ sites, loaded at runtime from the maintained repo). These presences are detected by **URL pattern**: they are explicitly flagged **"unverified"**, scored low and placed in cold orbit — the human confirms. This broadens coverage **without manufacturing false positives**. Sites checked per scan are capped (`?depth=`, default 100, to fit a serverless function's time limit) and the response exposes `coverage.capped` — **never a silent truncation**.
+**Broad layer — WhatsMyName.** On top of the API connectors, the scan sweeps the **bundled WhatsMyName dataset** (718 sites, committed — never fetched at runtime, so coverage cannot depend on a network call). These presences are detected by **URL pattern**: they are explicitly flagged **"unverified"**, scored low and placed in cold orbit — the human confirms. This broadens coverage **without manufacturing false positives**. Sites checked per scan are capped (`?depth=`, default 200, to fit a serverless function's time limit — use the queued deep run for more) and the response exposes `coverage.capped` — **never a silent truncation**.
 
 **Linking by photo — pHash.** Avatars of the presences found are hashed (perceptual dHash, local) and compared pairwise: two accounts whose photos match (low Hamming distance) are linked by a strong "Matching/near-match avatar" evidence. This is **deterministic and verifiable** — so no hallucination — and links accounts even when usernames differ. No external facial service: we compare images, not faces (no biometric exposure).
 
@@ -157,6 +157,21 @@ Finding nodes isn't the point; *identifying the person* is. The **DOSSIER** cons
 **⚡ INVESTIGATE** runs it end-to-end in one click: scan the seed → auto-expand one hop from a discovered identifier → open the synthesized dossier. **▤ DOSSIER** opens the synthesis for the current board at any time.
 
 **Breach search (IntelX).** Set `INTELX_API_KEY` (freemium) on Vercel to enable the **Intelligence X** app — a scan then also searches leaks/pastes/darkweb for the identifier and adds ⚠ leak nodes (sensitive: use under a legal basis; credentials are never redistributed).
+
+## Seeds
+
+A username, an email, a phone number, a full name, a domain — and now an **IP address** or a **file hash**, because a CTI analyst starts from an IOC at least as often as from a handle. An IP yields its RDAP registration, its abuse contact and its reverse DNS (each PTR name becoming its own pivotable node); a private address says so and says why it is a dead end. A digest is recorded as identifying **bytes, not a person**, and if no keyless repository answered, the node says the sample was *not checked* — which is not the same as unknown. External services that need an account (Shodan, Censys, VirusTotal, GreyNoise, MalwareBazaar) are offered as pre-filled pivots and explicitly marked *not queried*.
+
+## Finding an ordinary person
+
+Developer platforms are useless on someone with no GitHub account, and that is most people. Two things carry the coverage:
+
+- **The full WhatsMyName ruleset is bundled** — 718 sites, of which 353 are social, images, music, hobby or shopping. It used to be fetched at runtime with a 15-site sample as the fallback, so a blocked request silently turned a 700-site sweep into a dev-platform check. Refresh it with `npm run fetch-wmn`.
+- **The sweep order decides who is found.** The depth cap means the tail is never reached, so mainstream networks come first, then consumer categories, and adult sites last — asserted by tests, not assumed. Twenty-eight non-developer connectors (Snapchat, Twitch, Tumblr, Flickr, VK, Wattpad, Medium, Substack, Bandcamp, Vimeo, Etsy, Goodreads, Trello, Duolingo, Mixcloud, Steam, Telegram, Linktree…) add verified profile data — a name, a bio, sometimes a city — rather than mere existence.
+
+## Long runs
+
+A real sweep does not fit in one HTTP request. **Investigate → Deep run (queued)** enqueues the seed, its variants and every node you confirmed as checkpointed steps: each completed step is stored with its partial results, the graph absorbs them as they arrive, and a reload resumes instead of restarting. It works **without a database** (process-local) and says so; with `POSTGRES_URL` it becomes durable across restarts. Each step runs the *real* scan pipeline, not a reduced copy of it.
 
 ## The investigator's board
 

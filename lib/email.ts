@@ -118,7 +118,7 @@ export async function scanEmail(
     Promise.all(candidates.map((c) =>
       scanUsername(c.handle, enabled, health).then((ps) => ({ c, ps })).catch(() => ({ c, ps: [] as RawProfile[] })),
     )),
-    primary && wmnOn ? scanWmn(primary, depth) : Promise.resolve({ hits: [] as RawProfile[], checked: 0, total: 0 }),
+    primary && wmnOn ? scanWmn(primary, depth, 40, health) : Promise.resolve({ hits: [] as RawProfile[], checked: 0, total: 0 }),
     mailDomainIntel(shape.domain),
   ]);
 

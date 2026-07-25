@@ -86,6 +86,21 @@ const OG_SITES: OGSite[] = [
   { id: "deviantart", platform: "DEVIANTART", disc: "DA", url: (u) => `https://www.deviantart.com/${enc(u)}`, notFound: /deviantart is the world|page not found/i, cleanTitle: /\s*\|\s*DeviantArt$/i },
   { id: "kofi", platform: "KO-FI", disc: "KO", url: (u) => `https://ko-fi.com/${enc(u)}`, notFound: /page not found|ko-fi\.com - buy/i, cleanTitle: /\s*\|\s*Ko-fi.*$/i },
   { id: "patreon", platform: "PATREON", disc: "PA", url: (u) => `https://www.patreon.com/${enc(u)}`, notFound: /page not found|patreon logo/i, cleanTitle: /\s*\|\s*Patreon$/i },
+  // The second wave, chosen for reach among ordinary people rather than for being
+  // interesting to a developer. All keyless, all public profile pages.
+  { id: "snapchat", platform: "SNAPCHAT", disc: "SN", url: (u) => `https://www.snapchat.com/add/${enc(u)}`, notFound: /page not found|couldn.t find|snapchat$/i, cleanTitle: /\s*(?:on Snapchat|\| Snapchat)$/i },
+  { id: "twitch", platform: "TWITCH", disc: "TW", url: (u) => `https://www.twitch.tv/${enc(u)}`, notFound: /page not found|sorry.*unavailable|twitch$/i, cleanTitle: /\s*-\s*Twitch$/i },
+  { id: "tumblr", platform: "TUMBLR", disc: "TU", url: (u) => `https://${enc(u)}.tumblr.com/`, notFound: /nothing here|not found|tumblr$/i },
+  { id: "flickr", platform: "FLICKR", disc: "FL", url: (u) => `https://www.flickr.com/people/${enc(u)}/`, notFound: /page not found|this page is private/i, cleanTitle: /\s*\|\s*Flickr$/i },
+  { id: "vk", platform: "VK", disc: "VK", url: (u) => `https://vk.com/${enc(u)}`, notFound: /404|page not found|заблокирована/i, cleanTitle: /\s*\|\s*VK$/i },
+  { id: "wattpad", platform: "WATTPAD", disc: "WP", url: (u) => `https://www.wattpad.com/user/${enc(u)}`, notFound: /page not found|oops/i, cleanTitle: /\s*-\s*Wattpad$/i },
+  { id: "medium", platform: "MEDIUM", disc: "MD", url: (u) => `https://medium.com/@${enc(u)}`, notFound: /page not found|out of nothing/i, cleanTitle: /\s*[–|-]\s*Medium$/i },
+  { id: "substack", platform: "SUBSTACK", disc: "SU", url: (u) => `https://${enc(u)}.substack.com/`, notFound: /page not found|no such publication/i, cleanTitle: /\s*\|\s*Substack$/i },
+  { id: "bandcamp", platform: "BANDCAMP", disc: "BC", url: (u) => `https://${enc(u)}.bandcamp.com/`, notFound: /page not found|sorry, that something/i, cleanTitle: /\s*\|\s*Bandcamp$/i },
+  { id: "vimeo", platform: "VIMEO", disc: "VM", url: (u) => `https://vimeo.com/${enc(u)}`, notFound: /page not found|410/i, cleanTitle: /\s*on Vimeo$/i },
+  { id: "etsy", platform: "ETSY", disc: "ET", url: (u) => `https://www.etsy.com/people/${enc(u)}`, notFound: /page not found|sorry/i, cleanTitle: /\s*(?:-|\|)\s*Etsy$/i },
+  { id: "goodreads", platform: "GOODREADS", disc: "GD", url: (u) => `https://www.goodreads.com/${enc(u)}`, notFound: /page not found|error/i, cleanTitle: /\s*\(.*\)$/i },
+  { id: "trello", platform: "TRELLO", disc: "TR", url: (u) => `https://trello.com/u/${enc(u)}`, notFound: /page not found|nothing here/i, cleanTitle: /\s*\|\s*Trello$/i },
 ];
 
 /** Link-in-bio pages exist to list someone's other accounts — extract them all.
@@ -219,9 +234,56 @@ async function steam(u: string): Promise<RawProfile | null> {
   };
 }
 
+/**
+ * Duolingo — an open API and a user base of ordinary people rather than developers.
+ * Returns a display name, the account creation date and the courses studied, which
+ * says something real about the person (target language, likely country).
+ */
+async function duolingo(u: string): Promise<RawProfile | null> {
+  const r = await fetchJSON<any>(`https://www.duolingo.com/2017-06-30/users?username=${enc(u)}`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
+  const d = Array.isArray(r.data?.users) ? r.data.users[0] : null;
+  if (!d?.username) return null;
+  const courses: string[] = Array.isArray(d.courses)
+    ? d.courses.map((c: any) => `${c.fromLanguage}→${c.learningLanguage}`).slice(0, 4)
+    : [];
+  return {
+    id: "duolingo", platform: "DUOLINGO", disc: "DU", handle: d.username,
+    url: `https://www.duolingo.com/profile/${d.username}`,
+    displayName: d.name || undefined,
+    bio: courses.length ? `learning ${courses.join(", ")}` : undefined,
+    avatar: d.picture ? (String(d.picture).startsWith("//") ? "https:" + d.picture : d.picture) : undefined,
+    createdAt: d.creationDate ? new Date(d.creationDate * 1000).toISOString() : undefined,
+    source: "duolingo.com · open API",
+  };
+}
+
+/** Mixcloud — open API exposing name, city and country. */
+async function mixcloud(u: string): Promise<RawProfile | null> {
+  const r = await fetchJSON<any>(`https://api.mixcloud.com/${enc(u)}/`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
+  const d = r.data;
+  if (!d?.username || d.error) return null;
+  const loc = [d.city, d.country].filter(Boolean).join(", ");
+  return {
+    id: "mixcloud", platform: "MIXCLOUD", disc: "MX", handle: d.username,
+    url: d.url || `https://www.mixcloud.com/${d.username}/`,
+    displayName: d.name || undefined,
+    bio: d.biog ? String(d.biog).slice(0, 200) : undefined,
+    location: loc || undefined,
+    avatar: d.pictures?.large || d.pictures?.medium || undefined,
+    createdAt: d.created_time || undefined,
+    source: "mixcloud.com · open API",
+  };
+}
+
 export const SOCIAL_CONNECTOR_DEFS: Array<{ id: string; fn: (u: string) => Promise<RawProfile | null> }> = [
   { id: "lichess", fn: lichess },
   { id: "roblox", fn: roblox },
   { id: "steam", fn: steam },
+  { id: "duolingo", fn: duolingo },
+  { id: "mixcloud", fn: mixcloud },
   ...OG_SITES.map((s) => ({ id: s.id, fn: ogConnector(s) })),
 ];

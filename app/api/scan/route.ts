@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scanUsername, type RawProfile } from "@/lib/connectors";
-import { scanWmn } from "@/lib/wmn";
+import { scanWmn, wmnCatalogue } from "@/lib/wmn";
 import { scanEmail, emailShapeEvidence, type EmailScan } from "@/lib/email";
 import { dHashFromBuffer, fetchImageBuffer, avatarMatch } from "@/lib/phash";
 import { metaFromBuffer, metaEvidence } from "@/lib/metadata";
@@ -14,6 +14,7 @@ import { looksLikePhone, phoneIntel, type PhoneIntel } from "@/lib/phone";
 import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { namePairFromHandle, matchName, nameMatchEvidence } from "@/lib/namematch";
 import { looksLikeDomain, enrichDomain } from "@/lib/domain";
+import { looksLikeIp, looksLikeHash, ipIntel, ipSignals, hashIntel, hashSignals, iocPivots } from "@/lib/infra";
 import { usernameVariants } from "@/lib/variants";
 import { sharedHandleEvidence, handleRarity } from "@/lib/rarity";
 import { newHealth, healthNote, setEgress, torActive } from "@/lib/netfetch";
@@ -269,12 +270,44 @@ export async function GET(req: NextRequest) {
     // fire-and-forget: the trail must never slow or break collection
     recordQuery({ operator, kind: "scan", selector: q, legalBasis, caseId, posture: posture || "direct" }).catch(() => {});
   }
-  const depth = clamp(parseInt(req.nextUrl.searchParams.get("depth") || "120", 10) || 120, 1, 300);
+  const depth = clamp(parseInt(req.nextUrl.searchParams.get("depth") || "200", 10) || 200, 1, 718);
   if (!q || q.length > 128) {
     return NextResponse.json({ error: "invalid input" }, { status: 400 });
   }
   const isEmail = EMAIL_RE.test(q);
   const isPhone = !isEmail && looksLikePhone(q);
+
+  // --- infrastructure selectors: an IOC is a legitimate seed -------------------
+  // A CTI analyst starts from an address or a digest at least as often as from a
+  // handle. Typing one used to run a USERNAME search for "1.2.3.4".
+  if (looksLikeIp(q)) {
+    const collectedAt = new Date().toISOString();
+    const intel = await ipIntel(q);
+    const signals = [...ipSignals(intel, collectedAt), ...iocPivots(q, "ip")];
+    for (const sig of signals) {
+      const sc = scoreEvidence(sig.evidence);
+      sig.tier = sig.tier || sc.tier;
+      sig.confidence = sig.tier === "weak" ? sig.confidence : sc.confidence;
+    }
+    return NextResponse.json({ seed: q, mode: "ip", count: signals.length, signals, ip: intel });
+  }
+
+  if (looksLikeHash(q)) {
+    const collectedAt = new Date().toISOString();
+    const intel = await hashIntel(q);
+    const signals = [...hashSignals(intel, collectedAt), ...iocPivots(q, "hash")];
+    // a digest can also be a selector we already hold locally
+    try {
+      const hits = await searchCorpus(q);
+      if (hits.length) signals.push(...corpusSignals(hits, collectedAt));
+    } catch { /* corpus optional */ }
+    for (const sig of signals) {
+      const sc = scoreEvidence(sig.evidence);
+      sig.tier = sig.tier || sc.tier;
+      sig.confidence = sig.tier === "weak" ? sig.confidence : sc.confidence;
+    }
+    return NextResponse.json({ seed: q, mode: "hash", count: signals.length, signals, hash: intel });
+  }
 
   // phone mode: deterministic offline intel + pivots (no free owner lookup)
   if (isPhone) {
@@ -396,7 +429,7 @@ export async function GET(req: NextRequest) {
     } else {
       const [api, wmn] = await Promise.all([
         scanUsername(q, enabled ?? undefined, health),
-        wmnOn ? scanWmn(q, depth) : Promise.resolve({ hits: [] as RawProfile[], checked: 0, total: 0 }),
+        wmnOn ? scanWmn(q, depth, 40, health) : Promise.resolve({ hits: [] as RawProfile[], checked: 0, total: 0 }),
       ]);
       apiProfiles = api; wmnHits = wmn.hits;
       checked = wmn.checked; totalSites = wmn.total;
@@ -877,7 +910,7 @@ export async function GET(req: NextRequest) {
       email,
       sources: { api: apiProfiles.length, web: wmnHits.length },
       // coverage transparency — never silently truncate
-      coverage: { checked, available: totalSites, capped: checked < totalSites },
+      coverage: { checked, available: totalSites, capped: checked < totalSites, catalogue: wmnCatalogue() },
       // honesty: a rate-limited source did NOT report "no account" — it refused to
       // answer. Surfacing this is what stops a silent false negative.
       health: { rateLimited: health.rateLimited, failed: health.failed, blocked: health.blocked, note: healthNote(health) },

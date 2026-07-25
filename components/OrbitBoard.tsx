@@ -25,6 +25,7 @@ import { Logo } from "./Logo";
 import { loadCasefile, saveCasefile, addCard, updateCard, correlatable, emptyCasefile, sanitizeCasefile, type Casefile, type BoardCard, type OrbitLayout } from "@/lib/casefile";
 import { Glyph, type GlyphName } from "./Glyph";
 import { handleRarity } from "@/lib/rarity";
+import { usernameVariants } from "@/lib/variants";
 import { LLM_PRESETS } from "@/lib/llmconfig";
 import type { AssistResult } from "@/lib/assist";
 
@@ -127,6 +128,7 @@ export default function OrbitBoard() {
   const deepRef = useRef(false);
   const [deepStatus, setDeepStatus] = useState<string | null>(null);
   const seedInputRef = useRef<HTMLInputElement>(null);
+  const [job, setJob] = useState<{ id: string; durable: boolean; done: number; total: number; status: string; merged: number } | null>(null);
   const [orbitMode, setOrbitModeState] = useState<OrbitMode>("orbit");
   const [palQuery, setPalQuery] = useState("");
   const [palIndex, setPalIndex] = useState(0);
@@ -200,6 +202,7 @@ export default function OrbitBoard() {
   const COMMANDS: Cmd[] = [
     { group: "Investigate", label: "Investigate", hint: "Scan, auto-expand one hop, open the dossier", run: investigate, key: "⏎" },
     { group: "Investigate", label: "Scan the seed", hint: "Collect presences without expanding", run: runScan },
+    { group: "Investigate", label: "Deep run (queued)", hint: "Seed + variants + confirmed nodes, in checkpointed steps that survive a reload", run: queueDeepRun },
     { group: "Investigate", label: "Deep scan", hint: "3000+ sites via the collector worker", run: deepScan },
     { group: "Investigate", label: "Ask the assistant", hint: "LLM reads the graph: conclusion, pivots, false positives", run: runAssist },
     { group: "Investigate", label: "Monitor changes", hint: "Re-scan and diff since the last snapshot", run: runMonitor },
@@ -1283,7 +1286,64 @@ export default function OrbitBoard() {
     return () => clearTimeout(t);
   }, [dataVersion, view]);
 
+  useEffect(() => {
+    if (!job || job.status === "done" || job.status === "cancelled" || job.status === "error") return;
+    let alive = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/queue?id=${encodeURIComponent(job.id)}&advance=1`, {
+          headers: { ...cfgHeaders(), ...tradecraftHeaders() },
+        });
+        const d = await res.json();
+        if (!alive || !d?.job) return;
+        const sigs: Signal[] = d.job.signals || [];
+        // merge only what is new: a step is checkpointed, so the same signals come back
+        let merged = job.merged;
+        if (sigs.length > job.merged) {
+          clearDemoState();
+          for (const sg of sigs.slice(job.merged)) addNodeRef.current(sg);
+          merged = sigs.length;
+        }
+        setJob({ ...job, done: d.progress?.done ?? job.done, total: d.progress?.total ?? job.total, status: d.job.status, merged });
+      } catch { /* keep polling: a failed poll is not a failed job */ }
+    };
+    const t = setTimeout(tick, 1200);
+    return () => { alive = false; clearTimeout(t); };
+  }, [job]);
+
+  async function cancelDeepRun() {
+    if (!job) return;
+    try { await fetch(`/api/queue?id=${encodeURIComponent(job.id)}`, { method: "DELETE" }); } catch { /* ignore */ }
+    setJob({ ...job, status: "cancelled" });
+    flashMsg("deep run cancelled");
+  }
+
   /** Drop the live session and go back to a clean board. */
+  // ---- durable jobs ----------------------------------------------------------
+  // A long run cannot live inside one HTTP request. The queue does the work in
+  // checkpointed steps; this drives it, survives a reload (the id is in the session
+  // board), and merges partial results onto the graph as they arrive.
+  async function queueDeepRun() {
+    const seedNow = seedRef.current.trim();
+    if (!seedNow) { flashMsg("enter a seed first"); return; }
+    // the seed, its plausible variants, and every node the analyst has confirmed
+    const confirmed = currentSignals().filter((x) => x.status === "confirmed").map((x) => x.handle.replace(/^@/, ""));
+    const targets = [...new Set([seedNow, ...usernameVariants(seedNow, 4).map((v) => v.handle), ...confirmed])].slice(0, 12);
+    try {
+      const res = await fetch("/api/queue", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...cfgHeaders(), ...tradecraftHeaders() },
+        body: JSON.stringify({ targets, connectors: [...enabledRef.current].join(","), caseId: seedNow, note: `deep run on ${seedNow}` }),
+      });
+      const d = await res.json();
+      if (!d?.job?.id) { flashMsg(d?.error || "could not queue the run"); return; }
+      setJob({ id: d.job.id, durable: !!d.durable, done: 0, total: targets.length, status: "queued", merged: 0 });
+      flashMsg(`queued ${targets.length} target(s)` + (d.durable ? " — durable" : " — in memory, this process only"));
+    } catch {
+      flashMsg("network unavailable");
+    }
+  }
+
   function startFresh() {
     clearSession();
     demoRef.current = true;
@@ -1769,6 +1829,7 @@ export default function OrbitBoard() {
           <div className="pop-head">investigate — from a seed to a story</div>
           <button className="menu-item" disabled={scanning} onClick={() => { setRail(null); investigate(); }}><b>Investigate</b><span>Scan, auto-expand one hop, open the dossier</span></button>
           <button className="menu-item" disabled={scanning} onClick={() => { setRail(null); runScan(); }}><b>Scan the seed</b><span>Collect presences without expanding</span></button>
+          <button className="menu-item" disabled={!!job && job.status !== "done" && job.status !== "cancelled"} onClick={() => { setRail(null); queueDeepRun(); }}><b>Deep run (queued)</b><span>The seed, its variants and your confirmed nodes — in checkpointed steps that survive a reload</span></button>
           <button className="menu-item" onClick={() => { setRail(null); deepScan(); }}><b>Deep scan</b><span>3000+ sites via the collector worker</span></button>
           <button className="menu-item" disabled={assistBusy} onClick={() => { setRail(null); runAssist(); }}><b>Ask the assistant</b><span>LLM reads the graph: conclusion, pivots, false positives</span></button>
           <button className="menu-item" disabled={monitoring} onClick={() => { setRail(null); runMonitor(); }}><b>Monitor changes</b><span>Re-scan and diff since the last snapshot</span></button>
@@ -1865,7 +1926,7 @@ export default function OrbitBoard() {
           <label htmlFor="seed-input">seed</label>
           <input
             id="seed-input" ref={seedInputRef} value={seed} spellCheck={false}
-            placeholder="username, email, phone, name or domain"
+            placeholder="username, email, phone, name, domain, IP or file hash"
             onChange={(e) => setSeed(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); investigate(); } }}
             aria-label="seed"
@@ -1893,6 +1954,18 @@ export default function OrbitBoard() {
         </div>
       </div>
       {scanning && <div className="scanline"><i /></div>}
+
+      {job && (
+        <div className={"jobbar" + (job.status === "done" ? " done" : "")}>
+          <span className="jb-label">deep run</span>
+          <span className="jb-track"><i style={{ width: `${Math.round((job.done / Math.max(1, job.total)) * 100)}%` }} /></span>
+          <span className="jb-count">{job.done}/{job.total} · {job.merged} node(s) merged</span>
+          <span className="jb-note">{job.status}{job.durable ? " · durable" : " · in memory"}</span>
+          {job.status !== "done" && job.status !== "cancelled"
+            ? <button onClick={cancelDeepRun}>cancel</button>
+            : <button onClick={() => setJob(null)}>dismiss</button>}
+        </div>
+      )}
 
       {palette && (
         <div className="pal-overlay" onClick={() => setPalette(false)}>
@@ -2229,7 +2302,10 @@ export default function OrbitBoard() {
             <div className="guide-sect">Start</div>
             <ol className="guide-steps">
               <li><b>Type a seed</b> in the bar and press <b>Enter</b>. Octopus scans, correlates and expands
-                automatically, then opens the dossier. A username, email, phone, full name or domain all work.</li>
+                automatically, then opens the dossier. A username, email, phone, full name, domain, <b>IP address</b>
+                or <b>file hash</b> all work — the input decides the mode.</li>
+              <li>Breadth matters more than speed on an ordinary person: <b>Investigate → Deep run (queued)</b> sweeps
+                the seed, its variants and everything you confirmed, in checkpointed steps that survive a reload.</li>
               <li>Prefer manual control? <b>Investigate → Scan the seed</b> runs a single pass and expands nothing.</li>
             </ol>
 

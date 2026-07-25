@@ -19,6 +19,9 @@ export interface JobStep {
   /** what to run, e.g. { kind: "scan", target: "johndoe" } */
   kind: string;
   target: string;
+  /** the connector allowlist and sweep depth to use, so a job matches the UI settings */
+  connectors?: string;
+  depth?: number;
   done?: boolean;
   error?: string;
 }
@@ -34,9 +37,25 @@ export interface QueuedJob {
   createdAt: number;
   updatedAt: number;
   note?: string;
+  /** the app origin that enqueued it — a step runs the real scan pipeline over HTTP */
+  origin?: string;
 }
 
-export const queueEnabled = dbEnabled;
+/**
+ * The queue works WITHOUT a database.
+ *
+ * Requiring Postgres meant the feature did not exist for most deployments, which is
+ * the same as not having built it. With a database a job survives anything; without
+ * one it survives the process — which is already the difference between "a long scan
+ * is impossible" and "a long scan runs while you work". The API says which it is
+ * rather than pretending.
+ */
+export const queueEnabled = true;
+export const queueDurable = dbEnabled;
+
+/** Process-local fallback store, used when no database is configured. */
+const MEM = new Map<string, QueuedJob>();
+const MEM_MAX = 50;
 
 let ready: Promise<void> | null = null;
 async function ensureSchema(): Promise<void> {
@@ -65,18 +84,25 @@ function newId(): string {
   return "job_" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
 }
 
-export async function enqueue(steps: JobStep[], meta: { caseId?: string; operator?: string; note?: string } = {}): Promise<QueuedJob | null> {
-  if (!dbEnabled) return null;
+export async function enqueue(steps: JobStep[], meta: { caseId?: string; operator?: string; note?: string; origin?: string } = {}): Promise<QueuedJob | null> {
+  const now0 = Date.now();
+  const mkJob = (): QueuedJob => ({
+    id: newId(), caseId: meta.caseId, operator: meta.operator, status: "queued",
+    steps: steps.map((s) => ({ ...s, done: false })), signals: [],
+    createdAt: now0, updatedAt: now0, note: meta.note, origin: meta.origin,
+  });
+  if (!dbEnabled) {
+    const job = mkJob();
+    if (MEM.size >= MEM_MAX) MEM.delete(MEM.keys().next().value as string);
+    MEM.set(job.id, job);
+    return job;
+  }
   try {
     await ensureSchema();
     const q = sql();
     if (!q) return null;
-    const now = Date.now();
-    const job: QueuedJob = {
-      id: newId(), caseId: meta.caseId, operator: meta.operator, status: "queued",
-      steps: steps.map((s) => ({ ...s, done: false })), signals: [],
-      createdAt: now, updatedAt: now, note: meta.note,
-    };
+    const now = now0;
+    const job = mkJob();
     await q`INSERT INTO octopus_jobs (id, case_id, operator, status, steps, signals, created_at, updated_at, note)
             VALUES (${job.id}, ${job.caseId || null}, ${job.operator || null}, ${job.status},
                     ${JSON.stringify(job.steps)}::jsonb, ${"[]"}::jsonb, ${now}, ${now}, ${job.note || null})`;
@@ -87,7 +113,7 @@ export async function enqueue(steps: JobStep[], meta: { caseId?: string; operato
 }
 
 export async function getJob(id: string): Promise<QueuedJob | null> {
-  if (!dbEnabled) return null;
+  if (!dbEnabled) return MEM.get(id) || null;
   try {
     await ensureSchema();
     const q = sql();
@@ -107,7 +133,11 @@ export async function getJob(id: string): Promise<QueuedJob | null> {
 
 /** Checkpoint after each step, so a killed run resumes instead of restarting. */
 export async function checkpoint(id: string, steps: JobStep[], signals: Signal[], status: JobStatus): Promise<void> {
-  if (!dbEnabled) return;
+  if (!dbEnabled) {
+    const j = MEM.get(id);
+    if (j) MEM.set(id, { ...j, steps, signals, status, updatedAt: Date.now() });
+    return;
+  }
   try {
     await ensureSchema();
     const q = sql();
@@ -122,7 +152,11 @@ export async function checkpoint(id: string, steps: JobStep[], signals: Signal[]
 }
 
 export async function cancelJob(id: string): Promise<void> {
-  if (!dbEnabled) return;
+  if (!dbEnabled) {
+    const j = MEM.get(id);
+    if (j && (j.status === "queued" || j.status === "running")) MEM.set(id, { ...j, status: "cancelled", updatedAt: Date.now() });
+    return;
+  }
   try {
     await ensureSchema();
     const q = sql();
@@ -131,7 +165,12 @@ export async function cancelJob(id: string): Promise<void> {
 }
 
 export async function listJobs(limit = 20, caseId?: string): Promise<QueuedJob[]> {
-  if (!dbEnabled) return [];
+  if (!dbEnabled) {
+    return [...MEM.values()]
+      .filter((j) => !caseId || j.caseId === caseId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, limit);
+  }
   try {
     await ensureSchema();
     const q = sql();

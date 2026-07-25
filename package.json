@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "node --experimental-strip-types --no-warnings --import ./tests/register.mjs --test tests/*.test.ts",
-    "fetch-face-models": "node scripts/fetch-face-models.mjs"
+    "fetch-face-models": "node scripts/fetch-face-models.mjs",
+    "fetch-wmn": "node scripts/fetch-wmn.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
