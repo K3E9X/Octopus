@@ -54,9 +54,6 @@ export function parseSocks(url: string): SocksProxy | null {
   };
 }
 
-/** Tor's SOCKS port, for the hint shown in the UI. */
-export const TOR_DEFAULT = "socks5://127.0.0.1:9050";
-
 // ---- onion addressing --------------------------------------------------------
 // Lives here rather than in lib/darkweb because it is a TRANSPORT fact: ".onion means
 // this must go through SOCKS". The network layer needs it, and must not depend on the

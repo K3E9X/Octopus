@@ -10,8 +10,6 @@ const DEFAULT_BASE = (process.env.INTELX_URL || "https://2.intelx.io").replace(/
 const UA = "Octopus-OSINT/0.1 (+https://github.com/K3E9X/Tusna)";
 
 export interface IntelxCreds { key?: string; url?: string; }
-/** Enabled when a key is present in env OR supplied by the caller (API panel). */
-export const intelxEnabled = ENV_KEY.length > 0;
 export const intelxConfigured = (c?: IntelxCreds) => (c?.key || ENV_KEY).length > 0;
 
 function ix(path: string, key: string, base: string, init: RequestInit = {}) {

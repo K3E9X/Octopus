@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     void readClientConfig(req);
     return NextResponse.json({
       corpus, parsed: records.length, stored, persistent: corpusPersistent,
-      note: corpusPersistent ? "" : "no database configured — this corpus lives in memory for this session only",
+      note: corpusPersistent ? "" : "no database configured — this corpus lives only in the server process that received it, and a serverless deploy will usually have lost it by the next request. Set POSTGRES_URL to hold corpora for real.",
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

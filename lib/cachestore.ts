@@ -103,17 +103,3 @@ export function cacheStore(): CacheStore {
   if (!store) store = dbEnabled ? new PgStore() : new MemoryStore();
   return store;
 }
-
-/** Drop old rows so the shared cache cannot grow without bound. */
-export async function pruneCache(olderThanMs = 24 * 3600_000): Promise<number> {
-  if (!dbEnabled) return 0;
-  try {
-    const q = sql();
-    if (!q) return 0;
-    const cutoff = Date.now() - olderThanMs;
-    const rows = await q`DELETE FROM octopus_cache WHERE at < ${cutoff} RETURNING k`;
-    return (rows as any[]).length;
-  } catch {
-    return 0;
-  }
-}

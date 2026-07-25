@@ -89,5 +89,4 @@ export const MANUAL_APPS: AppDef[] = [
   { id: "onionsearch", name: "Tor Browser", category: "Leaks", kind: "manual", input: "both", status: "free", url: "https://www.torproject.org/download/", desc: "Needed to open .onion results by hand; also provides the SOCKS5 port Octopus uses." },
 ];
 
-export const ALL_APPS: AppDef[] = [...BUILTIN_APPS, ...MANUAL_APPS];
 export const BUILTIN_IDS = BUILTIN_APPS.map((a) => a.id);

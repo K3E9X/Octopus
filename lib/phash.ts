@@ -71,12 +71,6 @@ export async function fetchImageBuffer(url: string, timeoutMs = 5000): Promise<U
   }
 }
 
-/** Fetch an image and compute its dHash. Returns null on any failure (graceful). */
-export async function dHashFromUrl(url: string, timeoutMs = 5000): Promise<string | null> {
-  const buf = await fetchImageBuffer(url, timeoutMs);
-  return buf ? dHashFromBuffer(buf) : null;
-}
-
 /** Similarity verdict for a pair of hashes. */
 export function avatarMatch(a?: string, b?: string): { match: boolean; near: boolean; distance: number } {
   if (!a || !b) return { match: false, near: false, distance: 64 };

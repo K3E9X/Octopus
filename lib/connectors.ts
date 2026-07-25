@@ -262,8 +262,6 @@ export const CONNECTOR_DEFS: Array<{ id: string; fn: (u: string) => Promise<RawP
 // Instagram/TikTok/Facebook are deliberately absent).
 export const ALL_CONNECTOR_DEFS = [...CONNECTOR_DEFS, ...SOCIAL_CONNECTOR_DEFS];
 
-export const CONNECTOR_IDS = ALL_CONNECTOR_DEFS.map((d) => d.id);
-
 /** Run the enabled connectors for a username; never throws — failed ones drop to null.
  *  `enabled` = allowlist of connector ids; omit to run all.
  *  `health` (optional) collects rate-limit / failure notes so the caller can report

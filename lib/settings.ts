@@ -73,8 +73,3 @@ export function tradecraftHeaders(): Record<string, string> {
   if (s.legalBasis) h["x-octopus-legal-basis"] = s.legalBasis;
   return h;
 }
-
-/** True if the LLM is configured in the UI (base URL + model at minimum). */
-export function llmConfiguredLocally(s: OctopusSettings): boolean {
-  return !!(s.llmUrl && s.llmModel);
-}

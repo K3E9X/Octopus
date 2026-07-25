@@ -11,7 +11,7 @@
 //    pivots stop re-fetching and stop burning rate limits.
 
 import { cacheStore } from "./cachestore";
-import { egressIdentity, egressHeaders, touchPolicy, proxyKind, torCapable, jitter, type EgressConfig, type Posture } from "./egress";
+import { egressIdentity, egressHeaders, touchPolicy, proxyKind, torCapable, archiveUrl, jitter, type EgressConfig, type Posture } from "./egress";
 import { isOnion, onionVersion } from "./socks";
 import { proxyFetch } from "./proxyfetch";
 
@@ -24,6 +24,8 @@ export interface FetchResult<T = any> {
   cached?: boolean;
   /** set when the OPSEC posture refused the request */
   policyReason?: string;
+  /** true when the live page was refused and this content came from the web archive */
+  fromArchive?: boolean;
 }
 
 const DEFAULT_TTL = 120_000; // long enough for a multi-hop pivot, short enough to stay fresh
@@ -31,7 +33,6 @@ const DEFAULT_TTL = 120_000; // long enough for a multi-hop pivot, short enough 
 // ---- ambient egress config (set per scan by the route) ----
 let AMBIENT: EgressConfig = {};
 export function setEgress(cfg: EgressConfig): void { AMBIENT = cfg || {}; }
-export function currentPosture(): Posture { return egressIdentity(AMBIENT).posture; }
 /** The proxy in force for this scan ("" = direct). */
 export function currentProxy(): string { return egressIdentity(AMBIENT).proxy; }
 /** True when this scan can reach hidden services (a SOCKS proxy is configured). */
@@ -171,9 +172,25 @@ export async function fetchJSON<T = any>(url: string, opts: FetchOpts = {}): Pro
   return result as FetchResult<T>;
 }
 
-/** HTML convenience wrapper (profile pages, OpenGraph, favicon discovery). */
+/**
+ * HTML convenience wrapper (profile pages, OpenGraph, favicon discovery).
+ *
+ * Under the no-touch posture a refused page is retried through the web archive: the
+ * point of no-touch is never to contact infrastructure the target can observe, not to
+ * give up on the page. The result is marked so the caller knows it is reading a
+ * SNAPSHOT — possibly stale — rather than the live page.
+ */
 export async function fetchHTML(url: string, opts: FetchOpts = {}): Promise<FetchResult<string>> {
-  return fetchJSON<string>(url, { ...opts, accept: "html", requireJson: false, timeoutMs: opts.timeoutMs ?? 7000 });
+  const r = await fetchJSON<string>(url, { ...opts, accept: "html", requireJson: false, timeoutMs: opts.timeoutMs ?? 7000 });
+  if (r.outcome !== "blocked-by-policy" || isOnion(url)) return r;
+  const id = egressIdentity(opts.egress || AMBIENT);
+  if (id.posture !== "no-touch") return r;
+
+  const archived = await fetchJSON<string>(archiveUrl(url), {
+    ...opts, accept: "html", requireJson: false, timeoutMs: opts.timeoutMs ?? 12000,
+  });
+  if (archived.outcome !== "ok") return r; // keep the honest refusal, not a second failure
+  return { ...archived, fromArchive: true, policyReason: r.policyReason };
 }
 
 // ---- per-scan source health, so coverage claims stay honest ----

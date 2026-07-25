@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { SIGNALS, SEED, BANDS, BAND_ORDER, type Signal, type Status } from "@/lib/signals";
-import { listCases, saveCase, removeCase, caseToJSON, parseCase, backendMode, type Case } from "@/lib/cases";
+import { listCases, saveCase, removeCase, caseToJSON, parseCase, backendMode, listSnapshots, type Case } from "@/lib/cases";
 import { BUILTIN_APPS, MANUAL_APPS, type AppDef } from "@/lib/registry";
 import { loadEnabled, saveEnabled } from "@/lib/apps";
 import { normId } from "@/lib/extract";
 import { buildDossier, type Dossier } from "@/lib/dossier";
 import type { Verification } from "@/lib/verify";
 import { scoreEvidence, TIER_LABEL } from "@/lib/scoring";
+import { assessIndependence, independenceNote } from "@/lib/lineage";
 import { reverseImageLinks } from "@/lib/reverseimage";
 import { diffSnapshots, type MonitorDiff } from "@/lib/monitor";
 import { loadDecisions, saveDecision, applyDecisionsFiltered, suppressedIds } from "@/lib/decisions";
@@ -20,6 +21,7 @@ import { loadSettings, saveSettings, cfgHeaders, tradecraftHeaders, toClientConf
 import { migrateLegacyStorage } from "@/lib/migrate";
 import { toGraphML } from "@/lib/graphexport";
 import { Logo } from "./Logo";
+import { Glyph, type GlyphName } from "./Glyph";
 import { handleRarity } from "@/lib/rarity";
 import { LLM_PRESETS } from "@/lib/llmconfig";
 import type { AssistResult } from "@/lib/assist";
@@ -30,6 +32,20 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false });
 interface WorkNode extends Signal {
   x: number; y: number; vx: number; vy: number; op: number; a: number;
 }
+
+type RailId = "investigate" | "enrich" | "sources" | "cases" | "data" | "configure";
+
+const RAIL: { id: RailId; glyph: GlyphName; label: string }[] = [
+  { id: "investigate", glyph: "investigate", label: "Investigate" },
+  { id: "enrich", glyph: "enrich", label: "Enrich" },
+  { id: "sources", glyph: "sources", label: "Sources" },
+  { id: "cases", glyph: "cases", label: "Cases" },
+  { id: "data", glyph: "data", label: "Data" },
+  { id: "configure", glyph: "configure", label: "Configure" },
+];
+
+/** One palette entry. `hint` is searched too, so "onion" finds "Open hidden service". */
+interface Cmd { group: string; label: string; hint: string; run: () => void; key?: string }
 
 export default function OrbitBoard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,8 +68,12 @@ export default function OrbitBoard() {
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [cases, setCases] = useState<Case[]>([]);
-  const [casesOpen, setCasesOpen] = useState(false);
-  const [appsOpen, setAppsOpen] = useState(false);
+  // One navigation model: a rail of GROUPS on the left, each opening one popover, plus
+  // a command palette over everything. It replaces the twelve competing top-bar buttons
+  // — nothing was removed, it was given a place.
+  const [rail, setRail] = useState<{ id: RailId; top: number } | null>(null);
+  const [palette, setPalette] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [addForm, setAddForm] = useState<{ platform: string; handle: string; url: string; via: string; note: string; screenshot: string; displayName: string; bio: string; location: string; email: string; avatar: string } | null>(null);
   const [capturing, setCapturing] = useState(false);
   const ingestRef = useRef<(manual: Signal, extracted: Signal[], links: [string, string][]) => void>(() => {});
@@ -63,7 +83,6 @@ export default function OrbitBoard() {
   const [view, setView] = useState<"board" | "table" | "timeline" | "map">("board");
   const [monitor, setMonitor] = useState<MonitorDiff | null>(null);
   const [monitoring, setMonitoring] = useState(false);
-  const [barMenu, setBarMenu] = useState<"tools" | "data" | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [apiOpen, setApiOpen] = useState(false);
   const [settings, setSettings] = useState<OctopusSettings>({});
@@ -84,6 +103,122 @@ export default function OrbitBoard() {
 
   const deepRef = useRef(false);
   const [deepStatus, setDeepStatus] = useState<string | null>(null);
+  const seedInputRef = useRef<HTMLInputElement>(null);
+  const [palQuery, setPalQuery] = useState("");
+  const [palIndex, setPalIndex] = useState(0);
+  const [modKey, setModKey] = useState("Ctrl ");
+
+  // Every save appends an immutable snapshot — the chain of custody. It was being
+  // written and never shown, which makes an audit trail you cannot audit.
+  const [snapCounts, setSnapCounts] = useState<Record<string, number>>({});
+  async function loadSnapCounts(list: Case[]) {
+    const out: Record<string, number> = {};
+    await Promise.all(list.slice(0, 20).map(async (c) => {
+      try { out[c.id] = (await listSnapshots(c.id)).length; } catch { /* local fallback */ }
+    }));
+    setSnapCounts(out);
+  }
+
+  function openRail(e: React.MouseEvent<HTMLButtonElement>, id: RailId) {
+    if (rail?.id === id) return setRail(null);
+    // anchor the popover to the button, but never let it run off the bottom
+    const r = e.currentTarget.getBoundingClientRect();
+    setRail({ id, top: Math.max(66, Math.min(r.top, window.innerHeight - 360)) });
+    if (id === "cases") listCases().then((l) => { setCases(l); loadSnapCounts(l); }).catch(() => {});
+  }
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    try { window.localStorage.setItem("octopus:theme", next); } catch { /* private mode */ }
+  }
+
+  // Resolve the theme once: an explicit choice wins, otherwise follow the system — and
+  // keep following it until the analyst actually chooses.
+  useEffect(() => {
+    setModKey(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl ");
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    let stored: string | null = null;
+    try { stored = window.localStorage.getItem("octopus:theme"); } catch { /* private mode */ }
+    if (stored === "light" || stored === "dark") { setTheme(stored); return; }
+    setTheme(mq.matches ? "light" : "dark");
+    const onSys = (ev: MediaQueryListEvent) => setTheme(ev.matches ? "light" : "dark");
+    mq.addEventListener("change", onSys);
+    return () => mq.removeEventListener("change", onSys);
+  }, []);
+
+  // Case count is shown on the rail, so it has to be known before anything is clicked.
+  useEffect(() => { listCases().then(setCases).catch(() => {}); }, []);
+
+  /** Everything the interface can do, in one searchable list. */
+  const COMMANDS: Cmd[] = [
+    { group: "Investigate", label: "Investigate", hint: "Scan, auto-expand one hop, open the dossier", run: investigate, key: "⏎" },
+    { group: "Investigate", label: "Scan the seed", hint: "Collect presences without expanding", run: runScan },
+    { group: "Investigate", label: "Deep scan", hint: "3000+ sites via the collector worker", run: deepScan },
+    { group: "Investigate", label: "Ask the assistant", hint: "LLM reads the graph: conclusion, pivots, false positives", run: runAssist },
+    { group: "Investigate", label: "Monitor changes", hint: "Re-scan and diff since the last snapshot", run: runMonitor },
+    { group: "Investigate", label: "Open dossier", hint: "The synthesized identity and grounded brief", run: openDossier },
+    { group: "Enrich", label: "Image metadata", hint: "EXIF, GPS and camera from a photo URL", run: imageForensics },
+    { group: "Enrich", label: "Face match", hint: "The same person across different photos", run: faceMatch },
+    { group: "Enrich", label: "Open hidden service", hint: "Retrieve a .onion through Tor — emails, wallets, keys, handles", run: openOnion },
+    { group: "Enrich", label: "Add a finding", hint: "Your manual discovery, run through the same engine", run: () => openAddForm() },
+    { group: "View", label: "Orbit", hint: "The correlation graph — confidence as gravity", run: () => setView("board"), key: "1" },
+    { group: "View", label: "Table", hint: "Every node, sortable and filterable", run: () => setView("table"), key: "2" },
+    { group: "View", label: "Timeline", hint: "The chronology of the footprint", run: () => setView("timeline"), key: "3" },
+    { group: "View", label: "Map", hint: "Resolved locations and where they converge", run: () => setView("map"), key: "4" },
+    { group: "Data", label: "Local corpora", hint: "Load and search datasets you hold — silent, offline", run: () => { setCorpusOpen(true); loadCorpusStats(); } },
+    { group: "Data", label: "Save the case", hint: "Append an immutable snapshot", run: saveCurrent },
+    { group: "Data", label: "Export JSON", hint: "Download the case file", run: exportCurrent },
+    { group: "Data", label: "Export graph (GraphML)", hint: "Open in flowsint / Maltego / Gephi", run: exportGraphML },
+    { group: "Data", label: "Import JSON", hint: "Load a case file", run: () => fileRef.current?.click() },
+    { group: "Configure", label: "Sources & apps", hint: "Connectors to run, manual pivots to open", run: (e2?: any) => setRail({ id: "sources", top: 90 }) },
+    { group: "Configure", label: "API keys & tradecraft", hint: "LLM, leak sources, collector, OPSEC posture, proxy / Tor", run: () => setApiOpen(true) },
+    { group: "Configure", label: "Usage guide", hint: "Where to start and how to run an investigation", run: () => setGuideOpen(true) },
+    { group: "Configure", label: "Toggle light / dark", hint: "Follows your system until you choose", run: toggleTheme },
+  ];
+
+  const palResults = (() => {
+    const q = palQuery.trim().toLowerCase();
+    if (!q) return COMMANDS;
+    const words = q.split(/\s+/);
+    return COMMANDS.filter((c) => {
+      const hay = (c.group + " " + c.label + " " + c.hint).toLowerCase();
+      return words.every((w) => hay.includes(w));
+    });
+  })();
+
+  function onPaletteKey(e: React.KeyboardEvent) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setPalIndex((i) => Math.min(i + 1, palResults.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setPalIndex((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const c = palResults[palIndex];
+      if (c) { setPalette(false); c.run(); }
+    } else if (e.key === "Escape") { setPalette(false); }
+  }
+
+  // Global keys. Deliberately few, and none of them steal a keystroke from a field:
+  // an interface that swallows what you type is worse than one with no shortcuts.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalQuery(""); setPalIndex(0); setPalette((p) => !p);
+        return;
+      }
+      if (e.key === "Escape") { setPalette(false); setRail(null); return; }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "/") { e.preventDefault(); seedInputRef.current?.focus(); seedInputRef.current?.select(); return; }
+      const views = { "1": "board", "2": "table", "3": "timeline", "4": "map" } as const;
+      const v = views[e.key as keyof typeof views];
+      if (v) setView(v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // --- local corpora: datasets the analyst already holds ---
   const [corpusOpen, setCorpusOpen] = useState(false);
@@ -213,6 +348,7 @@ export default function OrbitBoard() {
 
   useEffect(() => { focusRef.current = focusId; }, [focusId]);
   const [enabled, setEnabled] = useState<Set<string>>(() => new Set(BUILTIN_APPS.map((a) => a.id)));
+  const builtinOn = [...enabled].filter((id) => BUILTIN_APPS.some((a) => a.id === id)).length;
   const enabledRef = useRef(enabled);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -241,7 +377,7 @@ export default function OrbitBoard() {
     if (assistBusy) return;
     const sigs = currentSignals();
     if (!sigs.length) { flashMsg("scan something first, then ask the assistant"); return; }
-    setAssistBusy(true); setAssist(null); setAssistVerdict(null); setBarMenu(null);
+    setAssistBusy(true); setAssist(null); setAssistVerdict(null); setRail(null);
     try {
       const res = await fetch("/api/assist", { method: "POST", headers: { "content-type": "application/json", ...cfgHeaders(), ...tradecraftHeaders() }, body: JSON.stringify({ signals: sigs }) });
       const d = await res.json();
@@ -292,7 +428,7 @@ export default function OrbitBoard() {
 
   function openAddForm(via?: string, platform?: string) {
     setAddForm({ platform: platform || "", handle: "", url: "", via: via || "", note: "", screenshot: "", displayName: "", bio: "", location: "", email: "", avatar: "" });
-    setAppsOpen(false);
+    setRail(null);
   }
 
   // Capture a manually-found account/fact and run it through the SAME correlation
@@ -496,7 +632,10 @@ export default function OrbitBoard() {
       W = window.innerWidth; H = window.innerHeight;
       cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      cx = W / 2; cy = H / 2 + 10; baseR = Math.min(W, H);
+      // the graph centres on the space it actually has: the rail owns the left edge,
+      // so a naive W/2 would push the seed permanently off-centre
+      const rail = parseInt(cssv("--rail-w")) || 0;
+      cx = (W + rail) / 2; cy = H / 2 + 10; baseR = Math.min(W - rail, H);
       metaRef.current = { cx, cy };
     }
 
@@ -534,6 +673,10 @@ export default function OrbitBoard() {
       const discContent = d.kind === "email" ? "✉" : d.kind === "alias" ? "~" : d.kind === "phone" ? "☎" : d.kind === "location" ? "⌖" : d.kind === "leak" ? "⚠" : d.kind === "person" ? "◆" : d.kind === "org" ? "▣" : d.kind === "domain" ? "◇" : d.disc;
       el.innerHTML = `<div class="disc">${discContent}</div><div class="tag">${escapeHtml(d.handle)}</div><div class="conf">${d.confidence}%</div>`;
       bodiesEl.appendChild(el);
+      // a node announces its arrival once — on a graph that grows while you work, this
+      // is what tells you something appeared without you having to diff the screen
+      el.classList.add("spawn");
+      setTimeout(() => el.classList.remove("spawn"), 600);
       elsRef.current[d.id] = el;
       attachDrag(el, d);
       el.addEventListener("contextmenu", (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: d.id }); });
@@ -1020,7 +1163,7 @@ export default function OrbitBoard() {
     lastScanRef.current = c.seed;
     clearDemoState();
     rebuildRef.current(c.signals, true);
-    setCasesOpen(false);
+    setRail(null);
     flashMsg(`loaded "${c.name}"`);
   }
 
@@ -1068,7 +1211,7 @@ export default function OrbitBoard() {
     lastScanRef.current = c.seed;
     clearDemoState();
     rebuildRef.current(c.signals, true);
-    setCasesOpen(false);
+    setRail(null);
     flashMsg(`imported "${c.name}"`);
   }
 
@@ -1185,124 +1328,192 @@ export default function OrbitBoard() {
 
       {view === "map" && <MapView signals={currentSignals()} onSelect={(id) => setSelectedId(id)} />}
 
+      <nav className="rail" aria-label="workspace">
+        <div className="wordmark rail-brand"><Logo size={22} /></div>
+        {RAIL.map((g) => (
+          <button
+            key={g.id}
+            className={"rail-item" + (rail?.id === g.id ? " on" : "")}
+            aria-label={g.label} aria-expanded={rail?.id === g.id}
+            onClick={(e) => openRail(e, g.id)}
+          >
+            <Glyph name={g.glyph} />
+            <span>{g.label}</span>
+            {g.id === "sources" && builtinOn < BUILTIN_APPS.length && <i className="rail-count">{builtinOn}</i>}
+            {g.id === "cases" && cases.length > 0 && <i className="rail-count">{cases.length}</i>}
+          </button>
+        ))}
+        <div className="rail-sep" />
+        <button className="rail-item" aria-label={theme === "dark" ? "Light theme" : "Dark theme"} onClick={toggleTheme}>
+          <Glyph name={theme === "dark" ? "sun" : "moon"} />
+          <span>{theme === "dark" ? "Light" : "Dark"}</span>
+        </button>
+        <button className="rail-item" aria-label="Guide" onClick={() => { setRail(null); setGuideOpen(true); }}>
+          <Glyph name="help" />
+          <span>Guide</span>
+        </button>
+      </nav>
+
+      {rail && <div className="menu-backdrop" onClick={() => setRail(null)} />}
+
+      {rail?.id === "investigate" && (
+        <div className="rail-pop" style={{ top: rail.top }}>
+          <div className="pop-head">investigate — from a seed to a story</div>
+          <button className="menu-item" disabled={scanning} onClick={() => { setRail(null); investigate(); }}><b>Investigate</b><span>Scan, auto-expand one hop, open the dossier</span></button>
+          <button className="menu-item" disabled={scanning} onClick={() => { setRail(null); runScan(); }}><b>Scan the seed</b><span>Collect presences without expanding</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); deepScan(); }}><b>Deep scan</b><span>3000+ sites via the collector worker</span></button>
+          <button className="menu-item" disabled={assistBusy} onClick={() => { setRail(null); runAssist(); }}><b>Ask the assistant</b><span>LLM reads the graph: conclusion, pivots, false positives</span></button>
+          <button className="menu-item" disabled={monitoring} onClick={() => { setRail(null); runMonitor(); }}><b>Monitor changes</b><span>Re-scan and diff since the last snapshot</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); openDossier(); }}><b>Open dossier</b><span>The synthesized identity, with an optional grounded brief</span></button>
+        </div>
+      )}
+
+      {rail?.id === "enrich" && (
+        <div className="rail-pop" style={{ top: rail.top }}>
+          <div className="pop-head">enrich — turn a node into more evidence</div>
+          <button className="menu-item" onClick={() => { setRail(null); imageForensics(); }}><b>Image metadata</b><span>EXIF / GPS / camera from a photo URL</span></button>
+          <button className="menu-item" disabled={faceBusy} onClick={() => { setRail(null); faceMatch(); }}><b>Face match</b><span>The same person across different photos</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); openOnion(); }}><b>Open hidden service</b><span>Retrieve a .onion through Tor: emails, wallets, keys, handles</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); openAddForm(); }}><b>Add a finding</b><span>Your manual discovery, run through the same engine</span></button>
+        </div>
+      )}
+
+      {rail?.id === "sources" && (
+        <div className="rail-pop wide" style={{ top: Math.min(rail.top, 90) }}>
+          <div className="pop-head sticky">connectors — {builtinOn}/{BUILTIN_APPS.length} enabled, toggle to include in the scan</div>
+          {BUILTIN_APPS.map((a) => (
+            <div className="app-row" key={a.id}>
+              <button className={"app-toggle" + (enabled.has(a.id) ? " on" : "")} onClick={() => toggleApp(a.id)} aria-label={`toggle ${a.name}`}>
+                <span className="app-sw" />
+              </button>
+              <div className="app-info">
+                <span className="app-name">{a.name} <em>{a.category}</em></span>
+                <span className="app-desc">{a.desc}</span>
+              </div>
+            </div>
+          ))}
+          <div className="pop-head">manual pivots — add, then open pre-filled with the seed</div>
+          {MANUAL_APPS.map((a) => (
+            <div className="app-row" key={a.id}>
+              <button className={"app-add" + (enabled.has(a.id) ? " added" : "")} onClick={() => toggleApp(a.id)} aria-label={`add ${a.name}`}>
+                {enabled.has(a.id) ? "✓" : "+"}
+              </button>
+              <div className="app-info">
+                <span className="app-name">{a.name} <em>{a.category}</em> <b className={"app-badge " + a.status}>{a.status}</b></span>
+                <span className="app-desc">{a.desc}</span>
+              </div>
+              {enabled.has(a.id) && <button className="app-open" onClick={() => openTool(a)} aria-label="open">↗</button>}
+              {enabled.has(a.id) && <button className="app-open" onClick={() => openAddForm(a.name)} aria-label="add a result" title="add a result to the board">＋</button>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rail?.id === "cases" && (
+        <div className="rail-pop" style={{ top: rail.top }}>
+          <div className="pop-head">cases — stored: {backendMode() || "…"}</div>
+          <button className="menu-item" onClick={() => { setRail(null); saveCurrent(); }}><b>Save the current board</b><span>Appends an immutable snapshot to the case history</span></button>
+          {cases.length === 0 && <div className="cases-empty">no saved case yet</div>}
+          {cases.map((c) => (
+            <div className="case-row" key={c.id}>
+              <button className="case-open" onClick={() => openCase(c)}>
+                <span className="case-name">{c.name}</span>
+                <span className="case-meta">
+                  {c.signals.length} signals · {new Date(c.savedAt).toLocaleDateString()}
+                  {snapCounts[c.id] ? ` · ${snapCounts[c.id]} snapshot(s) in history` : ""}
+                </span>
+              </button>
+              <button className="case-del" onClick={() => deleteCase(c.id)} aria-label={`delete ${c.name}`}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rail?.id === "data" && (
+        <div className="rail-pop" style={{ top: rail.top }}>
+          <div className="pop-head">data — in, out, and what you already hold</div>
+          <button className="menu-item" onClick={() => { setRail(null); setCorpusOpen(true); loadCorpusStats(); }}><b>Local corpora</b><span>Load and search datasets you hold — silent, nothing leaves the machine</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); exportCurrent(); }}><b>Export JSON</b><span>Download the case file</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); exportGraphML(); }}><b>Export graph (GraphML)</b><span>Open in flowsint / Maltego / Gephi</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); fileRef.current?.click(); }}><b>Import JSON</b><span>Load a case file</span></button>
+        </div>
+      )}
+
+      {rail?.id === "configure" && (
+        <div className="rail-pop" style={{ top: rail.top }}>
+          <div className="pop-head">configure — keys, tradecraft, help</div>
+          <button className="menu-item" onClick={() => { setRail(null); setApiOpen(true); }}><b>API keys &amp; tradecraft</b><span>LLM, leak sources, collector, OPSEC posture, proxy / Tor</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); setGuideOpen(true); }}><b>Usage guide</b><span>Where to start and how to run an investigation</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); toggleTheme(); }}><b>{theme === "dark" ? "Light" : "Dark"} theme</b><span>Currently {theme}; follows your system until you choose</span></button>
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept="application/json,.json" onChange={importFile} style={{ display: "none" }} />
+
       <div className="chrome">
-        <div className="wordmark"><Logo size={22} className="wm-logo" />OCTOPUS <small>ORBIT</small></div>
-        <label className="seed-in">
-          <span>seed</span>
+        <div className="wordmark">OCTOPUS <small>ORBIT</small></div>
+        <div className="cmdbar">
+          <label htmlFor="seed-input">seed</label>
           <input
-            value={seed} spellCheck={false}
+            id="seed-input" ref={seedInputRef} value={seed} spellCheck={false}
+            placeholder="username, email, phone, name or domain"
             onChange={(e) => setSeed(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") runScan(); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); investigate(); } }}
             aria-label="seed"
           />
-        </label>
+          <button className="go" onClick={investigate} disabled={scanning}>{scanning ? "WORKING" : "INVESTIGATE"}</button>
+        </div>
+        <button className="kbd" onClick={() => setPalette(true)} aria-label="open the command palette">
+          <Glyph name="command" size={13} />{modKey}K
+        </button>
+        <div className="flex" />
+        <div className="statusline">
+          {/* the strip never wraps, so the full text lives in the tooltip — a truncated
+              "sources unreachable" warning that cannot be read is not a warning */}
+          {(deepStatus || scanMsg) && <span className="st-msg" title={deepStatus || scanMsg || ""}>{deepStatus || scanMsg}</span>}
+          {isDemo && <span className="demo-tag hide-md">sample data — scan a seed to start</span>}
+          <span className="hide-md"><span className="dotpulse" /><b>{total}</b> signals</span>
+          <span className="hide-md"><b style={{ color: "var(--confirm)" }}>{confirmedCount}</b> confirmed</span>
+        </div>
         <div className="viewtoggle">
           <button className={view === "board" ? "on" : ""} onClick={() => setView("board")}>ORBIT</button>
           <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>TABLE</button>
           <button className={view === "timeline" ? "on" : ""} onClick={() => setView("timeline")}>TIMELINE</button>
           <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>MAP</button>
         </div>
-        <div className="flex" />
-        <div className="readout">
-          {(deepStatus || scanMsg) && <span className="rd-msg">{deepStatus || scanMsg}</span>}
-          {isDemo && <span className="demo-tag">sample data — scan a seed to start</span>}
-          <span className="hide-sm"><span className="dotpulse" /><b>{total}</b> signals</span>
-          <span className="hide-sm"><b style={{ color: "var(--confirm)" }}>{confirmedCount}</b> confirmed</span>
-
-          <button className="btn btn-primary" onClick={investigate} disabled={scanning}>INVESTIGATE</button>
-          <button className="btn" onClick={runScan} disabled={scanning}>{scanning ? "…" : "SCAN"}</button>
-
-          <div className="cases-wrap">
-            <button className={"btn" + (barMenu === "tools" ? " open" : "")} onClick={() => setBarMenu((m) => (m === "tools" ? null : "tools"))}>TOOLS ▾</button>
-            {barMenu === "tools" && (
-              <div className="menu-pop">
-                <button className="menu-item" disabled={assistBusy} onClick={runAssist}><b>Ask the assistant</b><span>LLM reads the graph → conclusion, pivots, false positives</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); deepScan(); }}><b>Deep scan</b><span>3000+ sites via the collector worker</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); imageForensics(); }}><b>Image metadata</b><span>EXIF / GPS from a photo URL</span></button>
-                <button className="menu-item" disabled={faceBusy} onClick={() => { setBarMenu(null); faceMatch(); }}><b>Face match</b><span>Same person across different photos</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); openOnion(); }}><b>Open hidden service</b><span>Retrieve a .onion through Tor → emails, wallets, keys, handles</span></button>
-                <button className="menu-item" disabled={monitoring} onClick={() => { setBarMenu(null); runMonitor(); }}><b>Monitor changes</b><span>Re-scan and diff since last snapshot</span></button>
-              </div>
-            )}
-          </div>
-
-          <button className="btn" onClick={openDossier}>DOSSIER</button>
-          <button className="btn" onClick={() => openAddForm()}>ADD FINDING</button>
-
-          <div className="cases-wrap">
-            <button className={"btn" + (barMenu === "data" ? " open" : "")} onClick={() => setBarMenu((m) => (m === "data" ? null : "data"))}>DATA ▾</button>
-            {barMenu === "data" && (
-              <div className="menu-pop">
-                <button className="menu-item" onClick={() => { setBarMenu(null); saveCurrent(); }}><b>Save case</b><span>Store the current board</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); exportCurrent(); }}><b>Export JSON</b><span>Download the case file</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); exportGraphML(); }}><b>Export graph (GraphML)</b><span>Open in flowsint / Maltego / Gephi</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); fileRef.current?.click(); }}><b>Import JSON</b><span>Load a case file</span></button>
-                <button className="menu-item" onClick={() => { setBarMenu(null); setCorpusOpen(true); loadCorpusStats(); }}><b>Local corpora</b><span>Load and search datasets you hold — searched silently, offline</span></button>
-              </div>
-            )}
-          </div>
-          <input ref={fileRef} type="file" accept="application/json,.json" onChange={importFile} style={{ display: "none" }} />
-
-          <div className="cases-wrap">
-            <button className="btn" onClick={() => setAppsOpen((o) => !o)}>
-              APPS ({[...enabled].filter((id) => BUILTIN_APPS.some((a) => a.id === id)).length}/{BUILTIN_APPS.length})
-            </button>
-            {appsOpen && (
-              <div className="apps-pop">
-                <div className="cases-head">connectors — toggle to include in the scan</div>
-                {BUILTIN_APPS.map((a) => (
-                  <div className="app-row" key={a.id}>
-                    <button className={"app-toggle" + (enabled.has(a.id) ? " on" : "")} onClick={() => toggleApp(a.id)} aria-label="toggle">
-                      <span className="app-sw" />
-                    </button>
-                    <div className="app-info">
-                      <span className="app-name">{a.name} <em>{a.category}</em></span>
-                      <span className="app-desc">{a.desc}</span>
-                    </div>
-                  </div>
-                ))}
-                <div className="cases-head">manual pivots (cipher387) — add &amp; open with the seed</div>
-                {MANUAL_APPS.map((a) => (
-                  <div className="app-row" key={a.id}>
-                    <button className={"app-add" + (enabled.has(a.id) ? " added" : "")} onClick={() => toggleApp(a.id)}>
-                      {enabled.has(a.id) ? "✓" : "+"}
-                    </button>
-                    <div className="app-info">
-                      <span className="app-name">{a.name} <em>{a.category}</em> <b className={"app-badge " + a.status}>{a.status}</b></span>
-                      <span className="app-desc">{a.desc}</span>
-                    </div>
-                    {enabled.has(a.id) && <button className="app-open" onClick={() => openTool(a)} aria-label="open">↗</button>}
-                    {enabled.has(a.id) && <button className="app-open" onClick={() => openAddForm(a.name)} aria-label="add result" title="add a result to the board">＋</button>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="cases-wrap">
-            <button className="btn" onClick={async () => { setCases(await listCases()); setCasesOpen((o) => !o); }}>
-              CASES{cases.length ? ` (${cases.length})` : ""}
-            </button>
-            {casesOpen && (
-              <div className="cases-pop">
-                <div className="cases-head">stored: {backendMode() || "…"}</div>
-                {cases.length === 0 && <div className="cases-empty">no saved case</div>}
-                {cases.map((c) => (
-                  <div className="case-row" key={c.id}>
-                    <button className="case-open" onClick={() => openCase(c)}>
-                      <span className="case-name">{c.name}</span>
-                      <span className="case-meta">{c.signals.length} signals · {new Date(c.savedAt).toLocaleDateString()}</span>
-                    </button>
-                    <button className="case-del" onClick={() => deleteCase(c.id)} aria-label="delete">✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <button className="btn" onClick={() => setApiOpen(true)}>API</button>
-          <button className="btn" onClick={() => setGuideOpen(true)}>GUIDE</button>
-          {barMenu && <div className="menu-backdrop" onClick={() => setBarMenu(null)} />}
-        </div>
       </div>
+      {scanning && <div className="scanline"><i /></div>}
+
+      {palette && (
+        <div className="pal-overlay" onClick={() => setPalette(false)}>
+          <div className="palette" onClick={(e) => e.stopPropagation()}>
+            <input
+              className="pal-input" autoFocus value={palQuery} spellCheck={false}
+              placeholder="Type a command — scan, dossier, onion, corpora, keys, theme…"
+              onChange={(e) => { setPalQuery(e.target.value); setPalIndex(0); }}
+              onKeyDown={onPaletteKey}
+              aria-label="command"
+            />
+            <div className="pal-list">
+              {palResults.length === 0 && <div className="pal-empty">nothing matches “{palQuery}”</div>}
+              {palResults.map((c, i) => (
+                <div key={c.group + c.label}>
+                  {(i === 0 || palResults[i - 1].group !== c.group) && <div className="pal-group">{c.group}</div>}
+                  <button
+                    className={"pal-item" + (i === palIndex ? " on" : "")}
+                    onMouseEnter={() => setPalIndex(i)}
+                    onClick={() => { setPalette(false); c.run(); }}
+                  >
+                    <div className="pi-main"><b>{c.label}</b><small>{c.hint}</small></div>
+                    {c.key && <span className="pi-key">{c.key}</span>}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="pal-foot"><span>↑↓ move</span><span>⏎ run</span><span>esc close</span></div>
+          </div>
+        </div>
+      )}
 
       {view === "board" && (
         <>
@@ -1311,7 +1522,11 @@ export default function OrbitBoard() {
               <div className="l" key={k}><span className="tick" />{BANDS[k].label}</div>
             ))}
           </div>
-          <div className="hint">Enter a seed (username, email, phone, name or domain) and press INVESTIGATE&nbsp;&nbsp;/&nbsp;&nbsp;click a node for its evidence&nbsp;&nbsp;/&nbsp;&nbsp;right-click to pivot&nbsp;&nbsp;/&nbsp;&nbsp;new here? open GUIDE</div>
+          <div className="hint">
+            Type a seed and press <b>Enter</b>&nbsp;&nbsp;/&nbsp;&nbsp;click a node for its evidence, right-click to pivot
+            &nbsp;&nbsp;/&nbsp;&nbsp;<b>{modKey}K</b> for every command&nbsp;&nbsp;/&nbsp;&nbsp;<b>/</b> to focus the seed,
+            <b> 1-4</b> to switch view&nbsp;&nbsp;/&nbsp;&nbsp;new here? the rail ends with the guide
+          </div>
         </>
       )}
 
@@ -1328,13 +1543,11 @@ export default function OrbitBoard() {
             </div>
 
             <div className="guide-sect">Load a dataset</div>
-            <div className="add-cols">
-              <label className="add-field"><span>corpus name (provenance — part of the evidence)</span>
+            <div className="field-row">
+              <label className="add-field"><span>corpus name — its provenance is part of the evidence</span>
                 <input value={corpusName} placeholder="collection1-2019 / forum-x-archive" onChange={(e) => setCorpusName(e.target.value)} />
               </label>
-              <div className="api-testcol">
-                <button className="ping-btn" onClick={() => corpusFileRef.current?.click()}>Choose file</button>
-              </div>
+              <button className="ping-btn" onClick={() => corpusFileRef.current?.click()}>Choose file</button>
             </div>
             <input
               ref={corpusFileRef} type="file" accept=".txt,.csv,.tsv,.json,.jsonl,.log,text/plain" style={{ display: "none" }}
@@ -1356,9 +1569,9 @@ export default function OrbitBoard() {
                 onChange={(e) => setCorpusText(e.target.value)}
               />
             </label>
-            <div className="add-cols">
+            <div className="field-row">
               <button className="ping-btn" disabled={corpusBusy} onClick={ingestCorpusText}>{corpusBusy ? "working…" : "Ingest"}</button>
-              <div className="api-testcol">{corpusMsg && <span className="ping-res">{corpusMsg}</span>}</div>
+              {corpusMsg && <span className="ping-res">{corpusMsg}</span>}
             </div>
 
             <div className="guide-sect">Held corpora</div>
@@ -1371,20 +1584,22 @@ export default function OrbitBoard() {
             ) : <div className="api-note">…</div>}
             {corpusStats && !corpusStats.persistent && (
               <div className="api-note">
-                No database configured — corpora live in memory for this session only. Set <b>POSTGRES_URL</b> to keep them.
+                No database configured — a corpus lives only in the server process that received it, and a serverless
+                deploy (Vercel) will usually have lost it by the next request. Set <b>POSTGRES_URL</b> to hold corpora
+                for real. Self-hosted (Docker / <b>node server.js</b>), it survives as long as the process does.
               </div>
             )}
 
             <div className="guide-sect">Search (silent)</div>
-            <div className="add-cols">
-              <label className="add-field"><span>selector — an exact email/handle/phone, or <b>@domain.com</b> to sweep a domain</span>
+            <div className="field-row">
+              <label className="add-field"><span>exact email / handle / phone — or <b>@domain.com</b> to sweep a domain</span>
                 <input
                   value={corpusQuery} placeholder="marie.dubois@example.com"
                   onChange={(e) => setCorpusQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") searchCorpusUI(); }}
                 />
               </label>
-              <div className="api-testcol"><button className="ping-btn" disabled={corpusBusy} onClick={searchCorpusUI}>Search</button></div>
+              <button className="ping-btn" disabled={corpusBusy} onClick={searchCorpusUI}>Search</button>
             </div>
             {corpusHits && (
               <div>
@@ -1569,9 +1784,22 @@ export default function OrbitBoard() {
 
             <div className="guide-sect">Start</div>
             <ol className="guide-steps">
-              <li><b>Type a seed</b> in the top-left field and press <b>INVESTIGATE</b>. Octopus scans, correlates and expands automatically, then opens the dossier.</li>
-              <li>Prefer manual control? Use <b>SCAN</b> for a single pass, then expand yourself.</li>
+              <li><b>Type a seed</b> in the bar and press <b>Enter</b>. Octopus scans, correlates and expands
+                automatically, then opens the dossier. A username, email, phone, full name or domain all work.</li>
+              <li>Prefer manual control? <b>Investigate → Scan the seed</b> runs a single pass and expands nothing.</li>
             </ol>
+
+            <div className="guide-sect">Finding things</div>
+            <div className="guide-lead">
+              Everything lives in two places, and nothing is hidden in a third.
+            </div>
+            <ul className="guide-list">
+              <li>The <b>rail</b> on the left groups every tool by intent — Investigate, Enrich, Sources, Cases, Data,
+                Configure. Hover a glyph to see its name; click it to open the group.</li>
+              <li><b>{modKey}K</b> opens the command palette: one searchable list of every action, including the ones
+                you would otherwise have to remember where to find. Arrows to move, Enter to run.</li>
+              <li><b>/</b> jumps to the seed field, <b>1-4</b> switch view, <b>Esc</b> closes whatever is open.</li>
+            </ul>
 
             <div className="guide-sect">Read the graph</div>
             <ol className="guide-steps">
@@ -1735,6 +1963,10 @@ export default function OrbitBoard() {
             <div className="grounded">
               <b>{selected.evidence.length} evidence items</b> tied to a verifiable source. The score aggregates only these
               signals — <b>no unsourced inference</b> is produced by the LLM.
+              {/* corroboration is only worth something when the sources are independent —
+                  three facts read off one profile page are one sighting, and saying so
+                  here is what stops a node from looking better corroborated than it is */}
+              <div className="grounded-ind">{independenceNote(assessIndependence(selected.evidence))}</div>
             </div>
             {selected.place && (
               <>

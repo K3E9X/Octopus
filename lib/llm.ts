@@ -9,9 +9,6 @@
 import type { Dossier } from "./dossier";
 import { resolveLLM, llmChat, type LLMConfig } from "./llmconfig";
 
-/** True when the ENV LLM is configured (client-provided config is checked per request). */
-export const llmEnabled = resolveLLM().enabled;
-
 const SYSTEM = [
   "You are an OSINT analyst assistant. You summarize ONLY the evidence provided about a subject.",
   "Rules, strictly:",
