@@ -1948,7 +1948,7 @@ export default function OrbitBoard() {
       <input ref={fileRef} type="file" accept="application/json,.json" onChange={importFile} style={{ display: "none" }} />
 
       <div className="chrome">
-        <div className="wordmark"><b>OCTOPUS</b><small>ORBIT</small></div>
+        <div className="wordmark"><b>OCTOPUS</b><small>OSINT</small></div>
         <div className="cmdbar">
           <label htmlFor="seed-input">seed</label>
           <input

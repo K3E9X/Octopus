@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Octopus — Orbit",
+  title: "Octopus OSINT",
   description:
-    "Octopus — OSINT identity correlation platform. Orbit view: matching confidence as gravitational pull.",
+    "Octopus OSINT — resolve one identity across everything, and know when it cannot be resolved. Orbit is one view inside it.",
 };
 
 export const viewport: Viewport = {

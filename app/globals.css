@@ -1056,3 +1056,122 @@ body::after {
 .orbit-tools { bottom: calc(118px * var(--ui)); }
 .legend { bottom: calc(20px * var(--ui)); }
 .hint { bottom: calc(20px * var(--ui)); right: calc(22px * var(--ui)); max-width: calc(620px * var(--ui)); }
+
+/* ============================================================================
+   LANDING — the showcase
+   Same art direction as the tool, scaled up: void ground, one accent, hairlines,
+   monospace. Nothing here is a gradient, a glass panel or a rounded feature box.
+   The page scrolls; the neural field stays behind it.
+   ========================================================================== */
+
+.lp { position: relative; min-height: 100vh; overflow-x: hidden; }
+body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
+/* The stacking rule below and this one have equal specificity, so `.neural` must be
+   excluded from it explicitly — otherwise the canvas loses `fixed`, falls back to the
+   intrinsic 2:1 canvas ratio and the field sits in a band at the top of the page. */
+.lp > *:not(.neural) { position: relative; z-index: 1; }
+.neural { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
+
+.lp-top { display: flex; align-items: center; gap: 28px; padding: 22px clamp(18px, 5vw, 54px); }
+.lp-brand, .auth-brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
+.lp-brand span, .auth-brand span { display: flex; align-items: baseline; gap: 8px; }
+.lp-brand b, .auth-brand b { font-weight: 400; font-size: calc(15px * var(--ui)); letter-spacing: .3em; color: var(--ink); }
+.lp-brand small, .auth-brand small { font-size: calc(10px * var(--ui)); letter-spacing: .26em; color: var(--accent); }
+.lp-nav { display: flex; align-items: center; gap: 22px; margin-left: auto; flex-wrap: wrap; }
+.lp-nav a { color: var(--ctl); text-decoration: none; font-size: calc(11.5px * var(--ui)); letter-spacing: .1em; }
+.lp-nav a:hover { color: var(--accent); }
+.lp-cta { border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent) !important;
+  padding: calc(8px * var(--ui)) calc(16px * var(--ui)); border-radius: 3px; }
+.lp-cta:hover { background: var(--accent-dim); }
+
+.lp-main { max-width: 900px; margin: 0 auto; padding: clamp(30px, 9vh, 90px) clamp(18px, 5vw, 54px) 60px; }
+/* Occlusion, not decoration. The field is dense enough to be tissue, which means axons
+   run straight through the words. This clears the ground under the reading column in
+   the page's own colour and lets the network stay legible at the edges. */
+.lp-main::before, .lp-top::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  inset: -8vh -6vw; border-radius: 50%;
+  background: radial-gradient(ellipse at 40% 50%, var(--void) 0%, var(--void) 38%, transparent 72%);
+}
+.lp-top { position: relative; }
+.lp-top::before { inset: -120% -4vw -60% -4vw; }
+.lp-h1 { font-size: clamp(32px, 6vw, 60px); line-height: 1.12; letter-spacing: -.01em; font-weight: 400;
+  color: var(--ink); margin: 0 0 22px; }
+.lp-lead { font-size: calc(14px * var(--ui)); line-height: 1.75; color: var(--ink-2); max-width: 62ch; margin: 0 0 34px; }
+
+.lp-search { display: flex; align-items: center; gap: 12px; border: 2px solid var(--ctl-bd); border-radius: 4px;
+  background: color-mix(in srgb, var(--void) 72%, transparent); backdrop-filter: blur(8px); padding: 6px 12px; }
+.lp-search:focus-within { border-color: color-mix(in srgb, var(--accent) 65%, transparent); box-shadow: 0 0 0 4px var(--accent-dim); }
+.lp-search label { font-size: calc(10px * var(--ui)); letter-spacing: .2em; text-transform: uppercase; color: var(--ink-3); }
+.lp-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--accent);
+  font-family: var(--mono); font-size: calc(16px * var(--ui)); padding: 12px 0; letter-spacing: .02em; }
+.lp-search input::placeholder { color: var(--ink-4); font-size: calc(13px * var(--ui)); }
+.lp-kind { flex: none; font-size: calc(10px * var(--ui)); letter-spacing: .16em; text-transform: uppercase;
+  border: 1px solid var(--ctl-bd); border-radius: 12px; padding: 5px 11px; color: var(--ctl); white-space: nowrap; }
+.lp-kind:not(.k-empty) { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+.lp-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.lp-examples button { background: transparent; border: 1px solid var(--line); border-radius: 12px; color: var(--ink-3);
+  font-family: var(--mono); font-size: calc(10.5px * var(--ui)); padding: 5px 11px; cursor: pointer; }
+.lp-examples button:hover { border-color: var(--accent); color: var(--accent); }
+
+.lp-read { margin-top: 34px; border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); padding-left: 22px;
+  transition: opacity .3s var(--ease); }
+.lp-read.idle { opacity: .45; border-left-color: var(--line); }
+.lp-what { font-size: calc(14px * var(--ui)); color: var(--ink); line-height: 1.65; margin: 0 0 16px; }
+.lp-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.lp-stages li { display: flex; gap: 14px; font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.55; }
+.lp-stages i { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; flex: none; }
+.lp-caveat { margin: 18px 0 0; font-size: calc(12px * var(--ui)); line-height: 1.7; color: var(--type-email); max-width: 66ch; }
+
+.lp-caps, .lp-honest { max-width: 900px; margin: 0 auto; padding: 60px clamp(18px, 5vw, 54px); border-top: 1px solid var(--line); }
+.lp-caps h2, .lp-honest h2 { font-size: calc(11px * var(--ui)); letter-spacing: .28em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 400; margin: 0 0 26px; }
+.lp-caps ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px 20px; }
+.lp-caps li { display: flex; align-items: center; gap: 11px; font-size: calc(13px * var(--ui)); color: var(--ink-3); transition: color .3s var(--ease); }
+.lp-caps li.on { color: var(--ink); }
+.lp-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--ink-4); flex: none; transition: .3s var(--ease); }
+.lp-caps li.on .lp-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 12px var(--accent-dim); }
+.lp-capnote { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 26px 0 0; max-width: 70ch; }
+
+.lp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px 40px; }
+.lp-grid h3 { font-size: calc(14px * var(--ui)); font-weight: 400; color: var(--accent); margin: 0 0 10px; letter-spacing: .02em; }
+.lp-grid p { font-size: calc(12.5px * var(--ui)); line-height: 1.75; color: var(--ink-2); margin: 0; }
+.lp-grid b { color: var(--ink); font-weight: 400; }
+
+.lp-foot { max-width: 900px; margin: 0 auto; padding: 34px clamp(18px, 5vw, 54px) 60px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.lp-foot > span { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); margin-right: auto; }
+
+/* ---- auth + admin ---- */
+.auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 30px 18px; }
+.auth-card { width: min(420px, 94vw); border: 2px solid var(--ctl-bd); border-radius: 6px; padding: 30px;
+  background: color-mix(in srgb, var(--void) 82%, transparent); }
+.auth-card h1 { font-size: calc(19px * var(--ui)); font-weight: 400; color: var(--ink); margin: 26px 0 20px; letter-spacing: .02em; }
+.auth-note, .auth-error { font-size: calc(11.5px * var(--ui)); line-height: 1.6; margin: 0 0 16px; }
+.auth-note { color: var(--accent); }
+.auth-error { color: var(--reject); }
+.auth-go { display: inline-block; width: 100%; text-align: center; margin-top: 8px; background: var(--accent-dim);
+  border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent); font-family: var(--mono);
+  font-size: calc(12px * var(--ui)); letter-spacing: .16em; padding: calc(11px * var(--ui)); border-radius: 3px;
+  cursor: pointer; text-decoration: none; }
+.auth-go:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.auth-switch { display: block; width: 100%; margin-top: 16px; background: none; border: 0; color: var(--ink-3);
+  font-family: var(--mono); font-size: calc(11.5px * var(--ui)); cursor: pointer; }
+.auth-switch:hover { color: var(--accent); }
+.auth-blocked p { font-size: calc(12.5px * var(--ui)); line-height: 1.75; color: var(--ink-2); margin: 0 0 22px; }
+
+.adm { max-width: 1100px; margin: 0 auto; padding: 26px clamp(16px, 4vw, 40px) 80px; }
+.adm-top { display: flex; align-items: center; gap: 16px; padding-bottom: 22px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.adm-me { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); }
+.adm h2 { font-size: calc(11px * var(--ui)); letter-spacing: .24em; text-transform: uppercase; color: var(--ink-3);
+  font-weight: 400; margin: 40px 0 14px; display: flex; align-items: center; gap: 12px; }
+.adm h2 em { font-style: normal; color: var(--accent); }
+.adm-chain { margin-left: auto; font-size: calc(10.5px * var(--ui)); letter-spacing: .06em; text-transform: none; }
+.adm-chain.ok { color: var(--confirm); }
+.adm-chain.bad { color: var(--reject); }
+.adm-note { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 0 0 16px; max-width: 78ch; }
+.adm-role { width: auto; padding: 4px 8px; font-size: calc(11px * var(--ui)); }
+.adm-msg { margin-top: 16px; font-size: calc(11.5px * var(--ui)); color: var(--accent); }
+.adm-empty { font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.75; margin-top: 40px; max-width: 70ch; }
+.adm .datatable td { padding: 10px 14px; }

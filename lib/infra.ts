@@ -10,6 +10,7 @@
 // investigation to the very infrastructure being investigated.
 
 import { isIP } from "node:net";
+import { hashKind, type HashKind } from "./selectors";
 import { fetchJSON } from "./netfetch";
 import type { Signal } from "./signals";
 
@@ -24,22 +25,9 @@ export function looksLikeIp(s: string): boolean {
   return isIP(s.trim()) !== 0;
 }
 
-export type HashKind = "md5" | "sha1" | "sha256" | "sha512";
-
-/** A bare hex digest of a known length. Anything else is not a hash. */
-export function hashKind(s: string): HashKind | null {
-  const t = s.trim().toLowerCase();
-  if (!/^[a-f0-9]+$/.test(t)) return null;
-  if (t.length === 32) return "md5";
-  if (t.length === 40) return "sha1";
-  if (t.length === 64) return "sha256";
-  if (t.length === 128) return "sha512";
-  return null;
-}
-
-export function looksLikeHash(s: string): boolean {
-  return hashKind(s) !== null;
-}
+// the digest predicates are pure and live in lib/selectors, so a browser can ask too
+export { hashKind, looksLikeHash } from "./selectors";
+export type { HashKind } from "./selectors";
 
 // ---- IP ----------------------------------------------------------------------
 
