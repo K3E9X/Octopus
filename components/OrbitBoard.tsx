@@ -98,6 +98,7 @@ export default function OrbitBoard() {
   const [rail, setRail] = useState<{ id: RailId; top: number } | null>(null);
   const [palette, setPalette] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [density, setDensity] = useState<"normal" | "large" | "xl">("normal");
   const [addForm, setAddForm] = useState<{ platform: string; handle: string; url: string; via: string; note: string; screenshot: string; displayName: string; bio: string; location: string; email: string; avatar: string } | null>(null);
   const [capturing, setCapturing] = useState(false);
   const ingestRef = useRef<(manual: Signal, extracted: Signal[], links: [string, string][]) => void>(() => {});
@@ -166,6 +167,20 @@ export default function OrbitBoard() {
     if (id === "cases") listCases().then((l) => { setCases(l); loadSnapCounts(l); }).catch(() => {});
   }
 
+  /**
+   * The interface scale. Not a preference toggle for its own sake: the whole art
+   * direction is hairlines and small type, which reads very differently on a 27"
+   * panel and on a laptop. Rather than guess, the analyst dials it.
+   */
+  function cycleDensity() {
+    const order = ["normal", "large", "xl"] as const;
+    const next = order[(order.indexOf(density) + 1) % order.length];
+    setDensity(next);
+    document.documentElement.setAttribute("data-density", next);
+    try { window.localStorage.setItem("octopus:density", next); } catch { /* private mode */ }
+    flashMsg(`interface scale: ${next}`);
+  }
+
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -177,6 +192,10 @@ export default function OrbitBoard() {
   // keep following it until the analyst actually chooses.
   useEffect(() => {
     setModKey(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl ");
+    try {
+      const d = window.localStorage.getItem("octopus:density");
+      if (d === "large" || d === "xl") { setDensity(d); document.documentElement.setAttribute("data-density", d); }
+    } catch { /* private mode */ }
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     let stored: string | null = null;
     try { stored = window.localStorage.getItem("octopus:theme"); } catch { /* private mode */ }
@@ -232,6 +251,7 @@ export default function OrbitBoard() {
     { group: "Configure", label: "API keys & tradecraft", hint: "LLM, leak sources, collector, OPSEC posture, proxy / Tor", run: () => setApiOpen(true) },
     { group: "Configure", label: "Usage guide", hint: "Where to start and how to run an investigation", run: () => setGuideOpen(true) },
     { group: "Configure", label: "Toggle light / dark", hint: "Follows your system until you choose", run: toggleTheme },
+    { group: "Configure", label: "Interface scale", hint: "Normal, large or extra large — the whole interface, graph included", run: cycleDensity },
   ];
 
   const palResults = (() => {
@@ -818,8 +838,10 @@ export default function OrbitBoard() {
     let cache: Record<string, string> = {};
     const cssv = (n: string) => (cache[n] ??= root.getPropertyValue(n).trim());
     const refreshCss = () => { cache = {}; root = getComputedStyle(document.documentElement); };
+    // the canvas draws itself, so it has to honour the same density dial as the CSS
+    const uiScale = () => parseFloat(cssv("--ui")) || 1;
     const themeObs = new MutationObserver(refreshCss);
-    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-density"] });
 
     function resize() {
       W = window.innerWidth; H = window.innerHeight;
@@ -1120,21 +1142,21 @@ export default function OrbitBoard() {
         const b = BANDS[k];
         const rMid = ((b.r0 + b.r1) / 2) * baseR * 0.5;
         ctx.beginPath(); ctx.arc(cx, cy, rMid, 0, Math.PI * 2);
-        ctx.strokeStyle = cssv("--line-soft"); ctx.lineWidth = 1; ctx.setLineDash([2, 7]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = cssv("--line-soft"); ctx.lineWidth = 1.4; ctx.setLineDash([3, 7]); ctx.stroke(); ctx.setLineDash([]);
       });
       nodes.forEach((d) => {
         let col: string, w: number, alpha: number;
-        if (d.status === "confirmed") { col = cssv("--confirm"); w = 1.2; alpha = 0.55; }
-        else if (d.status === "rejected") { col = cssv("--reject"); w = 1; alpha = 0.14; }
-        else if (d.id === selId) { col = cssv("--accent"); w = 1.2; alpha = 0.6; }
-        else { col = cssv("--ink-3"); w = 1; alpha = 0.3; }
+        if (d.status === "confirmed") { col = cssv("--confirm"); w = 1.8; alpha = 0.75; }
+        else if (d.status === "rejected") { col = cssv("--reject"); w = 1.4; alpha = 0.22; }
+        else if (d.id === selId) { col = cssv("--accent"); w = 2; alpha = 0.85; }
+        else { col = cssv("--ink-3"); w = 1.4; alpha = 0.5; }
         ctx.globalAlpha = alpha * d.op * dim(d.id);
         const mx = (cx + d.x) / 2, my = (cy + d.y) / 2;
         const nx = d.y - cy, ny = cx - d.x, nl = Math.hypot(nx, ny) || 1, bend = 14;
         ctx.beginPath(); ctx.moveTo(cx, cy);
         ctx.quadraticCurveTo(mx + (nx / nl) * bend, my + (ny / nl) * bend, d.x, d.y);
         ctx.strokeStyle = col; ctx.lineWidth = w;
-        ctx.setLineDash(d.status === "candidate" ? [1, 5] : []);
+        ctx.setLineDash(d.status === "candidate" ? [2, 5] : []);
         ctx.stroke(); ctx.setLineDash([]);
       });
       // inter-node edges: declared / verified cross-links between accounts
@@ -1146,12 +1168,12 @@ export default function OrbitBoard() {
           if (d.id >= lid) return; // draw each pair once
           const e = byId[lid];
           if (!e) return;
-          ctx.globalAlpha = 0.5 * Math.min(d.op, e.op) * Math.min(dim(d.id), dim(e.id));
+          ctx.globalAlpha = 0.72 * Math.min(d.op, e.op) * Math.min(dim(d.id), dim(e.id));
           const mx = (d.x + e.x) / 2, my = (d.y + e.y) / 2;
           const nx = e.y - d.y, ny = d.x - e.x, nl = Math.hypot(nx, ny) || 1, bend = 18;
           ctx.beginPath(); ctx.moveTo(d.x, d.y);
           ctx.quadraticCurveTo(mx + (nx / nl) * bend, my + (ny / nl) * bend, e.x, e.y);
-          ctx.strokeStyle = cssv("--accent"); ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = cssv("--accent"); ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
           ctx.stroke(); ctx.setLineDash([]);
         });
       });
@@ -1162,20 +1184,20 @@ export default function OrbitBoard() {
         d.relations.forEach((rel) => {
           const e = byId[rel.to];
           if (!e) return;
-          ctx.globalAlpha = 0.28 * Math.min(d.op, e.op) * Math.min(dim(d.id), dim(e.id));
+          ctx.globalAlpha = 0.45 * Math.min(d.op, e.op) * Math.min(dim(d.id), dim(e.id));
           ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y);
-          ctx.strokeStyle = cssv("--ink-3"); ctx.lineWidth = 0.8; ctx.setLineDash([1, 4]);
+          ctx.strokeStyle = cssv("--ink-3"); ctx.lineWidth = 1.2; ctx.setLineDash([2, 4]);
           ctx.stroke(); ctx.setLineDash([]);
         });
       });
       ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fillStyle = cssv("--accent"); ctx.fill();
-      ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(cx, cy, 13, 0, Math.PI * 2); ctx.strokeStyle = cssv("--accent"); ctx.lineWidth = 1; ctx.stroke();
-      ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
-      ctx.fillStyle = cssv("--ink-2"); ctx.font = "9px ui-monospace, monospace"; ctx.textAlign = "center";
-      ctx.fillText("SEED", cx, cy + 44);
-      ctx.fillStyle = cssv("--accent"); ctx.font = "11px ui-monospace, monospace";
-      ctx.fillText(seedRef.current || "—", cx, cy - 38);
+      ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fillStyle = cssv("--accent"); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(cx, cy, 15, 0, Math.PI * 2); ctx.strokeStyle = cssv("--accent"); ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.globalAlpha = 0.2; ctx.beginPath(); ctx.arc(cx, cy, 29, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = cssv("--ink-2"); ctx.font = `${Math.round(11 * uiScale())}px ui-monospace, monospace`; ctx.textAlign = "center";
+      ctx.fillText("SEED", cx, cy + 48);
+      ctx.fillStyle = cssv("--accent"); ctx.font = `${Math.round(13 * uiScale())}px ui-monospace, monospace`;
+      ctx.fillText(seedRef.current || "—", cx, cy - 42);
       nodes.forEach((d) => {
         const el = elsRef.current[d.id];
         if (!el) return;
@@ -1816,6 +1838,10 @@ export default function OrbitBoard() {
           <Glyph name={theme === "dark" ? "sun" : "moon"} />
           <span>{theme === "dark" ? "Light" : "Dark"}</span>
         </button>
+        <button className="rail-item rail-density" aria-label="Interface scale" onClick={cycleDensity}>
+          <span className="rd-mark">A</span>
+          <span>Scale · {density}</span>
+        </button>
         <button className="rail-item" aria-label="Guide" onClick={() => { setRail(null); setGuideOpen(true); }}>
           <Glyph name="help" />
           <span>Guide</span>
@@ -1915,6 +1941,7 @@ export default function OrbitBoard() {
           <button className="menu-item" onClick={() => { setRail(null); setApiOpen(true); }}><b>API keys &amp; tradecraft</b><span>LLM, leak sources, collector, OPSEC posture, proxy / Tor</span></button>
           <button className="menu-item" onClick={() => { setRail(null); setGuideOpen(true); }}><b>Usage guide</b><span>Where to start and how to run an investigation</span></button>
           <button className="menu-item" onClick={() => { setRail(null); toggleTheme(); }}><b>{theme === "dark" ? "Light" : "Dark"} theme</b><span>Currently {theme}; follows your system until you choose</span></button>
+          <button className="menu-item" onClick={() => { setRail(null); cycleDensity(); }}><b>Interface scale</b><span>Currently {density} — type, strokes, buttons and the graph together</span></button>
         </div>
       )}
 

@@ -25,7 +25,8 @@ export const viewport: Viewport = {
 const THEME_BOOT =
   '(function(){var t;try{t=localStorage.getItem("octopus:theme")}catch(e){}' +
   'if(t!=="light"&&t!=="dark"){try{t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}catch(e){t="dark"}}' +
-  'document.documentElement.setAttribute("data-theme",t)})()';
+  'document.documentElement.setAttribute("data-theme",t);' +
+  'try{var d=localStorage.getItem("octopus:density");if(d==="large"||d==="xl")document.documentElement.setAttribute("data-density",d)}catch(e){}})()';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

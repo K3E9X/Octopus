@@ -922,3 +922,137 @@ body::after {
   font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; cursor: pointer; }
 .jobbar button:hover { color: var(--accent); border-color: var(--accent); }
 @media (max-width: 720px) { .jobbar { left: 10px; right: 10px; bottom: 10px; } }
+
+/* ============================================================================
+   WEIGHT
+   The report: buttons hard to see, everything drawn in one-pixel strokes.
+   Measured, the interface had 59 rules at 9.5px or below and hairlines at 12%
+   alpha — elegant at 200% zoom on a retina panel, and genuinely thin anywhere
+   else. Contrast was fixed earlier; this is SIZE and STROKE, which is a
+   different problem and needed a different pass.
+
+   Everything below is expressed through --ui, so the same scale can be dialled
+   up from the rail instead of me guessing the screen it will be read on.
+   ========================================================================== */
+
+:root { --ui: 1; }
+:root[data-density="large"] { --ui: 1.14; }
+:root[data-density="xl"]    { --ui: 1.3; }
+
+/* hairlines that actually delimit */
+:root {
+  --line: rgba(255, 255, 255, .17);
+  --line-soft: rgba(255, 255, 255, .085);
+  --ctl-bd: rgba(255, 255, 255, .32);
+}
+:root[data-theme="light"] {
+  --line: rgba(20, 20, 25, .20);
+  --line-soft: rgba(20, 20, 25, .10);
+  --ctl-bd: rgba(20, 20, 25, .38);
+}
+
+/* ---- type: the floor moves up, and the letter-spacing comes down with it.
+   Wide tracking on 9px text is what made labels crumble into dots. ---- */
+.btn, .kbd, .go, .ping-btn, .ot-act, .api-nav button, .bc-status,
+.ot-modes button, .viewtoggle button, .bc-actions button, .bc-actions a,
+.jobbar, .jobbar button, .board-count, .board-mode, .app-badge, .rail-item span {
+  font-size: calc(11px * var(--ui)); letter-spacing: .1em;
+}
+.viewtoggle button { padding: calc(8px * var(--ui)) calc(11px * var(--ui)); }
+.btn, .ot-act, .ping-btn, .api-nav button { padding: calc(7px * var(--ui)) calc(12px * var(--ui)); }
+.go { font-size: calc(11.5px * var(--ui)); padding: calc(9px * var(--ui)) calc(17px * var(--ui)); letter-spacing: .14em; }
+.kbd { padding: calc(8px * var(--ui)) calc(11px * var(--ui)); }
+.cmdbar input { font-size: calc(14px * var(--ui)); }
+.cmdbar > label { font-size: calc(10px * var(--ui)); }
+.statusline { font-size: calc(11.5px * var(--ui)); }
+.demo-tag { font-size: calc(10px * var(--ui)); padding: calc(4px * var(--ui)) calc(10px * var(--ui)); }
+
+.menu-item b, .pal-item b { font-size: calc(13px * var(--ui)); }
+.menu-item span, .pal-item small { font-size: calc(11px * var(--ui)); line-height: 1.5; }
+.menu-item { padding: calc(10px * var(--ui)) calc(11px * var(--ui)); }
+.pal-item { padding: calc(10px * var(--ui)) calc(11px * var(--ui)); }
+.pal-input { font-size: calc(15px * var(--ui)); }
+.pal-group, .pop-head { font-size: calc(10px * var(--ui)); letter-spacing: .14em; }
+.pal-foot { font-size: calc(10px * var(--ui)); }
+
+.app-name { font-size: calc(13px * var(--ui)); }
+.app-desc { font-size: calc(11px * var(--ui)); line-height: 1.5; }
+.app-name em { font-size: calc(10px * var(--ui)); }
+.case-name { font-size: calc(13px * var(--ui)); }
+.case-meta { font-size: calc(10.5px * var(--ui)); }
+
+.insp-plat, .sect { font-size: calc(11px * var(--ui)); letter-spacing: .18em; }
+.ev .en { font-size: calc(13px * var(--ui)); }
+.ev .ed { font-size: calc(11.5px * var(--ui)); }
+.ev .es { font-size: calc(10.5px * var(--ui)); }
+.grounded, .insp-custody, .api-note, .rev-note, .assist-foot { font-size: calc(10.5px * var(--ui)); line-height: 1.65; }
+.api-sub, .add-sub { font-size: calc(11.5px * var(--ui)); }
+.add-field span { font-size: calc(10px * var(--ui)); letter-spacing: .1em; }
+.add-field input, .api-select, .api-textarea, .table-filter { font-size: calc(13px * var(--ui)); padding: calc(9px * var(--ui)) calc(11px * var(--ui)); }
+.tier-badge { font-size: calc(16px * var(--ui)); }
+.da-tier, .tline-type { font-size: calc(9.5px * var(--ui)); }
+.verb { font-size: calc(12px * var(--ui)); }
+.pivot-btn { font-size: calc(11.5px * var(--ui)); padding: calc(11px * var(--ui)) calc(9px * var(--ui)); }
+
+.datatable th { font-size: calc(10.5px * var(--ui)); }
+.datatable td { font-size: calc(13px * var(--ui)); }
+.tline-date, .tline-label, .tline-who { font-size: calc(12px * var(--ui)); }
+.legend { font-size: calc(10.5px * var(--ui)); letter-spacing: .12em; }
+.hint { font-size: calc(10.5px * var(--ui)); }
+.ot-modes button, .ot-act { letter-spacing: .1em; }
+.ot-hint { font-size: calc(10px * var(--ui)); }
+.bc-title { font-size: calc(13px * var(--ui)); }
+.bc-body { font-size: calc(11px * var(--ui)); }
+.bc-kind, .bc-tally { font-size: calc(10px * var(--ui)); }
+.bl text { font-size: calc(10px * var(--ui)); }
+.blist-chip { font-size: calc(10.5px * var(--ui)); }
+.mon-label, .assist-main b { font-size: calc(13px * var(--ui)); }
+.mon-detail, .assist-main span { font-size: calc(11.5px * var(--ui)); }
+.wordmark b { font-size: calc(14px * var(--ui)); }
+
+/* ---- stroke ------------------------------------------------------------------
+   WHOLE pixels only. Measured in the browser at both scale factors: a 1.5px
+   border is floored to 1px and renders exactly like the hairline it was meant to
+   replace — the first version of this pass changed nothing at all. Controls get a
+   real 2px edge; panels keep 1px, where the raised alpha is enough and 2px would
+   read as a box. */
+.btn, .kbd, .ot-act, .api-nav button, .app-add, .bc-status, .rel-chip,
+.bc-actions button, .bc-actions a, .ping-btn, .go,
+.add-field input, .api-select, .api-textarea, .table-filter, .bc-title-in, .bc-body-in,
+.cmdbar, .ot-modes, .viewtoggle {
+  border-width: 2px;
+}
+.viewtoggle button { border-left-width: 2px; }
+.rail { border-right-width: 2px; }
+
+/* ---- the graph: the nodes were the thinnest thing on the densest surface ---- */
+.body { width: calc(72px * var(--ui)); }
+.body .disc {
+  width: calc(38px * var(--ui)); height: calc(38px * var(--ui));
+  border-width: 2px; font-size: calc(11px * var(--ui));
+}
+.body .tag { font-size: calc(10.5px * var(--ui)); margin-top: calc(8px * var(--ui)); }
+.body .conf { font-size: calc(9.5px * var(--ui)); }
+.body.sel .disc { border-width: 3px; }
+.rail-item { width: calc(38px * var(--ui)); height: calc(38px * var(--ui)); }
+/* the glyphs carry their size as an attribute; CSS has to scale them too */
+.rail-item svg, .kbd svg { width: calc(19px * var(--ui)); height: calc(19px * var(--ui)); }
+.rail-brand svg { width: calc(34px * var(--ui)); height: calc(34px * var(--ui)); }
+:root { --rail-w: calc(56px * var(--ui)); --bar-h: calc(64px * var(--ui)); }
+.rail-density .rd-mark { font-family: var(--mono); font-size: calc(15px * var(--ui)); letter-spacing: 0; line-height: 1; }
+:root[data-density="large"] .rail-density .rd-mark::after { content: "+"; font-size: .7em; vertical-align: super; }
+:root[data-density="xl"] .rail-density .rd-mark::after { content: "++"; font-size: .7em; vertical-align: super; }
+
+/* The rail tooltip rule targets every span inside a rail item, which swallowed the
+   density button's own glyph — it was positioned off to the side at zero opacity, so
+   the control existed and could not be seen. */
+.rail-item .rd-mark {
+  position: static; opacity: 1; transform: none; background: none; border: 0;
+  box-shadow: none; padding: 0; color: inherit; text-transform: none; white-space: normal;
+}
+
+/* The legend grows with the scale, so a fixed 108px gap collided with it at XL.
+   Both blocks now move together. */
+.orbit-tools { bottom: calc(118px * var(--ui)); }
+.legend { bottom: calc(20px * var(--ui)); }
+.hint { bottom: calc(20px * var(--ui)); right: calc(22px * var(--ui)); max-width: calc(620px * var(--ui)); }

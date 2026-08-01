@@ -28,11 +28,11 @@ const P: Record<GlyphName, React.ReactNode> = {
   chevron: <><path d="m9 5 6 7-6 7" /></>,
 };
 
-export function Glyph({ name, size = 17, className }: { name: GlyphName; size?: number; className?: string }) {
+export function Glyph({ name, size = 19, className }: { name: GlyphName; size?: number; className?: string }) {
   return (
     <svg
       width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false"
-      fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"
+      fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
     >
       {P[name]}
     </svg>
