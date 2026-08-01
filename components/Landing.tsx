@@ -11,7 +11,7 @@
 // What it deliberately is not: a hero gradient, a glass card, a rotating testimonial,
 // a "trusted by" strip, or three feature boxes with rounded icons.
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Logo } from "./Logo";
 import NeuralField from "./NeuralField";
@@ -34,9 +34,21 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
     setPulse((p) => p + 1); // every keystroke injects a stimulus at the input neuron
   }
 
+  // The capability rows spark when the FIELD reaches them — the canvas calls this as a
+  // cluster head actually fires. Driving it from React state instead would mean a
+  // re-render per spike, so this writes the class straight onto the node.
+  const capRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const onCapFire = useCallback((cap: string) => {
+    const el = capRefs.current[cap];
+    if (!el) return;
+    el.classList.remove("spark");
+    void el.offsetWidth; // restart the animation; without the reflow it never replays
+    el.classList.add("spark");
+  }, []);
+
   return (
     <div className="lp">
-      <NeuralField kind={read.kind} pulse={pulse} />
+      <NeuralField kind={read.kind} pulse={pulse} onCapFire={onCapFire} />
 
       <header className="lp-top">
         <div className="lp-brand">
@@ -68,7 +80,8 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
             placeholder="a username, an email, a phone, a name, a domain, an IP, a hash"
             onChange={(e) => type(e.target.value)}
           />
-          <span className={"lp-kind k-" + read.kind}>{read.kind === "empty" ? "waiting" : read.label}</span>
+          {/* keyed on the kind so a change remounts the node and the flash replays */}
+          <span key={read.kind} className={"lp-kind k-" + read.kind}>{read.kind === "empty" ? "waiting" : read.label}</span>
         </div>
 
         <div className="lp-examples">
@@ -80,8 +93,12 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         <div className={"lp-read" + (read.kind === "empty" ? " idle" : "")}>
           <p className="lp-what">{read.what}</p>
           {read.stages.length > 0 && (
-            <ol className="lp-stages">
-              {read.stages.map((s, i) => <li key={i}><i>{String(i + 1).padStart(2, "0")}</i>{s}</li>)}
+            /* Keyed on the kind, and each row delayed by its index: the stages arrive
+               in sequence, at conduction pace, rather than appearing all at once. */
+            <ol className="lp-stages" key={read.kind}>
+              {read.stages.map((s, i) => (
+                <li key={i} style={{ ["--i" as string]: i }}><i>{String(i + 1).padStart(2, "0")}</i>{s}</li>
+              ))}
             </ol>
           )}
           {read.caveat && <p className="lp-caveat">{read.caveat}</p>}
@@ -92,7 +109,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         <h2>What lights up</h2>
         <ul>
           {CAPABILITIES.map((c) => (
-            <li key={c.id} className={active.has(c.id) ? "on" : ""}>
+            <li key={c.id} ref={(el) => { capRefs.current[c.id] = el; }} className={active.has(c.id) ? "on" : ""}>
               <span className="lp-dot" />{c.label}
             </li>
           ))}

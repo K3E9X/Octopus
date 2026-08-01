@@ -619,6 +619,10 @@ body::after {
   .rail-pop, .palette, .pal-overlay, .add-overlay, .add-card, .apicard, .guide, .dossier,
   .monitor-panel, .assist-panel, .body.spawn .disc { animation: none; }
   .rail-item span { transition: none; }
+  /* The landing's motion is the point of the landing, so it is suppressed rather than
+     softened: the stages appear, the chip does not travel, nothing sparks. */
+  .lp-stages li, .lp-kind, .lp-caps li.spark .lp-dot { animation: none; opacity: 1; transform: none; }
+  .lp-caps li.spark::before { display: none; }
 }
 
 /* ---- responsive -------------------------------------------------------------- */
@@ -1108,7 +1112,15 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .lp-search input::placeholder { color: var(--ink-4); font-size: calc(13px * var(--ui)); }
 .lp-kind { flex: none; font-size: calc(10px * var(--ui)); letter-spacing: .16em; text-transform: uppercase;
   border: 1px solid var(--ctl-bd); border-radius: 12px; padding: 5px 11px; color: var(--ctl); white-space: nowrap; }
-.lp-kind:not(.k-empty) { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.lp-kind:not(.k-empty) { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: latch .42s var(--ease); }
+/* The chip is the engine committing to a dispatch. It should read as a decision
+   landing, not as a label quietly swapping. */
+@keyframes latch {
+  0%   { transform: scale(.86); opacity: 0; letter-spacing: .34em; }
+  55%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: none; letter-spacing: .16em; }
+}
 
 .lp-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .lp-examples button { background: transparent; border: 1px solid var(--line); border-radius: 12px; color: var(--ink-3);
@@ -1120,18 +1132,42 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .lp-read.idle { opacity: .45; border-left-color: var(--line); }
 .lp-what { font-size: calc(14px * var(--ui)); color: var(--ink); line-height: 1.65; margin: 0 0 16px; }
 .lp-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
-.lp-stages li { display: flex; gap: 14px; font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.55; }
+.lp-stages li { display: flex; gap: 14px; font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.55;
+  animation: conduct .5s var(--ease) both; animation-delay: calc(var(--i) * 65ms); }
 .lp-stages i { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; flex: none; }
+/* The stages arrive in sequence rather than all at once: the seed is read, then each
+   collection stage reports. The row leans in from the rule it hangs off. */
+@keyframes conduct {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
 .lp-caveat { margin: 18px 0 0; font-size: calc(12px * var(--ui)); line-height: 1.7; color: var(--type-email); max-width: 66ch; }
 
 .lp-caps, .lp-honest { max-width: 900px; margin: 0 auto; padding: 60px clamp(18px, 5vw, 54px); border-top: 1px solid var(--line); }
 .lp-caps h2, .lp-honest h2 { font-size: calc(11px * var(--ui)); letter-spacing: .28em; text-transform: uppercase;
   color: var(--ink-3); font-weight: 400; margin: 0 0 26px; }
 .lp-caps ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px 20px; }
-.lp-caps li { display: flex; align-items: center; gap: 11px; font-size: calc(13px * var(--ui)); color: var(--ink-3); transition: color .3s var(--ease); }
+.lp-caps li { position: relative; display: flex; align-items: center; gap: 11px; font-size: calc(13px * var(--ui));
+  color: var(--ink-3); transition: color .3s var(--ease); }
 .lp-caps li.on { color: var(--ink); }
 .lp-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--ink-4); flex: none; transition: .3s var(--ease); }
 .lp-caps li.on .lp-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 12px var(--accent-dim); }
+/* A row sparks when the FIELD reaches it — the canvas calls back as that cluster head
+   actually fires, so the list is a readout of conduction, not a timed loop. */
+.lp-caps li.spark .lp-dot { animation: soma .55s var(--ease); }
+.lp-caps li.spark::before {
+  content: ""; position: absolute; left: -1px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px;
+  border: 1px solid var(--accent); border-radius: 50%; animation: release .55s var(--ease) forwards; pointer-events: none;
+}
+@keyframes soma {
+  0%   { transform: scale(1); }
+  22%  { transform: scale(2.1); border-color: var(--accent); }
+  100% { transform: scale(1); }
+}
+@keyframes release {
+  from { transform: scale(1); opacity: .7; }
+  to   { transform: scale(3.4); opacity: 0; }
+}
 .lp-capnote { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 26px 0 0; max-width: 70ch; }
 
 .lp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px 40px; }

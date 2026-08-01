@@ -834,6 +834,26 @@ export default function OrbitBoard() {
     const DPR = Math.min(2, window.devicePixelRatio || 1);
     let W = 0, H = 0, cx = 0, cy = 0, baseR = 1, raf = 0;
 
+    /**
+     * Conduction on the graph. A pulse travels the edge it was emitted on, and the RATE
+     * it is emitted at is the node's confidence — so a strong link visibly carries more
+     * traffic than a weak one, and a rejected node carries none at all. The reading is
+     * the same one the geometry already gives, in a second channel: you can see which
+     * parts of the graph are load-bearing without reading a single number.
+     *
+     * Positions are looked up by id every frame rather than captured, so a pulse stays
+     * glued to its edge while the physics moves both ends.
+     */
+    interface Pulse { a: string; b: string | null; t: number; speed: number; strong: boolean }
+    let pulses: Pulse[] = [];
+    let tick = 0;
+    const noMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    /** point on the same quadratic the edge is drawn with, so it never floats off it */
+    const qpt = (p0: number, p1: number, p2: number, t: number) => {
+      const u = 1 - t;
+      return u * u * p0 + 2 * u * t * p1 + t * t * p2;
+    };
+
     let root = getComputedStyle(document.documentElement);
     let cache: Record<string, string> = {};
     const cssv = (n: string) => (cache[n] ??= root.getPropertyValue(n).trim());
@@ -1074,6 +1094,7 @@ export default function OrbitBoard() {
     }
 
     function step() {
+      tick++;
       const nodes = nodesRef.current;
       const K_RAD = 0.02, K_REP = 1400, DAMP = 0.86;
       const mode = modeRef.current;
@@ -1117,8 +1138,34 @@ export default function OrbitBoard() {
         d.x += d.vx; d.y += d.vy;
         if (d.op < 1) d.op = Math.min(1, d.op + 0.02);
       }
+      conduct(nodes);
       draw();
       raf = requestAnimationFrame(step);
+    }
+
+    /** Emit and advance pulses. Rate is confidence; rejected nodes stay dark. */
+    function conduct(nodes: WorkNode[]) {
+      if (noMotion) return;
+      if (pulses.length < 140) {
+        for (const d of nodes) {
+          if (d.status === "rejected" || d.op < 0.6) continue;
+          const conf = Math.max(0, Math.min(100, d.confidence)) / 100;
+          // cubed, so the difference between a 90 and a 60 is something you can see
+          if (Math.random() < 0.014 * conf * conf * conf * (d.status === "confirmed" ? 2.2 : 1)) {
+            pulses.push({ a: d.id, b: null, t: 0, speed: 0.006 + conf * 0.007, strong: d.status === "confirmed" });
+          }
+          // cross-links carry traffic too: a resolved identity is a live pathway
+          if (d.linkedIds) {
+            for (const lid of d.linkedIds) {
+              if (d.id >= lid) continue;
+              if (Math.random() < 0.006 * conf) {
+                pulses.push({ a: d.id, b: lid, t: 0, speed: 0.008, strong: false });
+              }
+            }
+          }
+        }
+      }
+      pulses = pulses.filter((p) => (p.t += p.speed) < 1);
     }
 
     function draw() {
@@ -1190,10 +1237,46 @@ export default function OrbitBoard() {
           ctx.stroke(); ctx.setLineDash([]);
         });
       });
+      // conduction — pulses running the edges they were emitted on, at the rate their
+      // confidence earns. Drawn last so they read above the lines they travel.
+      if (pulses.length) {
+        const accent = cssv("--accent"), confirm = cssv("--confirm");
+        for (const p of pulses) {
+          const d = byId[p.a];
+          if (!d) continue;
+          let x0: number, y0: number, x1: number, y1: number, bend: number;
+          if (p.b) {
+            const e = byId[p.b];
+            if (!e) continue;
+            x0 = d.x; y0 = d.y; x1 = e.x; y1 = e.y; bend = 18;
+          } else {
+            x0 = cx; y0 = cy; x1 = d.x; y1 = d.y; bend = 14;
+          }
+          const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+          const nx = y1 - y0, ny = x0 - x1, nl = Math.hypot(nx, ny) || 1;
+          const bx = mx + (nx / nl) * bend, by = my + (ny / nl) * bend;
+          const x = qpt(x0, bx, x1, p.t), y = qpt(y0, by, y1, p.t);
+          const back = Math.max(0, p.t - 0.07);
+          // fades in and out over the run, so nothing pops at either end
+          ctx.globalAlpha = 0.9 * Math.sin(p.t * Math.PI) * dim(d.id) * d.op;
+          ctx.strokeStyle = p.strong ? confirm : accent;
+          ctx.lineWidth = p.strong ? 2.4 : 1.8;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(qpt(x0, bx, x1, back), qpt(y0, by, y1, back));
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+        ctx.lineCap = "butt";
+      }
+
       ctx.globalAlpha = 1;
       ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fillStyle = cssv("--accent"); ctx.fill();
       ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(cx, cy, 15, 0, Math.PI * 2); ctx.strokeStyle = cssv("--accent"); ctx.lineWidth = 1.6; ctx.stroke();
-      ctx.globalAlpha = 0.2; ctx.beginPath(); ctx.arc(cx, cy, 29, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      // the outer ring breathes: the seed is where everything is emitted from, and a
+      // dead circle at the centre of a live graph looks like a rendering bug
+      const beat = noMotion ? 0 : Math.sin(tick * 0.021);
+      ctx.globalAlpha = 0.2 - beat * 0.07; ctx.beginPath(); ctx.arc(cx, cy, 29 + beat * 3.5, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
       ctx.fillStyle = cssv("--ink-2"); ctx.font = `${Math.round(11 * uiScale())}px ui-monospace, monospace`; ctx.textAlign = "center";
       ctx.fillText("SEED", cx, cy + 48);
       ctx.fillStyle = cssv("--accent"); ctx.font = `${Math.round(13 * uiScale())}px ui-monospace, monospace`;
