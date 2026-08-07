@@ -11,6 +11,8 @@ import { recordedFutureLookup, recordedFutureConfigured } from "@/lib/recordedfu
 import { readClientConfig } from "@/lib/reqconfig";
 import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
 import { breachExposure, breachSignal } from "@/lib/breaches";
+import { leadPlan, type Lead } from "@/lib/leads";
+import { nodesFromExposure, applyReuse } from "@/lib/leaknodes";
 import { looksLikePhone, phoneIntel, type PhoneIntel } from "@/lib/phone";
 import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { namePairFromHandle, matchName, nameMatchEvidence } from "@/lib/namematch";
@@ -65,6 +67,49 @@ function phoneSignal(intel: PhoneIntel): Signal {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** One lead, one selector: keep the highest-ranked reason when two agree. */
+function dedupeLeads(leads: Lead[]): Lead[] {
+  const by = new Map<string, Lead>();
+  for (const l of leads) {
+    const k = l.kind + ":" + norm(l.value);
+    const prev = by.get(k);
+    if (!prev || l.rank > prev.rank) by.set(k, l);
+  }
+  return [...by.values()].sort((a, b) => b.rank - a.rank);
+}
+
+/**
+ * Follow a lead, cheaply.
+ *
+ * Deliberately NOT a full connector sweep: this runs inside one request that already
+ * has a 60s ceiling, and four full sweeps would turn a scan into a timeout. What it
+ * does instead is the high-yield, low-cost half — ask the breach indexes about the new
+ * selector, and resolve infrastructure passively. The heavy sweep is what the client
+ * runs afterwards on the leads this returns, which is also what keeps the scan
+ * interactive instead of blocking on a request that got greedy.
+ */
+async function chaseLead(lead: Lead, collectedAt: string): Promise<Signal[]> {
+  if (lead.kind === "email" || lead.kind === "username") {
+    const out: Signal[] = [];
+    const [hr, br] = await Promise.allSettled([
+      lead.kind === "email" ? hudsonRockEmail(lead.value) : hudsonRockUsername(lead.value),
+      breachExposure(lead.value).then((r) => breachSignal(lead.value, r, collectedAt)),
+    ]);
+    if (hr.status === "fulfilled") out.push(...hr.value);
+    if (br.status === "fulfilled") out.push(...br.value);
+    return out;
+  }
+  if (lead.kind === "domain") {
+    const d = await enrichDomain(lead.value, collectedAt);
+    return d.signals;
+  }
+  if (lead.kind === "ip") {
+    const intel = await ipIntel(lead.value);
+    return ipSignals(intel, collectedAt);
+  }
+  return [];
+}
 
 const SERVICE_TO_PLATFORM: Record<string, string> = {
   twitter: "X / TWITTER", x: "X / TWITTER", github: "GITHUB", gitlab: "GITLAB",
@@ -606,6 +651,52 @@ export async function GET(req: NextRequest) {
       } catch { /* corpus is optional */ }
     }
 
+    // --- what leaked becomes something to investigate -------------------------------
+    // Exposure used to be fields on one node, invisible to the resolver, the timeline,
+    // the map and the chaining logic. Promote its usable selectors into real nodes, and
+    // chase the strongest ones so the graph that comes back already contains what the
+    // breach pointed at instead of waiting for a manual click on each row.
+    const leakBearing = signals.filter((s) => s.exposure && s.exposure.length);
+    let chased: { value: string; kind: string; why: string; added: number }[] = [];
+    let deferredLeads: Lead[] = [];
+    if (leakBearing.length) {
+      const known = new Set<string>(signals.map((s) => norm(s.handle)));
+      const allLeads: Lead[] = [];
+      for (const leak of leakBearing) {
+        const { nodes, leads } = nodesFromExposure(leak.id, leak.exposure!, q, known, collectedAt);
+        for (const n of nodes) { if (!signals.some((s) => s.id === n.id)) signals.push(n); }
+        allLeads.push(...leads);
+        // reuse runs per leak: the association between a login and a secret is only
+        // observed inside one dump line, and pooling lines across sources would invent it
+        applyReuse(signals, leak.exposure!, leak.id);
+      }
+
+      // Chase the best leads. Bounded hard: this runs inside one request, and an
+      // unbounded expansion is how a scan turns into a timeout.
+      // `|| 4` would read "0" as absent — "0" is falsy — and a lead-scan that chases
+      // its own leads is an expansion storm, not an investigation.
+      const raw = req.nextUrl.searchParams.get("leadBudget");
+      const budget = raw === null ? 4 : Math.max(0, Math.min(8, Number(raw) || 0));
+      const plan = leadPlan(dedupeLeads(allLeads), budget);
+      deferredLeads = plan.deferred;
+      for (const lead of plan.run) {
+        try {
+          const found = await chaseLead(lead, collectedAt);
+          if (found.length) {
+            const parent = signals.find((s) => norm(s.handle) === norm(lead.value));
+            for (const f of found) {
+              if (signals.some((s) => s.id === f.id)) continue;
+              if (parent) f.linkedIds = [...new Set([...(f.linkedIds || []), parent.id])];
+              signals.push(f);
+            }
+          }
+          chased.push({ value: lead.value, kind: lead.kind, why: lead.why, added: found.length });
+        } catch {
+          chased.push({ value: lead.value, kind: lead.kind, why: lead.why, added: 0 });
+        }
+      }
+    }
+
     // --- the address itself, and the organisation behind it ---
     // Two things the email path never surfaced. First the SHAPE of the address, which
     // is mostly negative intelligence: a role mailbox is an organisation and must not
@@ -925,6 +1016,12 @@ export async function GET(req: NextRequest) {
       // honesty: a rate-limited source did NOT report "no account" — it refused to
       // answer. Surfacing this is what stops a silent false negative.
       health: { rateLimited: health.rateLimited, failed: health.failed, blocked: health.blocked, note: healthNote(health) },
+      // What the leaks pointed at. `chased` is what this request already enriched
+      // cheaply; `deferred` is what did not fit the budget, returned so the client can
+      // run the full sweep on it instead of it being silently dropped.
+      leads: (chased.length || deferredLeads.length)
+        ? { chased, deferred: deferredLeads.map((l) => ({ kind: l.kind, value: l.value, why: l.why })) }
+        : undefined,
       // darkweb coverage is always partial — say so rather than let silence read as
       // "nothing is out there". Includes which engines were skipped for lack of Tor.
       darkweb: darkwebNote ? { note: darkwebNote, tor: torActive() } : undefined,

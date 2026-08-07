@@ -1566,7 +1566,12 @@ export default function OrbitBoard() {
       // darkweb coverage is always partial — the caveat travels with the result, so a
       // quiet onion search is never mistaken for "nothing on the darkweb".
       const dw = data?.darkweb?.note ? ` · onion: ${data.darkweb.note}` : "";
-      setScanMsg(`${sigs.length} real presence(s)` + (suppressed ? ` · ${suppressed} suppressed (your prior decisions)` : "") + warn + dw);
+      const lead = data?.leads?.chased?.length ? ` · chased ${data.leads.chased.length} lead(s) from the leaks` : "";
+      setScanMsg(`${sigs.length} real presence(s)` + (suppressed ? ` · ${suppressed} suppressed (your prior decisions)` : "") + warn + dw + lead);
+      // The scan enriched the leads cheaply; the FULL sweep on them happens here, after
+      // the graph is already on screen. Doing it inside the request would have made the
+      // user wait on four extra connector sweeps before seeing anything at all.
+      if (data?.leads) chaseLeadsRef.current(data.leads);
     } catch {
       setScanMsg("network unavailable");
     } finally {
@@ -1574,6 +1579,43 @@ export default function OrbitBoard() {
       setTimeout(() => setScanMsg(null), 4000);
     }
   }
+
+  /**
+   * Run a full scan on each selector the leaks pointed at. This is the loop that turns
+   * a breach hit into an investigation: an address recovered from a dump gets the same
+   * 718-site sweep the original seed did, and whatever it finds merges onto the graph
+   * and goes through the same resolver.
+   */
+  async function chaseLeads(leads: { chased?: { value: string; kind: string }[]; deferred?: { value: string; kind: string; why: string }[] }) {
+    const all = [...(leads.deferred || []), ...(leads.chased || [])]
+      .filter((l) => l.kind === "email" || l.kind === "username")
+      .filter((l) => !chainedRef.current.has("lead:" + normId(l.value)));
+    const pick = all.slice(0, 3);
+    if (!pick.length) return;
+    setScanning(true);
+    let added = 0;
+    try {
+      const cids = [...enabledRef.current].join(",");
+      for (const l of pick) {
+        chainedRef.current.add("lead:" + normId(l.value));
+        setScanMsg(`following the leak: full scan of ${l.value.slice(0, 40)}…`);
+        try {
+          const res = await fetch(`/api/scan?username=${encodeURIComponent(l.value)}&connectors=${encodeURIComponent(cids)}&leadBudget=0`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
+          const d = await res.json().catch(() => null);
+          if (d?.signals?.length) {
+            const parent = nodesRef.current.find((n) => normId(n.handle) === normId(l.value));
+            added += mergeRef.current(d.signals, parent?.id || "", normId(l.value));
+          }
+        } catch { /* one dead lead must not stop the rest */ }
+      }
+      setScanMsg(added ? `leak-driven expansion: +${added} node(s) from ${pick.length} recovered selector(s)` : "leak-driven expansion: nothing new");
+    } finally {
+      setScanning(false);
+      setTimeout(() => setScanMsg(null), 6000);
+    }
+  }
+  const chaseLeadsRef = useRef(chaseLeads);
+  chaseLeadsRef.current = chaseLeads;
 
   function openDossier() {
     setDossier(buildDossier(currentSignals()));
@@ -2642,7 +2684,7 @@ export default function OrbitBoard() {
                 screen is provenance and caveats makes the analyst hunt for the one
                 thing they opened it for. */}
             {selected.exposure && selected.exposure.length > 0 && (
-              <ExposurePanel items={selected.exposure} onPivot={(v) => pivotOnValue(v, selected.id)} />
+              <ExposurePanel items={selected.exposure} seed={seed} known={[selected.handle]} onPivot={(v) => pivotOnValue(v, selected.id)} />
             )}
             <div className="sect">VERIFIED EVIDENCE</div>
             <div className="evs">

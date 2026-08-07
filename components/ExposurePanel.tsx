@@ -23,6 +23,7 @@ import {
   sortExposure, exposureText, credentialsText, usableCount, maskPattern,
   type ExposureItem, type ExposureKind,
 } from "@/lib/exposure";
+import { leadsFrom } from "@/lib/leads";
 
 const GROUPS: { kind: ExposureKind; label: string }[] = [
   { kind: "credential", label: "Credentials" },
@@ -45,13 +46,16 @@ const PIVOTABLE: ExposureKind[] = ["email", "identifier", "login", "ip"];
 
 const PER_GROUP = 10;
 
-export default function ExposurePanel({ items, onPivot }: { items: ExposureItem[]; onPivot: (v: string) => void }) {
+export default function ExposurePanel({ items, onPivot, seed, known }: { items: ExposureItem[]; onPivot: (v: string) => void; seed?: string; known?: string[] }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showMasked, setShowMasked] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const sorted = useMemo(() => sortExposure(items), [items]);
   const cred = useMemo(() => usableCount(items), [items]);
   const creds = useMemo(() => credentialsText(items), [items]);
+  // the same extraction the scan uses, so what the panel offers and what the engine
+  // chases can never drift apart
+  const leads = useMemo(() => leadsFrom(items, seed || "", known || []), [items, seed, known]);
 
   const grouped = useMemo(
     () => GROUPS
@@ -109,6 +113,22 @@ export default function ExposurePanel({ items, onPivot }: { items: ExposureItem[
         {cred.masked > 0 && <span>{cred.masked} masked at source — the source redacted these, not Octopus</span>}
         {!cred.total && <span>no source returned a credential for this identity</span>}
       </div>
+
+      {/* What this leak gives you to investigate NEXT. Showing the contents without
+          showing what to do with them was half the job. */}
+      {leads.length > 0 && (
+        <div className="exp-leads">
+          <div className="exp-lh">{leads.length} lead{leads.length > 1 ? "s" : ""} to investigate</div>
+          {leads.slice(0, 6).map((l, i) => (
+            <button key={i} className="exp-lead" onClick={() => onPivot(l.value)} title={l.why}>
+              <span className={"exp-lk k-" + l.kind}>{l.kind}</span>
+              <span className="exp-lv">{l.value}</span>
+              <span className="exp-lgo">scan →</span>
+            </button>
+          ))}
+          {leads.length > 6 && <div className="exp-lmore">+{leads.length - 6} more in the groups below</div>}
+        </div>
+      )}
 
       <div className="exp-bar">
         <button onClick={() => copy(exposureText(items), "__all")}>

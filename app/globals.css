@@ -1266,3 +1266,20 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .adm-msg { margin-top: 16px; font-size: calc(11.5px * var(--ui)); color: var(--accent); }
 .adm-empty { font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.75; margin-top: 40px; max-width: 70ch; }
 .adm .datatable td { padding: 10px 14px; }
+
+/* Leads: what this leak gives you to investigate NEXT. Showing a breach's contents
+   without showing what to do with them was half the job. */
+.exp-leads { border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 4px;
+  padding: 8px 10px 10px; margin-bottom: 10px; }
+.exp-lh { font-size: calc(9.5px * var(--ui)); letter-spacing: .2em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.exp-lead { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  background: transparent; border: 0; border-top: 1px solid var(--line-soft); color: var(--ink);
+  font-family: var(--mono); font-size: calc(11.5px * var(--ui)); padding: 6px 0; cursor: pointer; }
+.exp-lead:first-of-type { border-top: 0; }
+.exp-lead:hover { color: var(--accent); }
+.exp-lk { flex: none; font-size: calc(9px * var(--ui)); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); min-width: 62px; }
+.exp-lv { flex: 1; min-width: 0; word-break: break-all; }
+.exp-lgo { flex: none; font-size: calc(9.5px * var(--ui)); color: var(--accent); opacity: 0; }
+.exp-lead:hover .exp-lgo { opacity: 1; }
+.exp-lmore { font-size: calc(9.5px * var(--ui)); color: var(--ink-4); margin-top: 6px; }
+@media (hover: none) { .exp-lgo { opacity: 1; } }
