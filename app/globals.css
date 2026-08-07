@@ -1,43 +1,83 @@
+/* ============================================================================
+   OCTOPUS — "ABYSS" art direction.
+   Every component reads these variables, so re-pointing them re-skins the whole
+   app with no component edits. The handoff's token block omitted --type-phone,
+   --type-location and --type-leak, which are used 2/5/2 times by the graph and
+   the type chips; its own instruction is "keep these stable", so they are
+   carried forward unchanged rather than deleted.
+   ========================================================================== */
 :root {
-  --void: #0B0B0D;
-  --void-2: #0e0e12;
-  --line: rgba(255, 255, 255, .12);
-  --line-soft: rgba(255, 255, 255, .045);
-  --ink: #ECECEF;
-  --ink-2: #9A9AA4;
-  --ink-3: #7C7C88;
-  --ink-4: #6A6A74;
-  --accent: #8FD6D0;
-  --accent-dim: rgba(143, 214, 208, .14);
-  --confirm: #B7D9B0;
-  --reject: #C98B8B;
+  /* ground — deep water, colder and bluer than the old neutral void */
+  --void: #04080B;
+  --void-2: #0A1015;
+  --line: rgba(255, 196, 150, .14);        /* hairlines take a faint warm cast */
+  --line-soft: rgba(255, 196, 150, .06);
+
+  /* ink — warm-neutral, so text sits on the blue ground without a colour clash */
+  --ink: #E9F4F3;
+  --ink-2: #93A8AA;
+  --ink-3: #5F7476;
+  --ink-4: #4C6367;        /* 3.15:1 — #41565A measured 2.59 on this deeper ground */
+
+  /* the single hero accent */
+  --accent: #FF8A3D;
+  --accent-dim: rgba(255, 138, 61, .14);
+
+  /* Verdict semantics. Reject is a COOL violet on purpose: against the warm
+     accent it reads as "pushed away", which is what contradicting means in the
+     scoring model. It is never red — red here would collide with the accent and
+     with the type hues both. */
+  /* The handoff put confirm ON the accent. In the graph that made a CONFIRMED node
+     and a SELECTED one the same colour — two different states, one hue. A warm gold
+     keeps confirm on the accent's side of the wheel while staying tellable apart. */
+  --confirm: #FFC94D;
+  --reject: #B9A8FF;
+
+  /* evidence-type hues — what a node IS, never brand. Deliberately stable so a
+     saved case and the graph legend still read the same after the reskin. */
   --type-email: #D6B98F;
   --type-alias: #B3A6D6;
   --type-phone: #8FC7A0;
   --type-location: #8FB4D6;
   --type-leak: #D69090;
   --type-person: #E6DFA0;
-  --panel: rgba(18, 18, 22, .72);
-  /* Controls get their own tokens. Everything clickable used --ink-3, which measures
-     2.89:1 on the void — a button the eye has to hunt for. Bolding it would not have
-     changed that: contrast is contrast. */
-  --ctl: #C4C4CE;          /* 11.4:1 — the idle label of anything interactive */
-  --ctl-bd: rgba(255, 255, 255, .20);
-  --ctl-bg: rgba(255, 255, 255, .05);
-  --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --panel: rgba(8, 14, 19, .74);
+
+  /* Controls get their own tokens. Everything clickable used --ink-3, which
+     measured 2.89:1 on the old void — a button the eye has to hunt for. */
+  --ctl: #C9D8D6;
+  --ctl-bd: rgba(255, 196, 150, .24);
+  --ctl-bg: rgba(255, 196, 150, .05);
+
+  /* type — a display face for headings; mono stays everywhere data is shown */
+  --mono: var(--font-mono), ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --display: var(--font-display), var(--mono);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-/* The light palette is declared ONCE. The boot script in the layout resolves the
-   system preference into data-theme before first paint, so there is no second copy
-   inside a media query to drift out of step with this one — it already had, twice. */
+/* Sunlit shallows. Declared ONCE — the boot script in the layout resolves the
+   system preference into data-theme before first paint, so there is no second
+   copy inside a media query to drift out of step with this one. */
 :root[data-theme="light"] {
-  --void: #F7F7F5; --void-2: #F0F0EE; --line: rgba(20, 20, 25, .14); --line-soft: rgba(20, 20, 25, .06);
-  --ink: #17171B; --ink-2: #4E4E58; --ink-3: #70707A; --ink-4: #7A7A84;
-  /* the accent measured 3.81:1 here — the same cyan taken one step deeper, so a 10px
-     label on it is readable without changing the identity */
-  --accent: #12726B; --accent-dim: rgba(18, 114, 107, .11);
-  --confirm: #2f7a3e; --reject: #a34a4a; --panel: rgba(255, 255, 255, .82);
-  --ctl: #2E2E38; --ctl-bd: rgba(20, 20, 25, .26); --ctl-bg: rgba(20, 20, 25, .05);
+  --void: #FBF7F3; --void-2: #F3ECE4;
+  --line: rgba(40, 24, 12, .14); --line-soft: rgba(40, 24, 12, .06);
+  --ink: #1A140E; --ink-2: #55483C; --ink-3: #7A6A5C; --ink-4: #877868;
+  /* Measured, not assumed: the handoff's #C25A12 came out at 4.13:1 on this ground,
+     under the 4.5 floor for a 10px label. One step deeper clears it at 4.89. */
+  --accent: #B0510E; --accent-dim: rgba(176, 81, 14, .12);
+  --confirm: #7A6410; --reject: #5B4CB0; --panel: rgba(255, 252, 248, .84);
+  --ctl: #2E2822; --ctl-bd: rgba(40, 24, 12, .26); --ctl-bg: rgba(40, 24, 12, .05);
+
+  /* The type hues were never redefined for light — they are pastels built for a dark
+     ground and measured 1.28–2.39:1 here, i.e. the graph legend was unreadable in
+     light long before this reskin. Same hue families, taken deep enough to read
+     (5.8–8.0:1), so a saved case still looks like itself. */
+  --type-email: #7A5A1E;
+  --type-alias: #4E4288;
+  --type-phone: #2F6B41;
+  --type-location: #2C5478;
+  --type-leak: #8A3A3A;
+  --type-person: #6B6220;
 }
 
 * { box-sizing: border-box; }
@@ -1154,8 +1194,10 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 }
 .lp-top { position: relative; }
 .lp-top::before { inset: -120% -4vw -60% -4vw; }
-.lp-h1 { font-size: clamp(32px, 6vw, 60px); line-height: 1.12; letter-spacing: -.01em; font-weight: 400;
-  color: var(--ink); margin: 0 0 22px; }
+/* The display face carries the headings; data stays monospace everywhere, because a
+   proportional font on an identifier is how a zero and an O stop being distinguishable. */
+.lp-h1 { font-family: var(--display); font-size: clamp(34px, 6.4vw, 64px); line-height: 1.06;
+  letter-spacing: -.02em; font-weight: 800; color: var(--ink); margin: 0 0 22px; }
 .lp-lead { font-size: calc(14px * var(--ui)); line-height: 1.75; color: var(--ink-2); max-width: 62ch; margin: 0 0 34px; }
 
 .lp-search { display: flex; align-items: center; gap: 12px; border: 2px solid var(--ctl-bd); border-radius: 4px;
@@ -1199,7 +1241,7 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .lp-caveat { margin: 18px 0 0; font-size: calc(12px * var(--ui)); line-height: 1.7; color: var(--type-email); max-width: 66ch; }
 
 .lp-caps, .lp-honest { max-width: 900px; margin: 0 auto; padding: 60px clamp(18px, 5vw, 54px); border-top: 1px solid var(--line); }
-.lp-caps h2, .lp-honest h2 { font-size: calc(11px * var(--ui)); letter-spacing: .28em; text-transform: uppercase;
+.lp-caps h2, .lp-honest h2 { font-family: var(--display); font-weight: 700; font-size: calc(11.5px * var(--ui)); letter-spacing: .26em; text-transform: uppercase;
   color: var(--ink-3); font-weight: 400; margin: 0 0 26px; }
 .lp-caps ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px 20px; }
 .lp-caps li { position: relative; display: flex; align-items: center; gap: 11px; font-size: calc(13px * var(--ui));
@@ -1226,7 +1268,7 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .lp-capnote { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 26px 0 0; max-width: 70ch; }
 
 .lp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px 40px; }
-.lp-grid h3 { font-size: calc(14px * var(--ui)); font-weight: 400; color: var(--accent); margin: 0 0 10px; letter-spacing: .02em; }
+.lp-grid h3 { font-family: var(--display); font-size: calc(15px * var(--ui)); font-weight: 700; color: var(--accent); margin: 0 0 10px; letter-spacing: .02em; }
 .lp-grid p { font-size: calc(12.5px * var(--ui)); line-height: 1.75; color: var(--ink-2); margin: 0; }
 .lp-grid b { color: var(--ink); font-weight: 400; }
 
@@ -1238,7 +1280,7 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 30px 18px; }
 .auth-card { width: min(420px, 94vw); border: 2px solid var(--ctl-bd); border-radius: 6px; padding: 30px;
   background: color-mix(in srgb, var(--void) 82%, transparent); }
-.auth-card h1 { font-size: calc(19px * var(--ui)); font-weight: 400; color: var(--ink); margin: 26px 0 20px; letter-spacing: .02em; }
+.auth-card h1 { font-family: var(--display); font-size: calc(21px * var(--ui)); font-weight: 700; color: var(--ink); margin: 26px 0 20px; letter-spacing: .02em; }
 .auth-note, .auth-error { font-size: calc(11.5px * var(--ui)); line-height: 1.6; margin: 0 0 16px; }
 .auth-note { color: var(--accent); }
 .auth-error { color: var(--reject); }
@@ -1295,7 +1337,7 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 /* ---- REUSE view: who shares a password with whom ---- */
 .reuse-wrap { position: fixed; left: var(--rail-w, 0); right: 0; top: 66px; bottom: 0; z-index: 15;
   background: var(--void); overflow-y: auto; padding: 30px clamp(18px, 4vw, 46px) 60px; }
-.reuse-head h2 { font-size: calc(11px * var(--ui)); letter-spacing: .28em; color: var(--accent); font-weight: 400; margin: 0 0 10px; }
+.reuse-head h2 { font-family: var(--display); font-size: calc(11.5px * var(--ui)); letter-spacing: .26em; color: var(--accent); font-weight: 700; margin: 0 0 10px; }
 .reuse-head p { font-size: calc(12px * var(--ui)); color: var(--ink-2); line-height: 1.7; max-width: 78ch; margin: 0 0 26px; }
 .reuse-empty { font-size: calc(12.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; max-width: 74ch;
   border-left: 2px solid var(--line); padding-left: 16px; }

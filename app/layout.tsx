@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Syne, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+
+// next/font SELF-HOSTS these at build time. That matters more here than convenience:
+// a <link> to Google Fonts would make every page load of an OSINT tool call a third
+// party, which is the one thing this app's egress posture exists to avoid.
+const display = Syne({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-display", display: "swap" });
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Octopus OSINT",
@@ -9,8 +16,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0B0B0D" },
-    { media: "(prefers-color-scheme: light)", color: "#F7F7F5" },
+    { media: "(prefers-color-scheme: dark)", color: "#04080B" },
+    { media: "(prefers-color-scheme: light)", color: "#FBF7F3" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -30,7 +37,7 @@ const THEME_BOOT =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${display.variable} ${mono.variable}`}>
       <head><script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} /></head>
       <body>{children}</body>
     </html>
