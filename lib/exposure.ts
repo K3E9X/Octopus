@@ -18,14 +18,17 @@
 
 export type ExposureKind =
   | "credential"  // a password or hash — the thing an analyst is actually here for
-  | "login"       // a service the victim was signed into
+  | "identifier"  // the login the credential belongs to (an address, a username)
+  | "login"       // a service URL the victim was signed into
   | "email"
   | "ip"
+  | "breach"      // a named dump this identity appears in
+  | "field"       // a field CLASS a breach exposed ("passwords", "phone numbers")
   | "machine"     // computer name, operating system
   | "malware"     // stealer family, dropper path, antivirus present
   | "date"
   | "count"
-  | "record"      // a raw matched line out of a held corpus
+  | "record"      // a raw matched line out of a held corpus or combolist
   | "other";
 
 export interface ExposureItem {
@@ -38,6 +41,9 @@ export interface ExposureItem {
   url?: string;
   /** true when the SOURCE delivered it masked. Octopus does not mask on top. */
   masked?: boolean;
+  /** which connector produced it — with several sources merged, per-row provenance is
+   *  the difference between "this is usable" and "this came from the tier that masks" */
+  source?: string;
 }
 
 const MAX_ITEMS = 400;
@@ -56,7 +62,12 @@ const RULES: { re: RegExp; kind: ExposureKind; label?: string }[] = [
   { re: /malware_?path|file_?path|^path$/i, kind: "malware", label: "Dropper path" },
   { re: /antivirus|(^|_)av(s)?$/i, kind: "malware", label: "Antivirus present" },
   { re: /stealer|malware|family/i, kind: "malware" },
-  { re: /login|url|service|site|domain|resource/i, kind: "login" },
+  // `top_logins` in a stealer record is the LOGIN the victim typed — an address or a
+  // username — not the site. Real payloads return "n****@gmail.com" here, and calling
+  // that a "service signed into" mislabels it on every single row.
+  { re: /login|user_?name|^user$|account/i, kind: "identifier" },
+  { re: /url|service|site|domain|resource|effected|affected/i, kind: "login" },
+  { re: /breach|dump|leak|database/i, kind: "breach" },
   { re: /e?mail/i, kind: "email" },
   { re: /(^|_)ips?$|ip_?addr/i, kind: "ip" },
   { re: /computer|machine|host_?name|operating_?system|(^|_)os$|device/i, kind: "machine" },
@@ -80,11 +91,48 @@ export function humanKey(k: string): string {
 }
 
 /** Did the source hand this over already masked? Then we leave it exactly as it came. */
-function looksMasked(v: string): boolean {
-  return /\*{3,}|•{3,}|●{3,}|•{3,}|x{6,}|\[REDACTED\]/i.test(v);
+export function looksMasked(v: string): boolean {
+  return /\*{2,}|•{2,}|●{2,}|x{6,}|\[REDACTED\]/i.test(v);
+}
+
+/**
+ * Some masked values survive with NO information left in them at all — real Hudson Rock
+ * rows come back as `_|` and `\***********************_`. Showing those is worse than
+ * showing nothing: they pad the panel out and make an empty result look like a full one.
+ *
+ * The bar is deliberately at the floor rather than "looks useful". `M*********5` keeps
+ * two real characters and a length, which is a weak but genuine constraint on the
+ * password; that gets demoted in the UI, not deleted. Only a value with nothing left
+ * but mask and punctuation is dropped.
+ */
+export function isContentFree(v: string): boolean {
+  return v.replace(/[*•●\s\\/_|.,;:'"`~^\-–—+=()[\]{}<>!?@#$%&]/g, "").length < 1;
+}
+
+/** All a masked value actually tells you: the characters that survived, and a length. */
+export function maskPattern(v: string): string {
+  const kept = v.replace(/[*•●]/g, "");
+  return `${kept || "—"} · ${v.length} chars`;
+}
+
+export interface Usable { clear: number; masked: number; total: number }
+
+/**
+ * How much of this is actually usable? The single most important thing a leak panel can
+ * say, and the thing that was missing: five masked passwords and five real ones look
+ * identical in a count, and only one of them is worth an analyst's afternoon.
+ */
+export function usableCount(items: ExposureItem[], kind: ExposureKind = "credential"): Usable {
+  const rows = items.filter((i) => i.kind === kind);
+  const masked = rows.filter((i) => i.masked).length;
+  return { clear: rows.length - masked, masked, total: rows.length };
 }
 
 function classify(key: string, value: string): { kind: ExposureKind; label: string } {
+  // A URL is a service no matter which key carries it. `top_logins` holds masked
+  // ADDRESSES in a real stealer record but full URLs in other feeds, so the key alone
+  // cannot decide — the value can, and unambiguously.
+  if (/^https?:\/\//i.test(value)) return { kind: "login", label: humanKey(key) };
   for (const r of RULES) {
     if (r.re.test(key)) return { kind: r.kind, label: r.label || humanKey(key) };
   }
@@ -107,6 +155,8 @@ export function harvest(payload: unknown, opts: { skip?: RegExp } = {}): Exposur
     let value = typeof raw === "number" ? String(raw) : String(raw).trim();
     if (!value || value === "null" || value === "undefined" || value === "N/A") return;
     if (value.length > MAX_VALUE) value = value.slice(0, MAX_VALUE) + "…";
+    // masked down to nothing: a row that pads the panel out and says nothing at all
+    if (isContentFree(value)) return;
     const { kind, label } = classify(key, value);
     // a count of zero is noise; a count of anything else is a finding
     if (kind === "count" && /^0+$/.test(value)) return;
@@ -171,20 +221,50 @@ export function harvestText(lines: string[], label = "Record"): ExposureItem[] {
   return out;
 }
 
-const ORDER: ExposureKind[] = ["credential", "login", "email", "record", "ip", "machine", "malware", "date", "count", "other"];
+const ORDER: ExposureKind[] = ["credential", "identifier", "login", "email", "record", "breach", "field", "ip", "machine", "malware", "date", "count", "other"];
 
-/** Credentials and services first: that is the order an analyst reads them in. */
+/** Credentials first, and inside every group the CLEAR values before the masked ones. */
 export function sortExposure(items: ExposureItem[]): ExposureItem[] {
-  return [...items].sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
+  return [...items].sort((a, b) =>
+    ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || Number(!!a.masked) - Number(!!b.masked));
+}
+
+/**
+ * Merge the same fact reported by several sources into one row that credits all of them,
+ * and prefer the UNMASKED copy. This is the payoff for querying more than one index: if
+ * Hudson Rock masks a password and a combolist has it in clear, the analyst should see
+ * the clear one once, not both versions in two panels.
+ */
+export function mergeExposure(items: ExposureItem[]): ExposureItem[] {
+  const byKey = new Map<string, ExposureItem>();
+  for (const it of items) {
+    // masked and clear copies of one secret differ as strings, so they cannot dedupe by
+    // value; they collapse on the group + the characters that survived the mask
+    const key = it.kind + " " + (it.masked ? it.value.replace(/[*•●]+/g, "*") : it.value);
+    const prev = byKey.get(key);
+    if (!prev) { byKey.set(key, { ...it }); continue; }
+    if (prev.masked && !it.masked) byKey.set(key, { ...it, source: joinSource(prev.source, it.source) });
+    else prev.source = joinSource(prev.source, it.source);
+  }
+  return [...byKey.values()];
+}
+
+function joinSource(a?: string, b?: string): string | undefined {
+  const all = [...new Set([...(a || "").split(" · "), ...(b || "").split(" · ")].filter(Boolean))];
+  return all.length ? all.join(" · ") : undefined;
 }
 
 /** One line saying what is actually in there, for the node subtitle and the dossier. */
 export function exposureSummary(items: ExposureItem[]): string {
   const n = (k: ExposureKind) => items.filter((i) => i.kind === k).length;
+  const cred = usableCount(items);
   const parts: string[] = [];
-  if (n("credential")) parts.push(`${n("credential")} credential${n("credential") > 1 ? "s" : ""}`);
+  // the count that matters is the USABLE one — five masked passwords and five real ones
+  // are the same number and completely different findings
+  if (cred.total) parts.push(cred.clear ? `${cred.clear} credential${cred.clear > 1 ? "s" : ""} in clear` : `${cred.total} credential${cred.total > 1 ? "s" : ""} (masked)`);
   if (n("login")) parts.push(`${n("login")} service${n("login") > 1 ? "s" : ""}`);
-  if (n("email")) parts.push(`${n("email")} address${n("email") > 1 ? "es" : ""}`);
+  if (n("breach")) parts.push(`${n("breach")} breach${n("breach") > 1 ? "es" : ""}`);
+  if (n("email") + n("identifier")) parts.push(`${n("email") + n("identifier")} identifier${n("email") + n("identifier") > 1 ? "s" : ""}`);
   if (n("record")) parts.push(`${n("record")} record${n("record") > 1 ? "s" : ""}`);
   if (n("ip")) parts.push(`${n("ip")} IP${n("ip") > 1 ? "s" : ""}`);
   if (!parts.length) return items.length ? `${items.length} field(s), no credentials or services` : "nothing recovered";
@@ -209,6 +289,17 @@ export function exposureVerdict(items: ExposureItem[]): string {
 /** A copyable block, so the whole finding leaves the tool in one keystroke. */
 export function exposureText(items: ExposureItem[]): string {
   return sortExposure(items)
-    .map((i) => `${i.label}: ${i.value}${i.masked ? "  [masked at source]" : ""}`)
+    .map((i) => `${i.label}: ${i.value}${i.masked ? "  [masked at source]" : ""}${i.source ? `  (${i.source})` : ""}`)
+    .join("\n");
+}
+
+/** Just the usable credentials, one per line — the format a password audit wants. */
+export function credentialsText(items: ExposureItem[]): string {
+  const byId = new Map<string, string>();
+  for (const i of items) if (i.kind === "identifier" || i.kind === "email") byId.set(i.value, i.value);
+  const ids = [...byId.keys()];
+  return items
+    .filter((i) => i.kind === "credential" && !i.masked)
+    .map((c) => (ids.length === 1 ? `${ids[0]}:${c.value}` : c.value))
     .join("\n");
 }

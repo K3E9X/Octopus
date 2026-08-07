@@ -59,6 +59,9 @@ export function build(term: string, data: any, apiUrl: string): Signal[] {
   for (const s of stealers) exposure.push(...harvest(s));
 
   const creds = exposure.filter((e) => e.kind === "credential");
+  // `top_logins` holds the identifiers the victim typed, not the sites — a real lookup
+  // returns "n****@gmail.com" there. Only actual URLs count as services.
+  const idents = exposure.filter((e) => e.kind === "identifier");
   const logins = exposure.filter((e) => e.kind === "login");
   const machines = exposure.filter((e) => e.kind === "machine");
   const malware = exposure.filter((e) => e.kind === "malware");
@@ -74,6 +77,8 @@ export function build(term: string, data: any, apiUrl: string): Signal[] {
     ...(creds.length ? [ev("Credentials exposed",
       creds.slice(0, 12).map((c) => c.value + (c.masked ? " (masked at source)" : "")).join("  ·  ") +
       (creds.length > 12 ? `  … +${creds.length - 12} more` : ""), 88)] : []),
+    ...(idents.length ? [ev("Logins used",
+      idents.slice(0, 10).map((l) => l.value + (l.masked ? " (masked)" : "")).join("  ·  ") + (idents.length > 10 ? `  … +${idents.length - 10} more` : ""), 66)] : []),
     ...(logins.length ? [ev("Services signed into",
       logins.slice(0, 10).map((l) => hostOf(l.value)).join(" · ") + (logins.length > 10 ? ` … +${logins.length - 10} more` : ""), 70)] : []),
     ...(dates.length ? [ev("Compromise date", dates.length > 1 ? `${dates[0].slice(0, 10)} → ${dates[dates.length - 1].slice(0, 10)} (${dates.length} events)` : dates[0].slice(0, 10), 55)] : []),

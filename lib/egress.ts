@@ -131,6 +131,8 @@ const TARGET_OBSERVABLE = [
 const SAFE_SOURCES = [
   /(^|\.)rdap\.org$/i, /(^|\.)crt\.sh$/i, /(^|\.)dns\.google$/i, /(^|\.)archive\.org$/i,
   /(^|\.)hudsonrock\.com$/i, /(^|\.)intelx\.io$/i, /(^|\.)openstreetmap\.org$/i,
+  // breach indexes: third-party holdings, so a lookup is invisible to the subject
+  /(^|\.)proxynova\.com$/i, /(^|\.)leakcheck\.io$/i, /(^|\.)xposedornot\.com$/i,
   // onion index: a third-party crawl, so querying it tells the indexed service nothing
   /(^|\.)ahmia\.fi$/i,
 ];

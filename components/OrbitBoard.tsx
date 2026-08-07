@@ -2616,6 +2616,10 @@ export default function OrbitBoard() {
         {selected && (
           <>
             <button className="insp-close" onClick={() => setSelectedId(null)} aria-label="close">✕</button>
+            {/* Everything below the close button scrolls as one document. Only `.evs`
+                used to scroll, so a long EXPOSURE pushed the rest off the bottom of a
+                panel that had no way to reach it. */}
+            <div className="insp-body">
             <div className="insp-plat">{selected.platform}</div>
             <div className="insp-handle">{selected.handle}</div>
             {(() => {
@@ -2701,6 +2705,9 @@ export default function OrbitBoard() {
             {selected.collectedAt && (
               <div className="insp-custody">⛓ collected {new Date(selected.collectedAt).toLocaleString()} · chain of custody</div>
             )}
+            </div>
+            {/* the verdict stays pinned: it is the one control you must always reach,
+                no matter how much content the node is carrying */}
             <div className="verbs">
               <button className={"verb on-confirm" + (selected.status === "confirmed" ? " is-confirm" : "")} onClick={() => setStatus(selected.id, "confirmed")}>CONFIRM</button>
               <button className={"verb on-review" + (selected.status === "review" ? " is-review" : "")} onClick={() => setStatus(selected.id, "review")}>REVIEW</button>

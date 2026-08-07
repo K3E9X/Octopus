@@ -10,6 +10,7 @@ import { searchIntelX, intelxConfigured } from "@/lib/intelx";
 import { recordedFutureLookup, recordedFutureConfigured } from "@/lib/recordedfuture";
 import { readClientConfig } from "@/lib/reqconfig";
 import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
+import { breachExposure, breachSignal } from "@/lib/breaches";
 import { looksLikePhone, phoneIntel, type PhoneIntel } from "@/lib/phone";
 import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { namePairFromHandle, matchName, nameMatchEvidence } from "@/lib/namematch";
@@ -583,6 +584,16 @@ export async function GET(req: NextRequest) {
     if (!enabled || enabled.has("hudsonrock")) {
       const hr = isEmail ? await hudsonRockEmail(q) : await hudsonRockUsername(matchTarget);
       signals.push(...hr);
+    }
+
+    // Breach indexes that return CONTENT. Hudson Rock's free tier masks nearly
+    // everything it hands over, so the answer to "give me the password in clear" is a
+    // different source, not a cleverer client. These are keyless.
+    if (!enabled || enabled.has("breaches")) {
+      try {
+        const res = await breachExposure(isEmail ? q : matchTarget);
+        signals.push(...breachSignal(isEmail ? q : matchTarget, res, collectedAt));
+      } catch { /* a silent index is a missing source, never a failed scan */ }
     }
 
     // --- local corpora: SILENT search of datasets we already hold ---

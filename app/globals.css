@@ -231,7 +231,11 @@ body {
 .pivot-btn:disabled { opacity: .4; cursor: default; }
 
 .sect { font-size: 9.5px; letter-spacing: .28em; color: var(--ink-3); margin: 30px 0 4px; }
-.evs { overflow-y: auto; margin: 0 -4px; flex: 1; }
+/* The panel scrolls as one document. Making only `.evs` scrollable meant a node with a
+   lot of content pushed everything below it out of a container that could not reach it —
+   EXPOSURE, relationships and custody were simply unreachable. */
+.insp-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+.evs { margin: 0 -4px; }
 .ev { padding: 13px 4px; border-bottom: 1px solid var(--line-soft); display: flex; gap: 12px; align-items: flex-start; }
 .ev .en { font-size: 12px; color: var(--ink); letter-spacing: .02em; }
 .ev .ed { font-size: 10.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.5; }
@@ -243,11 +247,19 @@ body {
 .ev-open { margin-left: 10px; color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
 
 /* ---- EXPOSURE: what actually leaked ---- */
-.sect-exp { display: flex; align-items: baseline; gap: 12px; color: var(--accent); }
-.exp-copyall { margin-left: auto; background: transparent; border: 1px solid var(--ctl-bd); border-radius: 3px;
+.sect-exp { color: var(--accent); }
+/* the verdict, before the data: how much of this can you actually use */
+.exp-verdict { border-left: 2px solid var(--line); padding: 2px 0 2px 12px; margin: 10px 0 12px; }
+.exp-verdict.is-usable { border-left-color: var(--accent); }
+.exp-verdict b { display: block; font-size: calc(13px * var(--ui)); font-weight: 400; color: var(--ink-2); letter-spacing: .02em; }
+.exp-verdict.is-usable b { color: var(--accent); }
+.exp-verdict span { display: block; font-size: calc(10.5px * var(--ui)); color: var(--ink-3); line-height: 1.5; margin-top: 3px; }
+.exp-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.exp-bar button { background: transparent; border: 1px solid var(--ctl-bd); border-radius: 3px;
   color: var(--ctl); font-family: var(--mono); font-size: calc(9.5px * var(--ui)); letter-spacing: .1em;
-  padding: 3px 8px; cursor: pointer; }
-.exp-copyall:hover { border-color: var(--accent); color: var(--accent); }
+  padding: 4px 9px; cursor: pointer; }
+.exp-bar button:hover { border-color: var(--accent); color: var(--accent); }
+.exp-bar .exp-pivot { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .exp { border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); border-radius: 4px; padding: 4px 10px 8px; margin-top: 8px; }
 .exp-g + .exp-g { border-top: 1px solid var(--line-soft); margin-top: 6px; padding-top: 6px; }
 .exp-gh { display: flex; align-items: baseline; gap: 8px; padding: 6px 0 3px; }
@@ -260,7 +272,13 @@ body {
 .exp-v { font-size: calc(12px * var(--ui)); color: var(--ink); word-break: break-all; line-height: 1.45; }
 .exp-v a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .exp-l { font-size: calc(9.5px * var(--ui)); color: var(--ink-4); letter-spacing: .06em; margin-top: 1px; }
-.exp-mask { font-style: normal; margin-left: 8px; font-size: calc(9px * var(--ui)); color: var(--type-email); letter-spacing: .08em; }
+/* which index produced this row — with several merged, that decides how much to trust it */
+.exp-src { margin-left: 8px; color: var(--ink-3); }
+.exp-pat { margin-left: 8px; color: var(--type-email); }
+/* masked rows are kept but demoted: a mask still constrains the first character and the
+   length, so deleting them loses information — leading with them loses the analyst */
+.exp-row.is-masked .exp-v { color: var(--ink-3); }
+.exp-maskbtn { color: var(--ink-3); }
 .exp-acts { display: flex; gap: 4px; flex: none; opacity: 0; transition: opacity .15s var(--ease); }
 .exp-row:hover .exp-acts, .exp-acts:focus-within { opacity: 1; }
 .exp-acts button { background: var(--ctl-bg); border: 1px solid var(--ctl-bd); border-radius: 3px; color: var(--ctl);
