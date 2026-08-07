@@ -21,6 +21,9 @@ import { readSeed, CAPABILITIES } from "@/lib/seedtype";
 // WebGL is client-only, and the creature is decorative — if it never loads, the page
 // is unchanged. Loaded lazily so it costs nothing until the hero is on screen.
 const Octo3D = dynamic(() => import("./Octo3D"), { ssr: false });
+// Ignition, sonar cursor, depth gauge, scroll reveals. Client-only: it reads the
+// scroll position and the pointer, neither of which exists on the server.
+const AbyssMotion = dynamic(() => import("./AbyssMotion"), { ssr: false });
 
 const EXAMPLES = ["marie.dubois@gmail.com", "xk9_zulu_42", "8.8.8.8", "acme-corp.fr", "+33 6 12 34 56 78", "d41d8cd98f00b204e9800998ecf8427e"];
 
@@ -54,6 +57,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="lp">
       <NeuralField kind={read.kind} pulse={pulse} onCapFire={onCapFire} />
+      <AbyssMotion />
 
       <header className="lp-top">
         <div className="lp-brand">
@@ -118,7 +122,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         </div>
       </main>
 
-      <section className="lp-caps" id="what">
+      <section className="lp-caps rise" id="what">
         <h2>What lights up</h2>
         <ul>
           {CAPABILITIES.map((c) => (
@@ -133,7 +137,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         </p>
       </section>
 
-      <section className="lp-honest" id="honest">
+      <section className="lp-honest rise" id="honest">
         <h2>How it stays honest</h2>
         <div className="lp-grid">
           <article>

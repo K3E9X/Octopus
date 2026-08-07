@@ -980,7 +980,8 @@ body::after {
   width: 40px; display: grid; place-items: center; opacity: 1; }
 .rail-brand svg { display: block; filter: drop-shadow(0 0 10px var(--accent-dim)); }
 .chrome .wordmark { gap: 7px; }
-.chrome .wordmark b { font-weight: 400; font-size: 13px; letter-spacing: .32em; color: var(--ink); }
+/* the brand mark is the one thing in the cockpit that is not data */
+.chrome .wordmark b { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .3em; color: var(--ink); }
 .chrome .wordmark small { letter-spacing: .26em; font-size: 8.5px; color: var(--ink-3); }
 
 /* ---- board: links you can actually edit, actions that look like actions ------- */
@@ -1168,7 +1169,11 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 /* The stacking rule below and this one have equal specificity, so `.neural` must be
    excluded from it explicitly — otherwise the canvas loses `fixed`, falls back to the
    intrinsic 2:1 canvas ratio and the field sits in a band at the top of the page. */
-.lp > *:not(.neural) { position: relative; z-index: 1; }
+/* Anything that must stay FIXED opts out with data-fixed. This rule and the fixed
+   layers have equal specificity, so without the exclusion the motion layers would
+   silently become position:relative — exactly how the neural canvas broke before.
+   Stack: field 0 · depth shade 1 · content 2. */
+.lp > *:not(.neural):not([data-fixed]) { position: relative; z-index: 2; }
 .neural { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
 
 .lp-top { display: flex; align-items: center; gap: 28px; padding: 22px clamp(18px, 5vw, 54px); }
@@ -1403,3 +1408,57 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .reuse-rr { font-size: calc(10px * var(--ui)); color: var(--type-email); margin-top: 2px; }
 .reuse-isolist { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .reuse-isolist span { font-size: calc(11px * var(--ui)); color: var(--ink-3); }
+
+/* ---- ABYSS motion layer -------------------------------------------------------
+   Ignition, sonar cursor, depth gauge and scroll reveals. All pure CSS; the JS in
+   components/AbyssMotion only writes two custom properties and a transform. */
+
+/* Ignition: the void, the mark, a line that fills once. It is a real wait being
+   shown, not a fake one — it covers the frame where the fonts and the WebGL
+   context come up, and 1.75s is where it ends whether or not they did. */
+.ignition { position: fixed; inset: 0; z-index: 200; background: var(--void);
+  display: grid; place-items: center; animation: ign-out .45s ease 1.3s forwards; }
+.ign-mark { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.ign-mark span { font-family: var(--display); font-weight: 800; font-size: 15px;
+  letter-spacing: .42em; color: var(--ink); text-indent: .42em; }
+.ign-mark i { display: block; width: min(240px, 52vw); height: 1px; background: var(--line); position: relative; }
+.ign-mark i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent);
+  animation: ign-fill 1.6s cubic-bezier(.4, 0, .2, 1) forwards; }
+@keyframes ign-fill { to { width: 100%; } }
+@keyframes ign-out { to { opacity: 0; visibility: hidden; } }
+
+/* Depth: the page darkens as you descend. --depth is written by the scroll handler,
+   so the shade costs one compositor property and never a layout. */
+.depth-shade { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: var(--void); opacity: calc(var(--depth, 0) * .55); }
+.depth-gauge { position: fixed; right: clamp(12px, 2vw, 26px); top: 50%; transform: translateY(-50%);
+  z-index: 40; display: flex; align-items: center; gap: 10px; opacity: .25; transition: opacity .4s var(--ease);
+  pointer-events: none; }
+.depth-gauge.deep { opacity: 1; }
+.dg-rail { width: 1px; height: min(240px, 30vh); background: var(--line); position: relative; }
+.dg-rail i { position: absolute; inset: 0; background: var(--accent); transform-origin: top; transform: scaleY(0); }
+.dg-read { font-size: 9.5px; letter-spacing: .14em; color: var(--accent); font-variant-numeric: tabular-nums;
+  writing-mode: vertical-rl; }
+
+/* Sonar cursor: a ring that trails the pointer and opens over anything interactive.
+   Fine pointers only — on touch it would just lag a tap. */
+.sonar { position: fixed; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); z-index: 190;
+  pointer-events: none; opacity: 0; transition: opacity .3s var(--ease), border-color .2s var(--ease);
+  will-change: transform; }
+.sonar.on { opacity: .8; }
+.sonar-ping { position: fixed; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  border: 1px solid var(--accent); z-index: 189; pointer-events: none; animation: ping .6s ease-out forwards; }
+@keyframes ping { to { transform: scale(9); opacity: 0; } }
+
+/* Scroll reveals */
+.rise { opacity: 0; transform: translateY(14px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+.rise.in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* refused outright, not softened: no loader, no cursor, no darkening, no rise */
+  .ignition, .sonar, .sonar-ping, .depth-gauge { display: none; }
+  .depth-shade { opacity: 0; }
+  .rise { opacity: 1; transform: none; transition: none; }
+}
+@media (hover: none) { .sonar, .sonar-ping { display: none; } }
