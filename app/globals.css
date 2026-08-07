@@ -1183,6 +1183,23 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
   padding: calc(8px * var(--ui)) calc(16px * var(--ui)); border-radius: 3px; }
 .lp-cta:hover { background: var(--accent-dim); }
 
+/* The hero is a two-column grid on wide viewports: copy on the left, the creature on
+   the right. It is a single column below 1080px and the 3D column is REMOVED rather
+   than stacked — a WebGL scene squeezed into a 340px-tall band on a phone costs a
+   frame budget and returns a smudge. */
+.lp-hero { display: grid; grid-template-columns: 1fr; gap: 0; align-items: center; }
+.lp-hero-3d { display: none; }
+/* The split only happens when there is genuinely room for it. At 1080px the copy
+   column was narrow enough to break the h1 into five lines and push its last word
+   into the creature — a two-column hero that cramps the reading column is worse
+   than one column. */
+@media (min-width: 1240px) {
+  .lp-main { max-width: 1360px; }
+  .lp-hero { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 30%); gap: clamp(32px, 4vw, 76px); }
+  /* the column is the sizing context for the heading */
+  .lp-hero-copy { container-type: inline-size; }
+  .lp-hero-3d { display: block; position: relative; height: min(72vh, 640px); }
+}
 .lp-main { max-width: 900px; margin: 0 auto; padding: clamp(30px, 9vh, 90px) clamp(18px, 5vw, 54px) 60px; }
 /* Occlusion, not decoration. The field is dense enough to be tissue, which means axons
    run straight through the words. This clears the ground under the reading column in
@@ -1196,8 +1213,14 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 .lp-top::before { inset: -120% -4vw -60% -4vw; }
 /* The display face carries the headings; data stays monospace everywhere, because a
    proportional font on an identifier is how a zero and an O stop being distinguishable. */
-.lp-h1 { font-family: var(--display); font-size: clamp(34px, 6.4vw, 64px); line-height: 1.06;
+/* The size is capped against the COLUMN, not just the viewport. "everything." is one
+   unbreakable 11-character word: at 64px it is ~8.25em wide, so in the two-column hero
+   it overflowed its box by 128px and ran straight into the creature — invisible to
+   getBoundingClientRect, which reports the box and not the painted glyphs. 11.5cqw
+   keeps the longest word inside whatever width the column actually has. */
+.lp-h1 { font-family: var(--display); font-size: min(64px, 6.4vw, 11.5cqw); line-height: 1.06;
   letter-spacing: -.02em; font-weight: 800; color: var(--ink); margin: 0 0 22px; }
+@supports not (font-size: 1cqw) { .lp-h1 { font-size: clamp(34px, 4.4vw, 56px); } }
 .lp-lead { font-size: calc(14px * var(--ui)); line-height: 1.75; color: var(--ink-2); max-width: 62ch; margin: 0 0 34px; }
 
 .lp-search { display: flex; align-items: center; gap: 12px; border: 2px solid var(--ctl-bd); border-radius: 4px;
@@ -1278,6 +1301,13 @@ body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
 
 /* ---- auth + admin ---- */
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 30px 18px; }
+.auth-3d { display: none; }
+@media (min-width: 1000px) {
+  .auth-wrap { grid-template-columns: 1fr minmax(420px, 460px); align-items: center;
+    gap: clamp(20px, 5vw, 80px); padding: 30px clamp(24px, 6vw, 90px); }
+  .auth-3d { display: block; position: relative; height: min(72vh, 620px); justify-self: stretch; }
+  .auth-wrap .auth-card { justify-self: center; }
+}
 .auth-card { width: min(420px, 94vw); border: 2px solid var(--ctl-bd); border-radius: 6px; padding: 30px;
   background: color-mix(in srgb, var(--void) 82%, transparent); }
 .auth-card h1 { font-family: var(--display); font-size: calc(21px * var(--ui)); font-weight: 700; color: var(--ink); margin: 26px 0 20px; letter-spacing: .02em; }

@@ -8,7 +8,11 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Logo } from "./Logo";
+
+// Decorative and client-only. If WebGL is unavailable the form is unchanged.
+const Octo3D = dynamic(() => import("./Octo3D"), { ssr: false });
 
 export default function SignIn() {
   const router = useRouter();
@@ -46,6 +50,10 @@ export default function SignIn() {
 
   return (
     <div className="auth-wrap">
+      {/* The creature on one side, the form on the other — the handoff's Access
+          layout. Dropped below the breakpoint rather than stacked above a form:
+          nobody scrolls past an animation to reach a password field. */}
+      <div className="auth-3d"><Octo3D scene="hero" /></div>
       <div className="auth-card">
         <Link className="auth-brand" href="/"><Logo size={30} /><span><b>OCTOPUS</b><small>OSINT</small></span></Link>
 

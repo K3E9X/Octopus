@@ -15,7 +15,12 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Logo } from "./Logo";
 import NeuralField from "./NeuralField";
+import dynamic from "next/dynamic";
 import { readSeed, CAPABILITIES } from "@/lib/seedtype";
+
+// WebGL is client-only, and the creature is decorative — if it never loads, the page
+// is unchanged. Loaded lazily so it costs nothing until the hero is on screen.
+const Octo3D = dynamic(() => import("./Octo3D"), { ssr: false });
 
 const EXAMPLES = ["marie.dubois@gmail.com", "xk9_zulu_42", "8.8.8.8", "acme-corp.fr", "+33 6 12 34 56 78", "d41d8cd98f00b204e9800998ecf8427e"];
 
@@ -65,6 +70,11 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
       </header>
 
       <main className="lp-main">
+        {/* The creature sits BESIDE the copy, not behind it. Both it and the neural
+            field are hairline line-work; stacked, they read as mush. Below the grid
+            breakpoint it drops out entirely rather than shrinking into a smudge. */}
+        <div className="lp-hero">
+        <div className="lp-hero-copy">
         <h1 className="lp-h1">
           One identity,<br />resolved across everything.
         </h1>
@@ -102,6 +112,9 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
             </ol>
           )}
           {read.caveat && <p className="lp-caveat">{read.caveat}</p>}
+        </div>
+        </div>
+        <div className="lp-hero-3d"><Octo3D scene="hero" /></div>
         </div>
       </main>
 
