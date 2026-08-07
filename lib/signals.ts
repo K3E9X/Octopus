@@ -2,6 +2,8 @@
 // In production these objects are produced by the ingestion pipeline
 // (connectors -> normalization -> matching engine) — never invented by the LLM.
 
+import type { ExposureItem } from "./exposure";
+
 export type Status = "confirmed" | "review" | "candidate" | "rejected";
 
 export interface Evidence {
@@ -13,6 +15,8 @@ export interface Evidence {
   source: string;
   /** signal strength 0-100 */
   weight: number;
+  /** where to go and check it yourself — "verifiable" is worth more when it is one click */
+  url?: string;
 }
 
 /** A typed edge to another node that is NOT "the same identity" — it maps the
@@ -79,6 +83,9 @@ export interface Signal {
   place?: GeoPlace;
   /** public avatar URL (platform nodes) — enables reverse-image search pivots */
   avatarUrl?: string;
+  /** What actually leaked. A leak node without this is an assertion with nothing
+   *  behind it, which is the one thing a leak node must never be. */
+  exposure?: ExposureItem[];
 }
 
 export const SEED = "j0hn_doe";
@@ -165,6 +172,37 @@ export const SIGNALS: Signal[] = [
     linkedIds: ["gh"],
     evidence: [
       { name: "Alias discovered", detail: "Mentioned in the GitHub bio — pivot to expand.", source: "entity extraction · from collected bios", weight: 60 },
+    ],
+  },
+  // A leak node with its contents. The demo needs one, because a leak node is exactly
+  // where the tool used to fall over: it announced a compromise and showed nothing.
+  // Fictional data, shaped the way an infostealer record really comes back.
+  {
+    id: "hr", platform: "INFOSTEALER", handle: "j0hn_doe", disc: "HR", kind: "leak", confidence: 70,
+    status: "review", tier: "probable", createdAt: "2022-06-11", linkedIds: ["em"],
+    evidence: [
+      { name: "Infostealer compromise", detail: "j0hn_doe appears in 2 infostealer log(s). 1 credential(s) recovered in full.", source: "hudsonrock · cavalier", weight: 80 },
+      { name: "Credentials exposed", detail: "Sunshine!2019  ·  hu***** (masked at source)", source: "hudsonrock · cavalier", weight: 88 },
+      { name: "Services signed into", detail: "mail.example.org · store.example.com · vpn.example.net", source: "hudsonrock · cavalier", weight: 70 },
+      { name: "Compromise date", detail: "2022-06-11 → 2023-02-02 (2 events)", source: "hudsonrock · cavalier", weight: 55 },
+      { name: "Victim machine", detail: "Windows 10 Enterprise x64 · DESKTOP-4F2K9", source: "hudsonrock · cavalier", weight: 45 },
+      { name: "Sensitive source", detail: "Infostealer data. Defensive / legal use only — this is a victim's stolen session, not a target list.", source: "guidance", weight: 15 },
+    ],
+    exposure: [
+      { kind: "credential", label: "Top passwords", value: "Sunshine!2019" },
+      { kind: "credential", label: "Top passwords", value: "hu*****", masked: true },
+      { kind: "login", label: "Top logins", value: "https://mail.example.org/owa/", url: "https://mail.example.org/owa/" },
+      { kind: "login", label: "Top logins", value: "https://store.example.com/account", url: "https://store.example.com/account" },
+      { kind: "login", label: "Top logins", value: "https://vpn.example.net/portal", url: "https://vpn.example.net/portal" },
+      { kind: "email", label: "Email", value: "j0hn.doe@example.org" },
+      { kind: "ip", label: "Ip", value: "198.51.100.24" },
+      { kind: "machine", label: "Computer name", value: "DESKTOP-4F2K9" },
+      { kind: "machine", label: "Operating system", value: "Windows 10 Enterprise x64" },
+      { kind: "malware", label: "Stealer family", value: "RedLine" },
+      { kind: "malware", label: "Dropper path", value: "C:\\Users\\john\\AppData\\Local\\Temp\\setup.exe" },
+      { kind: "malware", label: "Antivirus present", value: "Windows Defender" },
+      { kind: "date", label: "Date compromised", value: "2022-06-11T00:00:00.000Z" },
+      { kind: "count", label: "Total user services", value: "12" },
     ],
   },
 ];

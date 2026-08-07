@@ -4,6 +4,7 @@
 
 import { normId } from "./extract";
 import type { Signal } from "./signals";
+import { harvest } from "./exposure";
 
 const ENV_KEY = process.env.INTELX_API_KEY || "";
 const DEFAULT_BASE = (process.env.INTELX_URL || "https://2.intelx.io").replace(/\/$/, "");
@@ -16,10 +17,17 @@ function ix(path: string, key: string, base: string, init: RequestInit = {}) {
   return fetch(base + path, { ...init, headers: { ...(init.headers || {}), "x-key": key, "User-Agent": UA }, cache: "no-store" });
 }
 
+/**
+ * A record as a node. The whole record is harvested rather than three fields off the
+ * top: a leak node that names a dump and shows nothing from it is a dead end, and the
+ * `systemid` gives a direct link back into Intelligence X for the item itself.
+ */
 function toNode(rec: any): Signal {
   const name = String(rec.name || rec.systemid || "leak record").slice(0, 48);
   const bucket = String(rec.bucket || "leak");
   const date = rec.date ? String(rec.date).slice(0, 10) : "";
+  const link = rec.systemid ? `https://intelx.io/?did=${encodeURIComponent(String(rec.systemid))}` : undefined;
+  const exposure = harvest(rec);
   return {
     id: "leak:" + (rec.systemid || normId(name)),
     platform: bucket.toUpperCase().slice(0, 18),
@@ -29,8 +37,12 @@ function toNode(rec: any): Signal {
     confidence: 50,
     tier: "possible",
     status: "review",
+    url: link,
+    createdAt: date || undefined,
+    exposure,
     evidence: [
-      { name: "Appears in leak / paste", detail: `${name} · ${bucket}${date ? " · " + date : ""}`, source: "intelx.io", weight: 62 },
+      { name: "Appears in leak / paste", detail: `${name} · ${bucket}${date ? " · " + date : ""}`, source: "intelx.io", weight: 62, url: link },
+      ...(link ? [{ name: "Open the record", detail: "The item itself on Intelligence X — content requires your account's access level.", source: "intelx.io", weight: 20, url: link }] : []),
       { name: "Sensitive source", detail: "Breach/leak data — handle under a legal basis; do not redistribute credentials.", source: "guidance", weight: 15 },
     ],
   };

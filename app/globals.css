@@ -202,6 +202,8 @@ body {
 .body.rejected { opacity: .32; }
 .body.rejected .disc { border-style: dashed; }
 .body .conf { font-size: 8.5px; color: var(--ink-4); letter-spacing: .05em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* what this node is carrying, readable without opening it */
+.body .haul { font-size: 8.5px; color: var(--accent); letter-spacing: .04em; margin-top: 2px; white-space: nowrap; }
 
 .inspector { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 30; padding: 74px 26px 26px;
   background: var(--panel); backdrop-filter: blur(14px); border-left: 1px solid var(--line);
@@ -235,6 +237,40 @@ body {
 .ev .ed { font-size: 10.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.5; }
 .ev .es { font-size: 9px; color: var(--ink-3); margin-top: 5px; letter-spacing: .08em; }
 .ev .ew { margin-left: auto; font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; flex: none; padding-top: 1px; }
+/* corpus records arrive as several lines in one detail — collapsing them to a single
+   run of text is how you turn three findings into one unreadable sentence */
+.ev .ed-wrap { white-space: pre-wrap; word-break: break-word; }
+.ev-open { margin-left: 10px; color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+
+/* ---- EXPOSURE: what actually leaked ---- */
+.sect-exp { display: flex; align-items: baseline; gap: 12px; color: var(--accent); }
+.exp-copyall { margin-left: auto; background: transparent; border: 1px solid var(--ctl-bd); border-radius: 3px;
+  color: var(--ctl); font-family: var(--mono); font-size: calc(9.5px * var(--ui)); letter-spacing: .1em;
+  padding: 3px 8px; cursor: pointer; }
+.exp-copyall:hover { border-color: var(--accent); color: var(--accent); }
+.exp { border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); border-radius: 4px; padding: 4px 10px 8px; margin-top: 8px; }
+.exp-g + .exp-g { border-top: 1px solid var(--line-soft); margin-top: 6px; padding-top: 6px; }
+.exp-gh { display: flex; align-items: baseline; gap: 8px; padding: 6px 0 3px; }
+.exp-gl { font-size: calc(9.5px * var(--ui)); letter-spacing: .22em; text-transform: uppercase; color: var(--ink-3); }
+/* credentials are the finding, so they are the one group that gets the accent */
+.exp-gl.k-credential { color: var(--accent); }
+.exp-gn { font-size: calc(9.5px * var(--ui)); color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.exp-row { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; }
+.exp-main { min-width: 0; flex: 1; }
+.exp-v { font-size: calc(12px * var(--ui)); color: var(--ink); word-break: break-all; line-height: 1.45; }
+.exp-v a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.exp-l { font-size: calc(9.5px * var(--ui)); color: var(--ink-4); letter-spacing: .06em; margin-top: 1px; }
+.exp-mask { font-style: normal; margin-left: 8px; font-size: calc(9px * var(--ui)); color: var(--type-email); letter-spacing: .08em; }
+.exp-acts { display: flex; gap: 4px; flex: none; opacity: 0; transition: opacity .15s var(--ease); }
+.exp-row:hover .exp-acts, .exp-acts:focus-within { opacity: 1; }
+.exp-acts button { background: var(--ctl-bg); border: 1px solid var(--ctl-bd); border-radius: 3px; color: var(--ctl);
+  font-family: var(--mono); font-size: calc(9.5px * var(--ui)); padding: 2px 7px; cursor: pointer; }
+.exp-acts button:hover { border-color: var(--accent); color: var(--accent); }
+.exp-acts .exp-pivot { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.exp-more { background: transparent; border: 0; color: var(--accent); font-family: var(--mono);
+  font-size: calc(10px * var(--ui)); padding: 4px 0 0; cursor: pointer; letter-spacing: .08em; }
+/* touch has no hover, so the actions would be permanently invisible */
+@media (hover: none) { .exp-acts { opacity: 1; } }
 .grounded { font-size: 9.5px; color: var(--ink-3); letter-spacing: .04em; line-height: 1.7; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
 .grounded b { color: var(--confirm); font-weight: 400; }
 .verbs { display: flex; gap: 22px; margin-top: 20px; }
@@ -1037,6 +1073,7 @@ body::after {
 }
 .body .tag { font-size: calc(10.5px * var(--ui)); margin-top: calc(8px * var(--ui)); }
 .body .conf { font-size: calc(9.5px * var(--ui)); }
+.body .haul { font-size: calc(9.5px * var(--ui)); }
 .body.sel .disc { border-width: 3px; }
 .rail-item { width: calc(38px * var(--ui)); height: calc(38px * var(--ui)); }
 /* the glyphs carry their size as an attribute; CSS has to scale them too */

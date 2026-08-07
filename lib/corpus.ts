@@ -15,6 +15,7 @@
 
 import { sql, dbEnabled } from "./db";
 import type { Signal } from "./signals";
+import { harvestText } from "./exposure";
 
 export interface CorpusRecord {
   /** which dataset this came from, e.g. "collection1-2019" or "forum-x-archive" */
@@ -358,7 +359,14 @@ function redactSecrets(line: string): string {
   return `${m[1]}${m[2]}${secret.slice(0, 2)}${"*".repeat(Math.min(10, Math.max(0, secret.length - 2)))}`;
 }
 
-/** Corpus hits as graph nodes — sourced, and flagged as sensitive. */
+/**
+ * Corpus hits as graph nodes.
+ *
+ * This used to report "N record(s) found" and then never show a record — the `content`
+ * field, the entire reason the corpus exists, was dropped on the floor. The records are
+ * now the node's exposure, and the addresses, URLs and IPs inside them are lifted out
+ * so they can be read and pivoted on instead of sitting buried in a string.
+ */
 export function corpusSignals(hits: CorpusHit[], collectedAt: string): Signal[] {
   const byCorpus = new Map<string, CorpusHit[]>();
   for (const h of hits) {
@@ -366,29 +374,50 @@ export function corpusSignals(hits: CorpusHit[], collectedAt: string): Signal[] 
     arr.push(h);
     byCorpus.set(h.corpus, arr);
   }
-  return [...byCorpus.entries()].map(([corpus, rows]) => ({
-    id: "corpus:" + corpus.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 40) + ":" + rows[0].selector.replace(/[^a-z0-9]/g, "").slice(0, 24),
-    platform: "LOCAL CORPUS",
-    handle: rows[0].selector,
-    disc: "CP",
-    kind: "leak" as const,
-    confidence: 70,
-    tier: "probable" as const,
-    status: "review" as const,
-    collectedAt,
-    evidence: [
-      {
-        name: "Appears in held corpus",
-        detail: `${rows.length} record(s) for "${rows[0].selector}" in "${corpus}"${rows[0].recordDate ? ` (record dated ${rows[0].recordDate})` : ""}. Searched locally — nothing left this machine.`,
-        source: `local corpus · ${corpus}`,
-        weight: 76,
-      },
-      {
-        name: "Sensitive source",
-        detail: "Held breach/archive material — legal basis required; credentials are redacted at ingest and must never be redistributed.",
-        source: "guidance",
-        weight: 15,
-      },
-    ],
-  }));
+  return [...byCorpus.entries()].map(([corpus, rows]) => {
+    const exposure = harvestText(rows.map((r) => r.content), `Record · ${corpus}`);
+    const creds = exposure.filter((e) => e.kind === "credential");
+    const dates = [...new Set(rows.map((r) => r.recordDate).filter(Boolean) as string[])].sort();
+    return {
+      id: "corpus:" + corpus.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 40) + ":" + rows[0].selector.replace(/[^a-z0-9]/g, "").slice(0, 24),
+      platform: "LOCAL CORPUS",
+      handle: rows[0].selector,
+      disc: "CP",
+      kind: "leak" as const,
+      confidence: 70,
+      tier: "probable" as const,
+      status: "review" as const,
+      collectedAt,
+      createdAt: dates[0],
+      exposure,
+      evidence: [
+        {
+          name: "Appears in held corpus",
+          detail: `${rows.length} record(s) for "${rows[0].selector}" in "${corpus}"${dates.length ? ` (dated ${dates[0]}${dates.length > 1 ? ` → ${dates[dates.length - 1]}` : ""})` : ""}. Searched locally — nothing left this machine.`,
+          source: `local corpus · ${corpus}`,
+          weight: 76,
+        },
+        // the records ARE the finding: showing the first few here is what makes this
+        // node worth opening, and the rest are in EXPOSURE
+        {
+          name: `Records (${rows.length})`,
+          detail: rows.slice(0, 6).map((r) => r.content).join("\n") + (rows.length > 6 ? `\n… +${rows.length - 6} more in EXPOSURE` : ""),
+          source: `local corpus · ${corpus}`,
+          weight: 78,
+        },
+        ...(creds.length ? [{
+          name: "Credentials in record",
+          detail: creds.slice(0, 8).map((c) => c.value + (c.masked ? " (masked at ingest)" : "")).join("  ·  ") + (creds.length > 8 ? `  … +${creds.length - 8} more` : ""),
+          source: `local corpus · ${corpus}`,
+          weight: 84,
+        }] : []),
+        {
+          name: "Sensitive source",
+          detail: "Held breach/archive material — legal basis required, and it must never be redistributed. Credential tails are masked at ingest.",
+          source: "guidance",
+          weight: 15,
+        },
+      ],
+    };
+  });
 }

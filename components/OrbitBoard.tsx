@@ -24,6 +24,8 @@ import { toGraphML } from "@/lib/graphexport";
 import { Logo } from "./Logo";
 import { loadCasefile, saveCasefile, addCard, updateCard, correlatable, emptyCasefile, sanitizeCasefile, type Casefile, type BoardCard, type OrbitLayout } from "@/lib/casefile";
 import { Glyph, type GlyphName } from "./Glyph";
+import ExposurePanel from "./ExposurePanel";
+import { exposureSummary } from "@/lib/exposure";
 import { handleRarity } from "@/lib/rarity";
 import { usernameVariants } from "@/lib/variants";
 import { LLM_PRESETS } from "@/lib/llmconfig";
@@ -949,7 +951,10 @@ export default function OrbitBoard() {
       el.className = "body";
       el.dataset.kind = d.kind || "platform";
       const discContent = d.kind === "email" ? "✉" : d.kind === "alias" ? "~" : d.kind === "phone" ? "☎" : d.kind === "location" ? "⌖" : d.kind === "leak" ? "⚠" : d.kind === "person" ? "◆" : d.kind === "org" ? "▣" : d.kind === "domain" ? "◇" : d.disc;
-      el.innerHTML = `<div class="disc">${discContent}</div><div class="tag">${escapeHtml(d.handle)}</div><div class="conf">${d.confidence}%</div>`;
+      // A leak node says what it is CARRYING, not just that it exists. "INFOSTEALER"
+      // with nothing under it costs a click to discover there is nothing under it.
+      const haul = d.exposure?.length ? `<div class="haul">${escapeHtml(exposureSummary(d.exposure))}</div>` : "";
+      el.innerHTML = `<div class="disc">${discContent}</div><div class="tag">${escapeHtml(d.handle)}</div><div class="conf">${d.confidence}%</div>${haul}`;
       bodiesEl.appendChild(el);
       // a node announces its arrival once — on a graph that grows while you work, this
       // is what tells you something appeared without you having to diff the screen
@@ -1630,6 +1635,30 @@ export default function OrbitBoard() {
       if (!res.ok || !data.signals?.length) { setScanMsg("nothing new to pivot"); return; }
       mergeRef.current(data.signals, node.id, normId(q));
       setScanMsg(`+ hop from ${q} (${data.signals.length})`);
+    } catch {
+      setScanMsg("network unavailable");
+    } finally {
+      setScanning(false);
+      setTimeout(() => setScanMsg(null), 4000);
+    }
+  }
+
+  /**
+   * Pivot on a raw value pulled out of a leak — an address inside a dumped record, a
+   * service URL from a stealer log. This is the whole point of showing the contents:
+   * what leaked has to be usable as the next seed, not just readable.
+   */
+  async function pivotOnValue(value: string, fromId?: string) {
+    const q = String(value || "").replace(/^@/, "").trim();
+    if (!q || scanning) return;
+    setScanning(true); setScanMsg(`pivoting on ${q.slice(0, 48)}…`);
+    try {
+      const cids = [...enabledRef.current].join(",");
+      const res = await fetch(`/api/scan?username=${encodeURIComponent(q)}&connectors=${encodeURIComponent(cids)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
+      const data = await res.json();
+      if (!res.ok || !data.signals?.length) { setScanMsg(`nothing found for ${q.slice(0, 32)}`); return; }
+      mergeRef.current(data.signals, fromId || "exposure:" + normId(q), normId(q));
+      setScanMsg(`+ ${data.signals.length} from ${q.slice(0, 32)}`);
     } catch {
       setScanMsg("network unavailable");
     } finally {
@@ -2605,14 +2634,24 @@ export default function OrbitBoard() {
               <button className="pivot-btn" onClick={() => pivotOn(selected)} disabled={scanning}>PIVOT</button>
               <button className="pivot-btn" onClick={() => autoExpand(selected)} disabled={scanning}>AUTO-EXPAND · 2 hops</button>
             </div>
+            {/* What actually leaked, before anything else. A leak node whose first
+                screen is provenance and caveats makes the analyst hunt for the one
+                thing they opened it for. */}
+            {selected.exposure && selected.exposure.length > 0 && (
+              <ExposurePanel items={selected.exposure} onPivot={(v) => pivotOnValue(v, selected.id)} />
+            )}
             <div className="sect">VERIFIED EVIDENCE</div>
             <div className="evs">
               {selected.evidence.map((e, idx) => (
                 <div className="ev" key={idx}>
                   <div>
                     <div className="en">{e.name}</div>
-                    <div className="ed">{e.detail}</div>
-                    <div className="es">{e.source}</div>
+                    {/* detail can be multi-line (corpus records) — keep the breaks */}
+                    <div className="ed ed-wrap">{e.detail}</div>
+                    <div className="es">
+                      {e.source}
+                      {e.url && <a className="ev-open" href={e.url} target="_blank" rel="noopener noreferrer">open ↗</a>}
+                    </div>
                   </div>
                   <div className="ew">{e.weight}%</div>
                 </div>
