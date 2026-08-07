@@ -3,6 +3,7 @@
 // (connectors -> normalization -> matching engine) — never invented by the LLM.
 
 import type { ExposureItem } from "./exposure";
+import type { CompromiseEvent } from "./compromise";
 
 export type Status = "confirmed" | "review" | "candidate" | "rejected";
 
@@ -86,6 +87,9 @@ export interface Signal {
   /** What actually leaked. A leak node without this is an assertion with nothing
    *  behind it, which is the one thing a leak node must never be. */
   exposure?: ExposureItem[];
+  /** When it leaked, in order. Decides whether a recovered credential is history or
+   *  a live exposure — the one thing a bare list of passwords cannot tell you. */
+  compromise?: CompromiseEvent[];
 }
 
 export const SEED = "j0hn_doe";
@@ -211,20 +215,37 @@ export const SIGNALS: Signal[] = [
     id: "br", platform: "BREACH DATA", handle: "j0hn.doe@example.org", disc: "BR", kind: "leak",
     confidence: 74, status: "review", tier: "probable", linkedIds: ["hr", "em"],
     evidence: [
-      { name: "Credentials recovered in clear", detail: "Sunshine!2019  ·  hunter2000", source: "proxynova", weight: 86 },
+      { name: "Credentials recovered in clear", detail: "Kerguelen#88z  ·  Vaudreuil2019!  ·  Vaudreuil2023!", source: "proxynova · dehashed", weight: 86 },
       { name: "Named breaches (2)", detail: "Collection #1 (2019-01) · MyFitnessPal (2018-02)", source: "xposedornot · leakcheck", weight: 64 },
       { name: "Sources reached", detail: "proxynova, xposedornot, leakcheck", source: "octopus", weight: 10 },
     ],
+    // Deliberately shaped to exercise every correlation the engine can draw:
+    //  - an exact reuse across two identities (Kerguelen#88z)
+    //  - an incremented habit across two more (Vaudreuil2019! / Vaudreuil2023!)
+    //  - a shared password the guard must REFUSE (123456)
+    //  - dates spanning years, so the hygiene finding has something to say
     exposure: [
-      { kind: "credential", label: "Password", value: "Sunshine!2019", source: "proxynova" },
-      { kind: "credential", label: "Password", value: "hunter2000", source: "proxynova" },
+      { kind: "credential", label: "Password", value: "Kerguelen#88z", source: "proxynova" },
+      { kind: "credential", label: "Password", value: "Vaudreuil2019!", source: "proxynova" },
+      { kind: "credential", label: "Password", value: "Vaudreuil2023!", source: "dehashed" },
       { kind: "identifier", label: "Login", value: "j0hn.doe@example.org", source: "proxynova · leakcheck" },
-      { kind: "record", label: "COMB line", value: "j0hn.doe@example.org:Sunshine!2019", source: "proxynova" },
-      { kind: "record", label: "COMB line", value: "j0hn.doe@example.org:hunter2000", source: "proxynova" },
+      { kind: "record", label: "COMB line", value: "j0hn.doe@example.org:Kerguelen#88z", source: "proxynova" },
+      { kind: "record", label: "COMB line", value: "jd.pro@example-corp.fr:Kerguelen#88z", source: "proxynova" },
+      { kind: "record", label: "COMB line", value: "johnny_d:Vaudreuil2019!", source: "proxynova" },
+      { kind: "record", label: "COMB line", value: "jdoe_backup@example.net:Vaudreuil2023!", source: "dehashed" },
+      { kind: "record", label: "COMB line", value: "unrelated_a@example.com:123456", source: "proxynova" },
+      { kind: "record", label: "COMB line", value: "unrelated_b@example.com:123456", source: "proxynova" },
       { kind: "breach", label: "Breach", value: "Collection #1 (2019-01)", source: "xposedornot" },
       { kind: "breach", label: "Breach", value: "MyFitnessPal (2018-02)", source: "leakcheck" },
+      { kind: "date", label: "Date compromised", value: "2019-01-14", source: "proxynova" },
+      { kind: "date", label: "Date compromised", value: "2023-09-02", source: "dehashed" },
       { kind: "field", label: "Leaked in Collection #1", value: "passwords", source: "xposedornot" },
       { kind: "field", label: "Leaked in MyFitnessPal", value: "email addresses", source: "xposedornot" },
+    ],
+    compromise: [
+      { date: "2018-02-01", label: "MyFitnessPal (2018-02)", kind: "breach", source: "leakcheck" },
+      { date: "2019-01-14", label: "Date compromised", kind: "stealer", source: "proxynova" },
+      { date: "2023-09-02", label: "Date compromised", kind: "stealer", source: "dehashed" },
     ],
   },
 ];

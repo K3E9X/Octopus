@@ -22,6 +22,7 @@
 import type { Signal } from "./signals";
 import { normId } from "./extract";
 import { harvest, mergeExposure, type ExposureItem } from "./exposure";
+import { reuseStrength } from "./reuse";
 
 const UA = "Octopus-OSINT/0.1 (+https://github.com/K3E9X/Tusna)";
 
@@ -88,6 +89,35 @@ export async function proxyNova(term: string, limit = 25): Promise<ExposureItem[
     out.push({ kind: "credential", label: "Password", value: parts.secret, source: "proxynova" });
   }
   return out;
+}
+
+/**
+ * Search BY SECRET rather than by identity: given a password, who else used it?
+ *
+ * On an improbable secret this is the widest identity sweep available — it walks the
+ * dump sideways and returns accounts no identifier-based query would ever reach.
+ *
+ * Two guards, both refusals rather than warnings:
+ *   - a common password is refused outright. `123456` would return an unbounded set of
+ *     unrelated strangers, and every one of them would arrive labelled as a lead.
+ *   - the result is never asserted as the same person. It is a candidate set, and the
+ *     reuse guard decides afterwards whether the shared secret means anything.
+ */
+export async function searchBySecret(secret: string, limit = 40): Promise<{ items: ExposureItem[]; refused?: string }> {
+  const v = reuseStrength(secret);
+  if (!v.linkable) {
+    return { items: [], refused: `Refused: ${v.reason}. Searching on it would return unrelated people.` };
+  }
+  const d = await getJSON(`${COMB}?query=${encodeURIComponent(secret)}&start=0&limit=${limit}`);
+  const items: ExposureItem[] = [];
+  for (const raw of linesFrom(d)) {
+    const parts = splitCombo(raw);
+    // the index matches substrings, so lines where this is not the actual secret get in
+    if (!parts || parts.secret !== secret) continue;
+    items.push({ kind: "record", label: "COMB line", value: raw, source: "proxynova · by-secret" });
+    items.push({ kind: "identifier", label: "Also used this password", value: parts.login, source: "proxynova · by-secret" });
+  }
+  return { items };
 }
 
 // ---- XposedOrNot: which breaches, and which field classes leaked ----------------

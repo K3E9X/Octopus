@@ -25,6 +25,7 @@ import { Logo } from "./Logo";
 import { loadCasefile, saveCasefile, addCard, updateCard, correlatable, emptyCasefile, sanitizeCasefile, type Casefile, type BoardCard, type OrbitLayout } from "@/lib/casefile";
 import { Glyph, type GlyphName } from "./Glyph";
 import ExposurePanel from "./ExposurePanel";
+import ReuseView from "./ReuseView";
 import { exposureSummary } from "@/lib/exposure";
 import { handleRarity } from "@/lib/rarity";
 import { usernameVariants } from "@/lib/variants";
@@ -107,7 +108,7 @@ export default function OrbitBoard() {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [dossier, setDossier] = useState<Dossier | null>(null);
-  const [view, setView] = useState<"board" | "case" | "table" | "timeline" | "map">("board");
+  const [view, setView] = useState<"board" | "case" | "table" | "timeline" | "map" | "reuse">("board");
   const [monitor, setMonitor] = useState<MonitorDiff | null>(null);
   const [monitoring, setMonitoring] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -237,6 +238,7 @@ export default function OrbitBoard() {
     { group: "View", label: "Table", hint: "Every node, sortable and filterable", run: () => setView("table"), key: "3" },
     { group: "View", label: "Timeline", hint: "The chronology of the footprint", run: () => setView("timeline"), key: "4" },
     { group: "View", label: "Map", hint: "Resolved locations and where they converge", run: () => setView("map"), key: "5" },
+    { group: "View", label: "Credential reuse", hint: "Who shares a password with whom — and what the guard refused", run: () => setView("reuse"), key: "6" },
     { group: "Graph", label: "Fit the graph to the view", hint: "Frame every node currently on the board", run: () => { setView("board"); fitRef.current(); }, key: "F" },
     { group: "Graph", label: "Layout: orbit", hint: "Distance from the seed IS the confidence", run: () => { setView("board"); setOrbitMode("orbit"); } },
     { group: "Graph", label: "Layout: clusters", hint: "Accounts resolved to one identity sit together", run: () => { setView("board"); setOrbitMode("cluster"); } },
@@ -1709,6 +1711,32 @@ export default function OrbitBoard() {
     }
   }
 
+  /**
+   * Search BY the secret: who else used this password?
+   *
+   * On an improbable secret this is the widest sweep the tool has — it walks the dump
+   * sideways and returns accounts no identifier-based query could reach. On a common
+   * one the server refuses outright and says why, because the alternative is an
+   * unbounded set of unrelated strangers arriving labelled as leads.
+   */
+  async function searchSecret(secret: string, fromId?: string) {
+    if (scanning || !secret) return;
+    setScanning(true); setScanMsg("searching for other users of this password…");
+    try {
+      const res = await fetch(`/api/secret?q=${encodeURIComponent(secret)}`, { headers: { ...cfgHeaders(), ...tradecraftHeaders() } });
+      const d = await res.json().catch(() => null);
+      if (d?.refused) { setScanMsg(d.refused); return; }
+      if (!d?.signals?.length) { setScanMsg("no other account found with this password"); return; }
+      const added = mergeRef.current(d.signals, fromId || "", "secret:" + normId(secret));
+      setScanMsg(added ? `+${added} identity/identities share this password` : "nothing new");
+    } catch {
+      setScanMsg("network unavailable");
+    } finally {
+      setScanning(false);
+      setTimeout(() => setScanMsg(null), 6000);
+    }
+  }
+
   async function autoExpand(startNode: Signal) {
     if (scanning) return;
     const MAX_HOPS = 2, CAP = 40, BREADTH = 5;
@@ -1959,6 +1987,7 @@ export default function OrbitBoard() {
       })()}
 
       {view === "map" && <MapView signals={currentSignals()} onSelect={(id) => setSelectedId(id)} />}
+      {view === "reuse" && <ReuseView signals={currentSignals()} onPivot={(v) => pivotOnValue(v)} />}
 
       {view === "case" && (
         <CaseBoard
@@ -2132,6 +2161,7 @@ export default function OrbitBoard() {
           <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>TABLE</button>
           <button className={view === "timeline" ? "on" : ""} onClick={() => setView("timeline")}>TIMELINE</button>
           <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>MAP</button>
+          <button className={view === "reuse" ? "on" : ""} onClick={() => setView("reuse")}>REUSE</button>
         </div>
       </div>
       {scanning && <div className="scanline"><i /></div>}
@@ -2415,7 +2445,25 @@ export default function OrbitBoard() {
                 <label className="add-field"><span>Recorded Future key</span><input type="password" value={settings.recordedfuture || ""} placeholder="enterprise (bonus)" onChange={(e) => updateSettings({ recordedfuture: e.target.value })} /></label>
                 <div className="api-testcol"><PingDot svc="recordedfuture" /></div>
               </div>
-              <div className="api-free"><span>Hudson Rock (infostealer intel)</span> — free, no key. <PingDot svc="hudsonrock" /></div>
+              <div className="api-free"><span>Hudson Rock (infostealer intel)</span> — free, no key, but it MASKS what it returns. <PingDot svc="hudsonrock" /></div>
+              <div className="api-free"><span>ProxyNova COMB · XposedOrNot · LeakCheck public</span> — free, no key. ProxyNova is the one that returns <b>login:password in clear</b>.</div>
+
+              {/* The paid tier of the same question. Worth stating plainly what the key
+                  buys: these four return everything unmasked. */}
+              <div className="guide-sect">Paid breach providers — unmasked content</div>
+              <div className="add-cols">
+                <label className="add-field"><span>Dehashed</span><input type="password" value={settings.dehashed || ""} placeholder="account-email:api-key" onChange={(e) => updateSettings({ dehashed: e.target.value })} /></label>
+              </div>
+              <div className="add-cols">
+                <label className="add-field"><span>Snusbase</span><input type="password" value={settings.snusbase || ""} placeholder="activation token" onChange={(e) => updateSettings({ snusbase: e.target.value })} /></label>
+              </div>
+              <div className="add-cols">
+                <label className="add-field"><span>LeakCheck Pro</span><input type="password" value={settings.leakcheckPro || ""} placeholder="api key" onChange={(e) => updateSettings({ leakcheckPro: e.target.value })} /></label>
+              </div>
+              <div className="add-cols">
+                <label className="add-field"><span>Hudson Rock Pro</span><input type="password" value={settings.hudsonrockPro || ""} placeholder="api key — same endpoints, unmasked" onChange={(e) => updateSettings({ hudsonrockPro: e.target.value })} /></label>
+              </div>
+              <div className="api-note">Every row in EXPOSURE names the source that produced it, so you can see exactly what a key bought over what was already free. A rejected key is reported as a rejected key — never folded into &ldquo;nothing found&rdquo;.</div>
 
               <div className="guide-sect" id="api-collector">Deep-scan collector (Maigret / Holehe / SpiderFoot)</div>
               <div className="add-cols">
@@ -2683,8 +2731,26 @@ export default function OrbitBoard() {
             {/* What actually leaked, before anything else. A leak node whose first
                 screen is provenance and caveats makes the analyst hunt for the one
                 thing they opened it for. */}
+            {selected.compromise && selected.compromise.length > 0 && (
+              <>
+                <div className="sect">COMPROMISE TIMELINE</div>
+                <div className="ctl">
+                  {selected.compromise.map((e, i) => (
+                    <div className="ctl-e" key={i}>
+                      <span className="ctl-d">{e.date}</span>
+                      <span className="ctl-l">{e.label}</span>
+                      {e.source && <span className="ctl-s">{e.source}</span>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             {selected.exposure && selected.exposure.length > 0 && (
-              <ExposurePanel items={selected.exposure} seed={seed} known={[selected.handle]} onPivot={(v) => pivotOnValue(v, selected.id)} />
+              <ExposurePanel
+                items={selected.exposure} seed={seed} known={[selected.handle]}
+                onPivot={(v) => pivotOnValue(v, selected.id)}
+                onSecretSearch={(secret) => searchSecret(secret, selected.id)}
+              />
             )}
             <div className="sect">VERIFIED EVIDENCE</div>
             <div className="evs">

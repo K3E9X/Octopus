@@ -46,7 +46,7 @@ const PIVOTABLE: ExposureKind[] = ["email", "identifier", "login", "ip"];
 
 const PER_GROUP = 10;
 
-export default function ExposurePanel({ items, onPivot, seed, known }: { items: ExposureItem[]; onPivot: (v: string) => void; seed?: string; known?: string[] }) {
+export default function ExposurePanel({ items, onPivot, seed, known, onSecretSearch }: { items: ExposureItem[]; onPivot: (v: string) => void; seed?: string; known?: string[]; onSecretSearch?: (v: string) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showMasked, setShowMasked] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
@@ -96,6 +96,11 @@ export default function ExposurePanel({ items, onPivot, seed, known }: { items: 
           <button onClick={() => copy(it.value, key)}>{copied === key ? "ok" : "copy"}</button>
           {PIVOTABLE.includes(it.kind) && !it.masked && (
             <button className="exp-pivot" onClick={() => onPivot(it.value)}>pivot</button>
+          )}
+          {/* the one query that starts from a credential instead of a person: who else
+              used this password. Refused server-side on a common secret. */}
+          {it.kind === "credential" && !it.masked && onSecretSearch && (
+            <button className="exp-pivot" title="who else used this password?" onClick={() => onSecretSearch(it.value)}>who else?</button>
           )}
         </div>
       </div>

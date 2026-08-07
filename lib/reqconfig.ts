@@ -12,6 +12,10 @@ export interface ClientConfig {
   recordedfuture?: string;
   collectorUrl?: string;
   collectorToken?: string;
+  dehashed?: string;
+  snusbase?: string;
+  leakcheckPro?: string;
+  hudsonrockPro?: string;
   llm?: Partial<LLMConfig>;
 }
 

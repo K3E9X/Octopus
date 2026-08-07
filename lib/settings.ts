@@ -10,6 +10,12 @@ export interface OctopusSettings {
   recordedfuture?: string;
   collectorUrl?: string;
   collectorToken?: string;
+  // --- paid breach providers: these return everything IN CLEAR ---
+  /** "account-email:api-key" — Dehashed auth is HTTP basic */
+  dehashed?: string;
+  snusbase?: string;
+  leakcheckPro?: string;
+  hudsonrockPro?: string;
   llmUrl?: string;
   llmModel?: string;
   llmKey?: string;
@@ -47,6 +53,10 @@ export function toClientConfig(s: OctopusSettings) {
     recordedfuture: s.recordedfuture || undefined,
     collectorUrl: s.collectorUrl || undefined,
     collectorToken: s.collectorToken || undefined,
+    dehashed: s.dehashed || undefined,
+    snusbase: s.snusbase || undefined,
+    leakcheckPro: s.leakcheckPro || undefined,
+    hudsonrockPro: s.hudsonrockPro || undefined,
     llm: (s.llmUrl || s.llmModel || s.llmKey) ? { url: s.llmUrl, model: s.llmModel, key: s.llmKey, web: s.llmWeb } : undefined,
   };
 }

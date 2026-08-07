@@ -13,6 +13,8 @@ import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
 import { breachExposure, breachSignal } from "@/lib/breaches";
 import { leadPlan, type Lead } from "@/lib/leads";
 import { nodesFromExposure, applyReuse } from "@/lib/leaknodes";
+import { leakApis, anyLeakKey } from "@/lib/leakapis";
+import { compromiseTimeline, hygiene } from "@/lib/compromise";
 import { looksLikePhone, phoneIntel, type PhoneIntel } from "@/lib/phone";
 import { looksLikeName, nameSignals, nameCandidates } from "@/lib/name";
 import { namePairFromHandle, matchName, nameMatchEvidence } from "@/lib/namematch";
@@ -636,8 +638,25 @@ export async function GET(req: NextRequest) {
     // different source, not a cleverer client. These are keyless.
     if (!enabled || enabled.has("breaches")) {
       try {
-        const res = await breachExposure(isEmail ? q : matchTarget);
-        signals.push(...breachSignal(isEmail ? q : matchTarget, res, collectedAt));
+        const term = isEmail ? q : matchTarget;
+        const res = await breachExposure(term);
+        // Paid providers, when the analyst has configured a key. They return everything
+        // in clear, and their rows merge into the same node with their own attribution
+        // so you can see exactly what the key bought over what was already free.
+        const keys = {
+          dehashed: clientCfg.dehashed || process.env.DEHASHED_KEY,
+          snusbase: clientCfg.snusbase || process.env.SNUSBASE_KEY,
+          leakcheck: clientCfg.leakcheckPro || process.env.LEAKCHECK_KEY,
+          hudsonrock: clientCfg.hudsonrockPro || process.env.HUDSONROCK_KEY,
+        };
+        if (anyLeakKey(keys)) {
+          const paid = await leakApis(term, keys);
+          res.items.push(...paid.items);
+          res.reached.push(...paid.reached);
+          // a rejected key is not a clean record, and only one of those means "nothing"
+          for (const p of paid.problems) res.silent.push(`${p.id} (${p.problem})`);
+        }
+        signals.push(...breachSignal(term, res, collectedAt));
       } catch { /* a silent index is a missing source, never a failed scan */ }
     }
 
@@ -669,6 +688,17 @@ export async function GET(req: NextRequest) {
         // reuse runs per leak: the association between a login and a secret is only
         // observed inside one dump line, and pooling lines across sources would invent it
         applyReuse(signals, leak.exposure!, leak.id);
+
+        // The dates were being collected and used as decoration. What they actually
+        // answer is whether a recovered credential is history or a live exposure.
+        const events = compromiseTimeline(leak.exposure!);
+        if (events.length) {
+          leak.compromise = events;
+          if (!leak.createdAt) leak.createdAt = events[0].date;
+          for (const h of hygiene(leak.exposure!, events)) {
+            leak.evidence.push({ name: h.headline, detail: h.detail, source: "octopus · compromise timeline", weight: h.weight });
+          }
+        }
       }
 
       // Chase the best leads. Bounded hard: this runs inside one request, and an
