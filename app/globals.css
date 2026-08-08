@@ -1164,281 +1164,194 @@ body::after {
    The page scrolls; the neural field stays behind it.
    ========================================================================== */
 
-.lp { position: relative; min-height: 100vh; overflow-x: hidden; }
-body:has(.lp), body:has(.auth-wrap), body:has(.adm) { overflow: auto; }
-/* The stacking rule below and this one have equal specificity, so `.neural` must be
-   excluded from it explicitly — otherwise the canvas loses `fixed`, falls back to the
-   intrinsic 2:1 canvas ratio and the field sits in a band at the top of the page. */
-/* Anything that must stay FIXED opts out with data-fixed. This rule and the fixed
-   layers have equal specificity, so without the exclusion the motion layers would
-   silently become position:relative — exactly how the neural canvas broke before.
-   Stack: field 0 · depth shade 1 · content 2. */
-.lp > *:not(.neural):not([data-fixed]) { position: relative; z-index: 2; }
-.neural { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
+/* ============================================================================
+   LANDING — the Abyss depth dive.
+   Surface at the seed panel, −800 m at the reach, −2400 m at the verdict,
+   −3900 m at the floor. Built to the reference; every colour goes through the
+   tokens so the light theme comes for free.
+   ========================================================================== */
+.lp { position: relative; background: var(--void); color: var(--ink); font-family: var(--mono); overflow-x: hidden; }
+body:has(.lp) { overflow: auto; }
 
-.lp-top { display: flex; align-items: center; gap: 28px; padding: 22px clamp(18px, 5vw, 54px); }
-.lp-brand, .auth-brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
-.lp-brand span, .auth-brand span { display: flex; align-items: baseline; gap: 8px; }
-.lp-brand b, .auth-brand b { font-weight: 400; font-size: calc(15px * var(--ui)); letter-spacing: .3em; color: var(--ink); }
-.lp-brand small, .auth-brand small { font-size: calc(10px * var(--ui)); letter-spacing: .26em; color: var(--accent); }
-.lp-nav { display: flex; align-items: center; gap: 22px; margin-left: auto; flex-wrap: wrap; }
-.lp-nav a { color: var(--ctl); text-decoration: none; font-size: calc(11.5px * var(--ui)); letter-spacing: .1em; }
+/* Fixed layers opt out of the stacking rule with data-fixed. This rule and the
+   fixed layers have EQUAL specificity, so without the exclusion they silently
+   become position:relative and the whole effect collapses. */
+.lp > *:not(.snow):not([data-fixed]) { position: relative; z-index: 2; }
+.snow { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
+
+.lp-top { position: relative; z-index: 20; display: flex; align-items: center; gap: 28px;
+  padding: 20px clamp(18px, 6vw, 72px); }
+.lp-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.lp-brand span { display: flex; align-items: baseline; gap: 9px; }
+.lp-brand b { font-family: var(--display); font-weight: 800; font-size: 16px; letter-spacing: .22em; color: var(--ink); }
+.lp-brand small { font-size: 9.5px; letter-spacing: .3em; color: var(--accent); }
+.lp-nav { display: flex; align-items: center; gap: 24px; margin-left: auto; flex-wrap: wrap; }
+.lp-nav a { color: var(--ink-2); text-decoration: none; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .lp-nav a:hover { color: var(--accent); }
-.lp-cta { border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent) !important;
-  padding: calc(8px * var(--ui)) calc(16px * var(--ui)); border-radius: 3px; }
-.lp-cta:hover { background: var(--accent-dim); }
+.lp-nav .lp-cta { border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); color: var(--accent);
+  padding: 10px 20px; letter-spacing: .18em; transition: .25s var(--ease); }
+.lp-nav .lp-cta:hover { background: var(--accent-dim); border-color: var(--accent); }
 
-/* The hero is a two-column grid on wide viewports: copy on the left, the creature on
-   the right. It is a single column below 1080px and the 3D column is REMOVED rather
-   than stacked — a WebGL scene squeezed into a 340px-tall band on a phone costs a
-   frame budget and returns a smudge. */
-.lp-hero { display: grid; grid-template-columns: 1fr; gap: 0; align-items: center; }
-.lp-hero-3d { display: none; }
-/* The split only happens when there is genuinely room for it. At 1080px the copy
-   column was narrow enough to break the h1 into five lines and push its last word
-   into the creature — a two-column hero that cramps the reading column is worse
-   than one column. */
-@media (min-width: 1240px) {
-  .lp-main { max-width: 1360px; }
-  .lp-hero { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 30%); gap: clamp(32px, 4vw, 76px); }
-  /* the column is the sizing context for the heading */
-  .lp-hero-copy { container-type: inline-size; }
-  .lp-hero-3d { display: block; position: relative; height: min(72vh, 640px); }
-}
-.lp-main { max-width: 900px; margin: 0 auto; padding: clamp(30px, 9vh, 90px) clamp(18px, 5vw, 54px) 60px; }
-/* Occlusion, not decoration. The field is dense enough to be tissue, which means axons
-   run straight through the words. This clears the ground under the reading column in
-   the page's own colour and lets the network stay legible at the edges. */
-.lp-main::before, .lp-top::before {
-  content: ""; position: absolute; z-index: -1; pointer-events: none;
-  inset: -8vh -6vw; border-radius: 50%;
-  background: radial-gradient(ellipse at 40% 50%, var(--void) 0%, var(--void) 38%, transparent 72%);
-}
-.lp-top { position: relative; }
-.lp-top::before { inset: -120% -4vw -60% -4vw; }
-/* The display face carries the headings; data stays monospace everywhere, because a
-   proportional font on an identifier is how a zero and an O stop being distinguishable. */
-/* The size is capped against the COLUMN, not just the viewport. "everything." is one
-   unbreakable 11-character word: at 64px it is ~8.25em wide, so in the two-column hero
-   it overflowed its box by 128px and ran straight into the creature — invisible to
-   getBoundingClientRect, which reports the box and not the painted glyphs. 11.5cqw
-   keeps the longest word inside whatever width the column actually has. */
-.lp-h1 { font-family: var(--display); font-size: min(64px, 6.4vw, 11.5cqw); line-height: 1.06;
-  letter-spacing: -.02em; font-weight: 800; color: var(--ink); margin: 0 0 22px; }
-@supports not (font-size: 1cqw) { .lp-h1 { font-size: clamp(34px, 4.4vw, 56px); } }
-.lp-lead { font-size: calc(14px * var(--ui)); line-height: 1.75; color: var(--ink-2); max-width: 62ch; margin: 0 0 34px; }
+/* ---- 0 m · surface ---------------------------------------------------------- */
+.lp-hero { max-width: 1500px; margin: 0 auto; padding: clamp(20px, 5vh, 60px) clamp(18px, 6vw, 72px) 90px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: clamp(20px, 3vw, 40px); align-items: center; }
+.lp-hero-copy { container-type: inline-size; min-width: 0; }
 
-.lp-search { display: flex; align-items: center; gap: 12px; border: 2px solid var(--ctl-bd); border-radius: 4px;
-  background: color-mix(in srgb, var(--void) 72%, transparent); backdrop-filter: blur(8px); padding: 6px 12px; }
-.lp-search:focus-within { border-color: color-mix(in srgb, var(--accent) 65%, transparent); box-shadow: 0 0 0 4px var(--accent-dim); }
-.lp-search label { font-size: calc(10px * var(--ui)); letter-spacing: .2em; text-transform: uppercase; color: var(--ink-3); }
-.lp-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--accent);
-  font-family: var(--mono); font-size: calc(16px * var(--ui)); padding: 12px 0; letter-spacing: .02em; }
-.lp-search input::placeholder { color: var(--ink-4); font-size: calc(13px * var(--ui)); }
-.lp-kind { flex: none; font-size: calc(10px * var(--ui)); letter-spacing: .16em; text-transform: uppercase;
-  border: 1px solid var(--ctl-bd); border-radius: 12px; padding: 5px 11px; color: var(--ctl); white-space: nowrap; }
+.lp-eyebrow, .lp-depth-label { display: flex; align-items: center; gap: 12px; font-size: 10px;
+  letter-spacing: .32em; text-transform: uppercase; color: var(--ink-3); }
+.lp-eyebrow { margin-bottom: 30px; }
+.lp-depth-label { margin-bottom: 20px; }
+.lp-pip { width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 14px var(--accent); animation: glowpulse 2.6s ease-in-out infinite; flex: none; }
+.lp-pip.sm { width: 5px; height: 5px; box-shadow: none; animation-duration: 1.8s; }
+@keyframes glowpulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* "verdict" is one unbreakable word: capped against the COLUMN, not just the
+   viewport, or it overflows its box and runs into the creature. */
+.lp-h1 { font-family: var(--display); font-weight: 800; font-size: min(96px, 6.4vw, 15cqw);
+  line-height: .98; letter-spacing: -.025em; color: var(--ink); margin: 0 0 28px; text-wrap: balance; }
+.lp-h1 span { color: var(--accent); text-shadow: 0 0 34px var(--accent-dim); }
+@supports not (font-size: 1cqw) { .lp-h1 { font-size: clamp(40px, 5vw, 76px); } }
+.lp-lead { font-size: 14px; line-height: 1.85; color: var(--ink-2); max-width: 52ch; margin: 0 0 40px; }
+.lp-lead b { color: var(--ink); font-weight: 500; }
+
+.lp-engine { border: 1px solid var(--ctl-bd); background: color-mix(in srgb, var(--void) 72%, transparent);
+  backdrop-filter: blur(10px); }
+.lp-engine-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); font-size: 9.5px; letter-spacing: .28em;
+  text-transform: uppercase; color: var(--ink-3); }
+.lp-kind { margin-left: auto; font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase;
+  border: 1px solid var(--ctl-bd); padding: 4px 10px; color: var(--ctl); white-space: nowrap; }
 .lp-kind:not(.k-empty) { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   animation: latch .42s var(--ease); }
-/* The chip is the engine committing to a dispatch. It should read as a decision
-   landing, not as a label quietly swapping. */
 @keyframes latch {
-  0%   { transform: scale(.86); opacity: 0; letter-spacing: .34em; }
-  55%  { transform: scale(1.05); opacity: 1; }
-  100% { transform: none; letter-spacing: .16em; }
+  0% { transform: scale(.86); opacity: 0; letter-spacing: .34em; }
+  55% { transform: scale(1.05); opacity: 1; }
+  100% { transform: none; letter-spacing: .2em; }
 }
-
-.lp-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.lp-examples button { background: transparent; border: 1px solid var(--line); border-radius: 12px; color: var(--ink-3);
-  font-family: var(--mono); font-size: calc(10.5px * var(--ui)); padding: 5px 11px; cursor: pointer; }
-.lp-examples button:hover { border-color: var(--accent); color: var(--accent); }
-
-.lp-read { margin-top: 34px; border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); padding-left: 22px;
+.lp-engine-in { display: flex; align-items: center; gap: 12px; padding: 4px 16px; }
+.lp-engine-in label { font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--ink-3); }
+.lp-engine-in input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none;
+  color: var(--accent); font-family: inherit; font-size: 16px; padding: 14px 0; letter-spacing: .02em; }
+.lp-engine-in input::placeholder { color: var(--ink-4); font-size: 13px; }
+.lp-engine-out { padding: 0 16px 18px; border-top: 1px solid var(--line); padding-top: 16px;
   transition: opacity .3s var(--ease); }
-.lp-read.idle { opacity: .45; border-left-color: var(--line); }
-.lp-what { font-size: calc(14px * var(--ui)); color: var(--ink); line-height: 1.65; margin: 0 0 16px; }
-.lp-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
-.lp-stages li { display: flex; gap: 14px; font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.55;
+.lp-engine-out.idle { opacity: .55; }
+.lp-what { font-size: 13px; color: var(--ink); line-height: 1.7; margin: 0 0 14px; max-width: 58ch; }
+.lp-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lp-stages li { display: flex; gap: 12px; font-size: 12px; color: var(--ink-2); line-height: 1.6;
   animation: conduct .5s var(--ease) both; animation-delay: calc(var(--i) * 65ms); }
 .lp-stages i { font-style: normal; color: var(--accent); font-variant-numeric: tabular-nums; flex: none; }
-/* The stages arrive in sequence rather than all at once: the seed is read, then each
-   collection stage reports. The row leans in from the rule it hangs off. */
-@keyframes conduct {
-  from { opacity: 0; transform: translateX(-10px); }
-  to   { opacity: 1; transform: none; }
-}
-.lp-caveat { margin: 18px 0 0; font-size: calc(12px * var(--ui)); line-height: 1.7; color: var(--type-email); max-width: 66ch; }
+@keyframes conduct { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+.lp-caveat { margin: 16px 0 0; font-size: 11.5px; line-height: 1.75; color: var(--reject); max-width: 60ch; }
 
-.lp-caps, .lp-honest { max-width: 900px; margin: 0 auto; padding: 60px clamp(18px, 5vw, 54px); border-top: 1px solid var(--line); }
-.lp-caps h2, .lp-honest h2 { font-family: var(--display); font-weight: 700; font-size: calc(11.5px * var(--ui)); letter-spacing: .26em; text-transform: uppercase;
-  color: var(--ink-3); font-weight: 400; margin: 0 0 26px; }
-.lp-caps ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px 20px; }
-.lp-caps li { position: relative; display: flex; align-items: center; gap: 11px; font-size: calc(13px * var(--ui));
+.lp-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.lp-examples button { background: transparent; border: 1px solid var(--line); color: var(--ink-3);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; padding: 6px 12px;
+  cursor: pointer; transition: .2s var(--ease); }
+.lp-examples button:hover { border-color: var(--accent); color: var(--accent); }
+
+.lp-hero-3d { position: relative; height: min(80vh, 760px); min-height: 440px; }
+.lp-3d-cap { position: absolute; bottom: 4px; right: 2px; font-size: 9px; letter-spacing: .26em;
+  text-transform: uppercase; color: var(--ink-4); }
+
+/* ---- shared section chrome --------------------------------------------------- */
+.lp-reach, .lp-verdict, .lp-floor { max-width: 1500px; margin: 0 auto;
+  padding: clamp(60px, 11vh, 130px) clamp(18px, 6vw, 72px); border-top: 1px solid var(--line); }
+.lp-reach h2, .lp-verdict h2 { font-family: var(--display); font-weight: 800;
+  font-size: clamp(30px, 3.6vw, 52px); line-height: 1.04; letter-spacing: -.02em;
+  color: var(--ink); margin: 0 0 22px; text-wrap: balance; }
+.lp-reach h2 span, .lp-verdict h2 span, .lp-floor h2 span { color: var(--accent); }
+.lp-reach p, .lp-floor p { font-size: 13px; line-height: 1.85; color: var(--ink-2); margin: 0 0 34px; max-width: 52ch; }
+
+/* ---- −800 m · the reach ------------------------------------------------------- */
+.lp-reach { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: clamp(24px, 4vw, 70px); align-items: center; }
+.lp-orb { position: relative; height: min(64vh, 580px); min-height: 360px; }
+.lp-caps { list-style: none; margin: 0; padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 13px 22px; }
+.cap { position: relative; display: flex; align-items: center; gap: 11px; font-size: 13px;
   color: var(--ink-3); transition: color .3s var(--ease); }
-.lp-caps li.on { color: var(--ink); }
-.lp-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--ink-4); flex: none; transition: .3s var(--ease); }
-.lp-caps li.on .lp-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 12px var(--accent-dim); }
-/* A row sparks when the FIELD reaches it — the canvas calls back as that cluster head
-   actually fires, so the list is a readout of conduction, not a timed loop. */
-.lp-caps li.spark .lp-dot { animation: soma .55s var(--ease); }
-.lp-caps li.spark::before {
-  content: ""; position: absolute; left: -1px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px;
-  border: 1px solid var(--accent); border-radius: 50%; animation: release .55s var(--ease) forwards; pointer-events: none;
+.cap.on { color: var(--ink); }
+.capdot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--ink-4);
+  flex: none; transition: .3s var(--ease); }
+.cap.on .capdot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 12px var(--accent-dim); }
+/* a row sparks when the seed actually reaches that stage */
+.cap.spark .capdot { animation: soma .55s var(--ease); }
+.cap.spark::before { content: ""; position: absolute; left: -1px; top: 50%; width: 9px; height: 9px;
+  margin-top: -4.5px; border: 1px solid var(--accent); border-radius: 50%;
+  animation: release .55s var(--ease) forwards; pointer-events: none; }
+@keyframes soma { 0% { transform: scale(1); } 22% { transform: scale(2.2); border-color: var(--accent); } 100% { transform: scale(1); } }
+@keyframes release { from { transform: scale(1); opacity: .7; } to { transform: scale(3.6); opacity: 0; } }
+
+/* ---- −2400 m · the verdict ----------------------------------------------------- */
+.lp-verdict h2 { max-width: 24ch; margin-bottom: 46px; }
+.lp-honest-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  border-top: 1px solid var(--ctl-bd); }
+.lp-honest-grid article { padding: 34px 30px 34px 0; border-bottom: 1px solid var(--line); }
+.lp-art-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; }
+.lp-art-n { font-size: 11px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.lp-honest-grid h3 { font-family: var(--display); font-weight: 700; font-size: 17px; margin: 0; letter-spacing: .01em; }
+.lp-honest-grid p { font-size: 12.5px; line-height: 1.9; color: var(--ink-2); margin: 0; }
+.lp-honest-grid b { color: var(--ink); font-weight: 500; }
+
+/* ---- −3900 m · the floor -------------------------------------------------------- */
+.lp-floor { padding: clamp(80px, 16vh, 180px) clamp(18px, 6vw, 72px) 60px; text-align: center; }
+.lp-floor .lp-depth-label { justify-content: center; margin-bottom: 24px; }
+.lp-floor h2 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 5vw, 72px);
+  line-height: 1; letter-spacing: -.02em; color: var(--ink); margin: 0 0 20px; text-wrap: balance; }
+.lp-floor p { margin: 0 auto 42px; max-width: 54ch; }
+.lp-floor-cta { display: inline-block; border: 1px solid var(--accent); color: var(--void);
+  background: var(--accent); padding: 16px 38px; font-size: 12px; letter-spacing: .22em;
+  text-transform: uppercase; font-weight: 500; text-decoration: none; transition: .25s var(--ease); }
+.lp-floor-cta:hover { box-shadow: 0 0 40px var(--accent-dim); transform: translateY(-2px); }
+.lp-foot { margin-top: 90px; display: flex; align-items: center; justify-content: center; gap: 18px;
+  flex-wrap: wrap; color: var(--ink-4); font-size: 10.5px; letter-spacing: .14em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-pip { animation: none; }
+  .lp-stages li, .lp-kind { animation: none; opacity: 1; transform: none; }
+  .cap.spark .capdot { animation: none; }
+  .cap.spark::before { display: none; }
 }
-@keyframes soma {
-  0%   { transform: scale(1); }
-  22%  { transform: scale(2.1); border-color: var(--accent); }
-  100% { transform: scale(1); }
-}
-@keyframes release {
-  from { transform: scale(1); opacity: .7; }
-  to   { transform: scale(3.4); opacity: 0; }
-}
-.lp-capnote { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 26px 0 0; max-width: 70ch; }
-
-.lp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px 40px; }
-.lp-grid h3 { font-family: var(--display); font-size: calc(15px * var(--ui)); font-weight: 700; color: var(--accent); margin: 0 0 10px; letter-spacing: .02em; }
-.lp-grid p { font-size: calc(12.5px * var(--ui)); line-height: 1.75; color: var(--ink-2); margin: 0; }
-.lp-grid b { color: var(--ink); font-weight: 400; }
-
-.lp-foot { max-width: 900px; margin: 0 auto; padding: 34px clamp(18px, 5vw, 54px) 60px; border-top: 1px solid var(--line);
-  display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
-.lp-foot > span { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); margin-right: auto; }
-
-/* ---- auth + admin ---- */
-.auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 30px 18px; }
-.auth-3d { display: none; }
-@media (min-width: 1000px) {
-  .auth-wrap { grid-template-columns: 1fr minmax(420px, 460px); align-items: center;
-    gap: clamp(20px, 5vw, 80px); padding: 30px clamp(24px, 6vw, 90px); }
-  .auth-3d { display: block; position: relative; height: min(72vh, 620px); justify-self: stretch; }
-  .auth-wrap .auth-card { justify-self: center; }
-}
-.auth-card { width: min(420px, 94vw); border: 2px solid var(--ctl-bd); border-radius: 6px; padding: 30px;
-  background: color-mix(in srgb, var(--void) 82%, transparent); }
-.auth-card h1 { font-family: var(--display); font-size: calc(21px * var(--ui)); font-weight: 700; color: var(--ink); margin: 26px 0 20px; letter-spacing: .02em; }
-.auth-note, .auth-error { font-size: calc(11.5px * var(--ui)); line-height: 1.6; margin: 0 0 16px; }
-.auth-note { color: var(--accent); }
-.auth-error { color: var(--reject); }
-.auth-go { display: inline-block; width: 100%; text-align: center; margin-top: 8px; background: var(--accent-dim);
-  border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent); font-family: var(--mono);
-  font-size: calc(12px * var(--ui)); letter-spacing: .16em; padding: calc(11px * var(--ui)); border-radius: 3px;
-  cursor: pointer; text-decoration: none; }
-.auth-go:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.auth-switch { display: block; width: 100%; margin-top: 16px; background: none; border: 0; color: var(--ink-3);
-  font-family: var(--mono); font-size: calc(11.5px * var(--ui)); cursor: pointer; }
-.auth-switch:hover { color: var(--accent); }
-.auth-blocked p { font-size: calc(12.5px * var(--ui)); line-height: 1.75; color: var(--ink-2); margin: 0 0 22px; }
-
-.adm { max-width: 1100px; margin: 0 auto; padding: 26px clamp(16px, 4vw, 40px) 80px; }
-.adm-top { display: flex; align-items: center; gap: 16px; padding-bottom: 22px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.adm-me { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); }
-.adm h2 { font-size: calc(11px * var(--ui)); letter-spacing: .24em; text-transform: uppercase; color: var(--ink-3);
-  font-weight: 400; margin: 40px 0 14px; display: flex; align-items: center; gap: 12px; }
-.adm h2 em { font-style: normal; color: var(--accent); }
-.adm-chain { margin-left: auto; font-size: calc(10.5px * var(--ui)); letter-spacing: .06em; text-transform: none; }
-.adm-chain.ok { color: var(--confirm); }
-.adm-chain.bad { color: var(--reject); }
-.adm-note { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 0 0 16px; max-width: 78ch; }
-.adm-role { width: auto; padding: 4px 8px; font-size: calc(11px * var(--ui)); }
-.adm-msg { margin-top: 16px; font-size: calc(11.5px * var(--ui)); color: var(--accent); }
-.adm-empty { font-size: calc(12.5px * var(--ui)); color: var(--ink-2); line-height: 1.75; margin-top: 40px; max-width: 70ch; }
-.adm .datatable td { padding: 10px 14px; }
-
-/* Leads: what this leak gives you to investigate NEXT. Showing a breach's contents
-   without showing what to do with them was half the job. */
-.exp-leads { border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 4px;
-  padding: 8px 10px 10px; margin-bottom: 10px; }
-.exp-lh { font-size: calc(9.5px * var(--ui)); letter-spacing: .2em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
-.exp-lead { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
-  background: transparent; border: 0; border-top: 1px solid var(--line-soft); color: var(--ink);
-  font-family: var(--mono); font-size: calc(11.5px * var(--ui)); padding: 6px 0; cursor: pointer; }
-.exp-lead:first-of-type { border-top: 0; }
-.exp-lead:hover { color: var(--accent); }
-.exp-lk { flex: none; font-size: calc(9px * var(--ui)); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); min-width: 62px; }
-.exp-lv { flex: 1; min-width: 0; word-break: break-all; }
-.exp-lgo { flex: none; font-size: calc(9.5px * var(--ui)); color: var(--accent); opacity: 0; }
-.exp-lead:hover .exp-lgo { opacity: 1; }
-.exp-lmore { font-size: calc(9.5px * var(--ui)); color: var(--ink-4); margin-top: 6px; }
-@media (hover: none) { .exp-lgo { opacity: 1; } }
-
-/* ---- Compromise timeline: whether a recovered credential is history or live ---- */
-.ctl { border-left: 2px solid var(--line); padding-left: 14px; margin-top: 8px; }
-.ctl-e { padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
-.ctl-e:last-child { border-bottom: 0; }
-.ctl-d { display: inline-block; min-width: 88px; font-size: calc(11px * var(--ui)); color: var(--accent); font-variant-numeric: tabular-nums; }
-.ctl-l { font-size: calc(11.5px * var(--ui)); color: var(--ink); }
-.ctl-s { display: block; font-size: calc(9.5px * var(--ui)); color: var(--ink-4); margin-top: 1px; }
-
-/* ---- REUSE view: who shares a password with whom ---- */
-.reuse-wrap { position: fixed; left: var(--rail-w, 0); right: 0; top: 66px; bottom: 0; z-index: 15;
-  background: var(--void); overflow-y: auto; padding: 30px clamp(18px, 4vw, 46px) 60px; }
-.reuse-head h2 { font-family: var(--display); font-size: calc(11.5px * var(--ui)); letter-spacing: .26em; color: var(--accent); font-weight: 700; margin: 0 0 10px; }
-.reuse-head p { font-size: calc(12px * var(--ui)); color: var(--ink-2); line-height: 1.7; max-width: 78ch; margin: 0 0 26px; }
-.reuse-empty { font-size: calc(12.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; max-width: 74ch;
-  border-left: 2px solid var(--line); padding-left: 16px; }
-.reuse-c { border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; margin-bottom: 16px; }
-.reuse-ch { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-.reuse-q { font-size: calc(9.5px * var(--ui)); letter-spacing: .18em; text-transform: uppercase;
-  border: 1px solid; border-radius: 3px; padding: 3px 8px; }
-/* observed = the same string, seen. inferred = the same habit, deduced. Different claims. */
-.reuse-q.q-observed { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
-.reuse-q.q-inferred { color: var(--type-email); border-color: color-mix(in srgb, var(--type-email) 55%, transparent); }
-.reuse-q.q-mixed { color: var(--ink-2); border-color: var(--ctl-bd); }
-.reuse-cn, .reuse-cs { font-size: calc(10.5px * var(--ui)); color: var(--ink-3); }
-.reuse-cs { margin-left: auto; font-variant-numeric: tabular-nums; }
-.reuse-members { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.reuse-m { background: var(--ctl-bg); border: 1px solid var(--ctl-bd); border-radius: 3px; padding: 6px 10px;
-  font-family: var(--mono); text-align: left; cursor: pointer; }
-.reuse-m:hover { border-color: var(--accent); }
-.reuse-mid { display: block; font-size: calc(11.5px * var(--ui)); color: var(--ink); word-break: break-all; }
-.reuse-md { display: block; font-size: calc(9.5px * var(--ui)); color: var(--ink-4); margin-top: 1px; }
-.reuse-links { border-top: 1px solid var(--line-soft); padding-top: 8px; }
-.reuse-l { display: flex; align-items: baseline; gap: 12px; padding: 4px 0; flex-wrap: wrap; }
-.reuse-lw { font-size: calc(11px * var(--ui)); color: var(--accent); font-variant-numeric: tabular-nums; min-width: 26px; }
-.reuse-l.is-pattern .reuse-lw { color: var(--type-email); }
-.reuse-lt { font-size: calc(11.5px * var(--ui)); color: var(--ink-2); }
-.reuse-lt b { color: var(--ink); font-weight: 400; }
-.reuse-lp { font-size: calc(10px * var(--ui)); color: var(--ink-4); margin-left: auto; }
-.reuse-lmore { font-size: calc(10px * var(--ui)); color: var(--ink-4); padding-top: 4px; }
-.reuse-refused, .reuse-iso { border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; margin-top: 20px; }
-.reuse-rh { font-size: calc(9.5px * var(--ui)); letter-spacing: .22em; color: var(--ink-3); margin-bottom: 8px; }
-.reuse-refused p { font-size: calc(11.5px * var(--ui)); color: var(--ink-3); line-height: 1.7; max-width: 76ch; margin: 0 0 12px; }
-.reuse-r { padding: 6px 0; border-top: 1px solid var(--line-soft); }
-.reuse-rids { font-size: calc(11.5px * var(--ui)); color: var(--ink-2); word-break: break-all; }
-.reuse-rr { font-size: calc(10px * var(--ui)); color: var(--type-email); margin-top: 2px; }
-.reuse-isolist { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-.reuse-isolist span { font-size: calc(11px * var(--ui)); color: var(--ink-3); }
 
 /* ---- ABYSS motion layer -------------------------------------------------------
    Ignition, sonar cursor, depth gauge and scroll reveals. All pure CSS; the JS in
    components/AbyssMotion only writes two custom properties and a transform. */
 
-/* Ignition: the void, the mark, a line that fills once. It is a real wait being
-   shown, not a fake one — it covers the frame where the fonts and the WebGL
-   context come up, and 1.75s is where it ends whether or not they did. */
+/* Ignition: the void, the creature, a line that fills once. It covers the frame
+   where the fonts and the WebGL context come up, and 1.75s is where it ends
+   whether or not they did. */
 .ignition { position: fixed; inset: 0; z-index: 200; background: var(--void);
-  display: grid; place-items: center; animation: ign-out .45s ease 1.3s forwards; }
-.ign-mark { display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.ign-mark span { font-family: var(--display); font-weight: 800; font-size: 15px;
-  letter-spacing: .42em; color: var(--ink); text-indent: .42em; }
-.ign-mark i { display: block; width: min(240px, 52vw); height: 1px; background: var(--line); position: relative; }
-.ign-mark i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent);
-  animation: ign-fill 1.6s cubic-bezier(.4, 0, .2, 1) forwards; }
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+  animation: ign-out .9s cubic-bezier(.4, 0, .2, 1) 1.15s forwards; }
+.ign-octo { animation: igndrop 2.2s ease-in-out infinite alternate; filter: drop-shadow(0 0 18px var(--accent-dim)); }
+@keyframes igndrop { 0% { transform: translateY(0); } 100% { transform: translateY(14px); } }
+.ign-bar { width: 180px; height: 1px; background: var(--line); overflow: hidden; }
+.ign-bar i { display: block; width: 0; height: 100%; background: var(--accent);
+  box-shadow: 0 0 10px var(--accent); animation: ign-fill 1.6s cubic-bezier(.4, 0, .2, 1) forwards; }
+.ign-label { font-size: 10px; letter-spacing: .4em; text-transform: uppercase; color: var(--ink-3); }
 @keyframes ign-fill { to { width: 100%; } }
 @keyframes ign-out { to { opacity: 0; visibility: hidden; } }
 
 /* Depth: the page darkens as you descend. --depth is written by the scroll handler,
    so the shade costs one compositor property and never a layout. */
 .depth-shade { position: fixed; inset: 0; z-index: 1; pointer-events: none;
-  background: var(--void); opacity: calc(var(--depth, 0) * .55); }
-.depth-gauge { position: fixed; right: clamp(12px, 2vw, 26px); top: 50%; transform: translateY(-50%);
-  z-index: 40; display: flex; align-items: center; gap: 10px; opacity: .25; transition: opacity .4s var(--ease);
-  pointer-events: none; }
+  background: #010304; opacity: calc(var(--depth, 0) * .55); }
+/* the rail sits on the LEFT, as a sounding line does */
+.depth-gauge { position: fixed; left: 26px; top: 0; bottom: 0; z-index: 30;
+  display: flex; align-items: center; gap: 14px; pointer-events: none;
+  opacity: .3; transition: opacity .4s var(--ease); }
 .depth-gauge.deep { opacity: 1; }
-.dg-rail { width: 1px; height: min(240px, 30vh); background: var(--line); position: relative; }
-.dg-rail i { position: absolute; inset: 0; background: var(--accent); transform-origin: top; transform: scaleY(0); }
-.dg-read { font-size: 9.5px; letter-spacing: .14em; color: var(--accent); font-variant-numeric: tabular-nums;
-  writing-mode: vertical-rl; }
+.dg-rail { width: 9px; height: 46vh; border-left: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--accent) 35%, transparent) 0 1px, transparent 1px 12px);
+  position: relative; }
+.dg-rail i { position: absolute; left: -1px; top: 0; width: 1px; height: 100%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent); transform-origin: top; transform: scaleY(0); }
+.dg-read { font-size: 13px; letter-spacing: .08em; color: var(--accent); font-variant-numeric: tabular-nums; }
+.dg-cap { font-size: 9px; letter-spacing: .3em; color: var(--ink-3); margin-top: 6px; text-transform: uppercase; }
+@media (max-width: 1180px) { .depth-gauge { display: none; } }
 
 /* Sonar cursor: a ring that trails the pointer and opens over anything interactive.
    Fine pointers only — on touch it would just lag a tap. */

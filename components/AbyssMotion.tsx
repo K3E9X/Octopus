@@ -15,6 +15,7 @@
 //   properties — no layout, no React state, no re-render per pixel scrolled.
 
 import { useEffect, useRef, useState } from "react";
+import { OctoMark } from "./OctoMark";
 
 const MAX_DEPTH = 3900; // metres at the bottom of the page — the abyssal plain
 
@@ -31,7 +32,7 @@ export default function AbyssMotion() {
 
   // ---- depth gauge + darkening -------------------------------------------------
   const gaugeRef = useRef<HTMLDivElement>(null);
-  const readoutRef = useRef<HTMLSpanElement>(null);
+  const readoutRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -125,16 +126,18 @@ export default function AbyssMotion() {
     <>
       {!ignited && (
         <div className="ignition" data-fixed aria-hidden="true">
-          <div className="ign-mark">
-            <span>OCTOPUS</span>
-            <i />
-          </div>
+          <OctoMark size={66} className="ign-octo" />
+          <div className="ign-bar"><i /></div>
+          <div className="ign-label">descending</div>
         </div>
       )}
       <div className="depth-shade" data-fixed aria-hidden="true" />
       <div className="depth-gauge" data-fixed ref={gaugeRef} aria-hidden="true">
         <div className="dg-rail"><i ref={barRef} /></div>
-        <span className="dg-read" ref={readoutRef}>0 m</span>
+        <div className="dg-out">
+          <div className="dg-read" ref={readoutRef}>0 m</div>
+          <div className="dg-cap">depth</div>
+        </div>
       </div>
       <div className="sonar" data-fixed ref={ringRef} aria-hidden="true" />
     </>

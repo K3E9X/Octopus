@@ -1,35 +1,44 @@
 "use client";
 
-// The front door.
+// The front door — the Abyss landing, built to the reference.
 //
-// A showcase for an investigation tool has one job: prove the thing works before
-// anyone signs up. So the search box here is not a mock — it runs the ENGINE'S seed
-// reader, names the mode it would dispatch to, lists the stages it would actually
-// run, and states the refusal that comes with that seed type. The neural field
-// behind it lights the capability clusters that seed would really reach.
+// A depth dive: surface at the seed panel, −800 m at the reach, −2400 m at the verdict,
+// −3900 m at the floor. The page darkens as you descend and the rail on the left reads
+// out where you are.
 //
-// What it deliberately is not: a hero gradient, a glass card, a rotating testimonial,
-// a "trusted by" strip, or three feature boxes with rounded icons.
+// The one thing here that is not decoration: the seed panel runs the ENGINE'S own
+// reader (lib/seedtype), so typing an address names the mode it would really dispatch
+// to, lists the stages it would really run, and states the refusal that comes with that
+// seed type. A showcase for an investigation tool that lies about the tool is worse than
+// no showcase. The reference reimplements readSeed inline for its mock; here it is the
+// real import, which is also why the capability list cannot drift from the engine.
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Logo } from "./Logo";
-import NeuralField from "./NeuralField";
 import dynamic from "next/dynamic";
+import { OctoMark } from "./OctoMark";
 import { readSeed, CAPABILITIES } from "@/lib/seedtype";
 
-// WebGL is client-only, and the creature is decorative — if it never loads, the page
-// is unchanged. Loaded lazily so it costs nothing until the hero is on screen.
 const Octo3D = dynamic(() => import("./Octo3D"), { ssr: false });
-// Ignition, sonar cursor, depth gauge, scroll reveals. Client-only: it reads the
-// scroll position and the pointer, neither of which exists on the server.
+const MarineSnow = dynamic(() => import("./MarineSnow"), { ssr: false });
 const AbyssMotion = dynamic(() => import("./AbyssMotion"), { ssr: false });
 
 const EXAMPLES = ["marie.dubois@gmail.com", "xk9_zulu_42", "8.8.8.8", "acme-corp.fr", "+33 6 12 34 56 78", "d41d8cd98f00b204e9800998ecf8427e"];
 
+/** The four honesty articles. Each takes the hue that types that idea in the graph. */
+const HONEST = [
+  { n: "01", tone: "var(--accent)", h: "A tier, not a percentage",
+    p: <>Evidence is hard, soft, weak or <b>contradicting</b>, and the node gets a qualitative tier. The number comes second — a number invents precision the evidence has not earned.</> },
+  { n: "02", tone: "var(--type-alias)", h: "Corroboration is independent",
+    p: <>Three facts read off one profile page are <b>one</b> sighting. Every piece of evidence carries its root observation, and the same source is never counted twice.</> },
+  { n: "03", tone: "var(--type-location)", h: "It can say no",
+    p: <>A common handle is refused as a link. A role mailbox is not a person. A conflicting name lowers the score instead of raising it.</> },
+  { n: "04", tone: "var(--ink)", h: "Silence is reported",
+    p: <>A rate-limited source did not say &ldquo;no account&rdquo; — it refused to answer. Every scan states which sources were unreachable, so an incomplete sweep is never read as a negative.</> },
+];
+
 export default function Landing({ signedIn }: { signedIn: boolean }) {
   const [q, setQ] = useState("");
-  const [pulse, setPulse] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const read = useMemo(() => readSeed(q), [q]);
   const active = useMemo(
@@ -37,148 +46,153 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
     [read.kind],
   );
 
-  function type(v: string) {
-    setQ(v);
-    setPulse((p) => p + 1); // every keystroke injects a stimulus at the input neuron
-  }
-
-  // The capability rows spark when the FIELD reaches them — the canvas calls this as a
-  // cluster head actually fires. Driving it from React state instead would mean a
-  // re-render per spike, so this writes the class straight onto the node.
+  // A capability row sparks when the seed actually reaches it. The class is written
+  // straight onto the node — driving it through React would mean a re-render per spark.
   const capRefs = useRef<Record<string, HTMLLIElement | null>>({});
-  const onCapFire = useCallback((cap: string) => {
+  const spark = useCallback((cap: string) => {
     const el = capRefs.current[cap];
     if (!el) return;
     el.classList.remove("spark");
-    void el.offsetWidth; // restart the animation; without the reflow it never replays
+    void el.offsetWidth;               // restart the animation; without the reflow it never replays
     el.classList.add("spark");
   }, []);
 
+  function type(v: string) {
+    setQ(v);
+    // the seed lights what it would reach, one cluster at a time, at dispatch pace
+    const kind = readSeed(v).kind;
+    if (kind === "empty") return;
+    CAPABILITIES.filter((c) => c.kinds.includes(kind))
+      .forEach((c, i) => setTimeout(() => spark(c.id), 60 + i * 55));
+  }
+
+  const cta = signedIn ? "Open the tool" : "Create access";
+  const ctaHref = signedIn ? "/app" : "/signin?mode=register";
+
   return (
     <div className="lp">
-      <NeuralField kind={read.kind} pulse={pulse} onCapFire={onCapFire} />
+      <MarineSnow />
       <AbyssMotion />
 
       <header className="lp-top">
-        <div className="lp-brand">
-          <Logo size={30} />
+        <Link className="lp-brand" href="/">
+          <OctoMark size={44} float glow />
           <span><b>OCTOPUS</b><small>OSINT</small></span>
-        </div>
+        </Link>
         <nav className="lp-nav">
-          <a href="#what">What it does</a>
-          <a href="#honest">How it stays honest</a>
-          {signedIn
-            ? <Link className="lp-cta" href="/app">Open the tool</Link>
-            : <><Link href="/signin">Sign in</Link><Link className="lp-cta" href="/signin?mode=register">Create an account</Link></>}
+          <a href="#reach">The reach</a>
+          <a href="#verdict">The verdict</a>
+          {!signedIn && <Link href="/signin">Sign in</Link>}
+          <Link className="lp-cta" href={ctaHref}>{cta}</Link>
         </nav>
       </header>
 
-      <main className="lp-main">
-        {/* The creature sits BESIDE the copy, not behind it. Both it and the neural
-            field are hairline line-work; stacked, they read as mush. Below the grid
-            breakpoint it drops out entirely rather than shrinking into a smudge. */}
-        <div className="lp-hero">
+      {/* ---- 0 m · surface -------------------------------------------------------- */}
+      <section className="lp-hero">
         <div className="lp-hero-copy">
-        <h1 className="lp-h1">
-          One identity,<br />resolved across everything.
-        </h1>
-        <p className="lp-lead">
-          Octopus does not just find accounts. It decides which of them are the same person — and tells you when
-          it cannot. Type anything below: the engine reads it here, exactly as it would inside the tool.
-        </p>
+          <div className="lp-eyebrow"><span className="lp-pip" />0 m — surface · the seed goes in here</div>
 
-        <div className="lp-search">
-          <label htmlFor="lp-q">seed</label>
-          <input
-            id="lp-q" ref={inputRef} value={q} spellCheck={false} autoComplete="off"
-            placeholder="a username, an email, a phone, a name, a domain, an IP, a hash"
-            onChange={(e) => type(e.target.value)}
-          />
-          {/* keyed on the kind so a change remounts the node and the flash replays */}
-          <span key={read.kind} className={"lp-kind k-" + read.kind}>{read.kind === "empty" ? "waiting" : read.label}</span>
+          <h1 className="lp-h1">Eight arms.<br />One <span>verdict</span>.</h1>
+
+          <p className="lp-lead">
+            Octopus sends proven collectors into every corner of the open web — then does the part nobody
+            does well: it decides, on evidence, which findings are the <b>same person</b>. And it tells you
+            when it can&rsquo;t.
+          </p>
+
+          <div className="lp-engine">
+            <div className="lp-engine-head">
+              <span className="lp-pip sm" />
+              engine read — live
+              <span key={read.kind} className={"lp-kind k-" + read.kind}>{read.kind === "empty" ? "waiting" : read.label}</span>
+            </div>
+            <div className="lp-engine-in">
+              <label htmlFor="lp-q">seed</label>
+              <input
+                id="lp-q" ref={inputRef} value={q} spellCheck={false} autoComplete="off"
+                placeholder="username · email · phone · name · domain · IP · hash"
+                onChange={(e) => type(e.target.value)}
+              />
+            </div>
+            <div className={"lp-engine-out" + (read.kind === "empty" ? " idle" : "")}>
+              <p className="lp-what">{read.what}</p>
+              {read.stages.length > 0 && (
+                <ol className="lp-stages" key={read.kind}>
+                  {read.stages.map((s, i) => (
+                    <li key={i} style={{ ["--i" as string]: i }}><i>{String(i + 1).padStart(2, "0")}</i>{s}</li>
+                  ))}
+                </ol>
+              )}
+              {read.caveat && <p className="lp-caveat">{read.caveat}</p>}
+            </div>
+          </div>
+
+          <div className="lp-examples">
+            {EXAMPLES.map((ex) => (
+              <button key={ex} onClick={() => { type(ex); inputRef.current?.focus(); }}>{ex}</button>
+            ))}
+          </div>
         </div>
 
-        <div className="lp-examples">
-          {EXAMPLES.map((ex) => (
-            <button key={ex} onClick={() => { type(ex); inputRef.current?.focus(); }}>{ex}</button>
-          ))}
-        </div>
-
-        <div className={"lp-read" + (read.kind === "empty" ? " idle" : "")}>
-          <p className="lp-what">{read.what}</p>
-          {read.stages.length > 0 && (
-            /* Keyed on the kind, and each row delayed by its index: the stages arrive
-               in sequence, at conduction pace, rather than appearing all at once. */
-            <ol className="lp-stages" key={read.kind}>
-              {read.stages.map((s, i) => (
-                <li key={i} style={{ ["--i" as string]: i }}><i>{String(i + 1).padStart(2, "0")}</i>{s}</li>
-              ))}
-            </ol>
-          )}
-          {read.caveat && <p className="lp-caveat">{read.caveat}</p>}
-        </div>
-        </div>
-        <div className="lp-hero-3d"><Octo3D scene="hero" /></div>
-        </div>
-      </main>
-
-      <section className="lp-caps rise" id="what">
-        <h2>What lights up</h2>
-        <ul>
-          {CAPABILITIES.map((c) => (
-            <li key={c.id} ref={(el) => { capRefs.current[c.id] = el; }} className={active.has(c.id) ? "on" : ""}>
-              <span className="lp-dot" />{c.label}
-            </li>
-          ))}
-        </ul>
-        <p className="lp-capnote">
-          Those are not marketing categories. They are the collection stages the engine dispatches, and the
-          highlighted ones are what your seed above would actually reach.
-        </p>
-      </section>
-
-      <section className="lp-honest rise" id="honest">
-        <h2>How it stays honest</h2>
-        <div className="lp-grid">
-          <article>
-            <h3>A tier, not a percentage</h3>
-            <p>
-              Evidence is classified hard, soft, weak or <b>contradicting</b>, and the node gets a qualitative tier.
-              A confidence number derived from that is shown second, because a number invents a precision the
-              evidence has not earned.
-            </p>
-          </article>
-          <article>
-            <h3>Corroboration must be independent</h3>
-            <p>
-              Three facts read off one profile page are <b>one</b> sighting. Octopus tracks the root observation
-              behind each piece of evidence and refuses to count the same source twice.
-            </p>
-          </article>
-          <article>
-            <h3>It can say no</h3>
-            <p>
-              A common handle is refused as a link. A role mailbox is not a person. A name that conflicts with the
-              one you were looking for lowers the score instead of raising it.
-            </p>
-          </article>
-          <article>
-            <h3>Silence is reported</h3>
-            <p>
-              A rate-limited source did not say “no account” — it refused to answer. Every scan states which
-              sources were unreachable, so an incomplete sweep is never read as a negative result.
-            </p>
-          </article>
+        <div className="lp-hero-3d">
+          <Octo3D scene="hero" />
+          <span className="lp-3d-cap">arms out · sources adrift · findings carried home</span>
         </div>
       </section>
 
-      <footer className="lp-foot">
-        <div className="lp-brand"><Logo size={22} /><span><b>OCTOPUS</b><small>OSINT</small></span></div>
-        <span>Orbit, the gravitational graph, is one view inside it.</span>
-        {signedIn
-          ? <Link className="lp-cta" href="/app">Open the tool</Link>
-          : <Link className="lp-cta" href="/signin?mode=register">Create an account</Link>}
-      </footer>
+      {/* ---- −800 m · the reach --------------------------------------------------- */}
+      <section className="lp-reach rise" id="reach">
+        <div className="lp-orb"><Octo3D scene="orb" /></div>
+        <div>
+          <div className="lp-depth-label">−800 m — the reach</div>
+          <h2>The sweep reaches wide.<br />Only answers become <span>evidence</span>.</h2>
+          <p>
+            The sweep touches each source in order — mainstream first, tail last — and reports which ones
+            stayed silent. These are the collection stages the engine dispatches; the lit ones are what
+            your seed above would actually reach.
+          </p>
+          <ul className="lp-caps">
+            {CAPABILITIES.map((c) => (
+              <li key={c.id} ref={(el) => { capRefs.current[c.id] = el; }} className={"cap" + (active.has(c.id) ? " on" : "")}>
+                <span className="capdot" />{c.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* ---- −2400 m · the verdict ------------------------------------------------ */}
+      <section className="lp-verdict rise" id="verdict">
+        <div className="lp-depth-label">−2400 m — the verdict</div>
+        <h2>Down here, the light you carry is the only light. It stays <span>honest</span>.</h2>
+        <div className="lp-honest-grid">
+          {HONEST.map((a) => (
+            <article key={a.n}>
+              <div className="lp-art-head">
+                <span className="lp-art-n">{a.n}</span>
+                <h3 style={{ color: a.tone }}>{a.h}</h3>
+              </div>
+              <p>{a.p}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ---- −3900 m · the floor --------------------------------------------------- */}
+      <section className="lp-floor rise" id="floor">
+        <div className="lp-depth-label">−3900 m — the floor</div>
+        <h2>This is where it lives.</h2>
+        <p>
+          Orbit — the gravitational graph where confidence is distance — is one view inside it. The table,
+          the timeline, the dossier and the board are the others.
+        </p>
+        <Link className="lp-floor-cta" href={ctaHref}>{cta}</Link>
+        <div className="lp-foot">
+          <span>OCTOPUS · OSINT</span><span aria-hidden="true">·</span>
+          <span>delegate collection, own correlation</span><span aria-hidden="true">·</span>
+          <span>the engine runs on your deployment</span>
+        </div>
+      </section>
     </div>
   );
 }
