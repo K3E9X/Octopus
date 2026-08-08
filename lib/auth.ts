@@ -13,6 +13,7 @@
 import { createHmac, randomBytes, scrypt as _scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { sql, dbEnabled } from "./db";
+import { passwordProblem } from "./pwrule";
 
 const scrypt = promisify(_scrypt) as (p: string | Buffer, s: string | Buffer, k: number) => Promise<Buffer>;
 
@@ -75,11 +76,9 @@ function sameHash(a: string, b: string): boolean {
   return timingSafeEqual(ba, bb);
 }
 
-export function passwordProblem(pw: string): string | null {
-  if (!pw || pw.length < 10) return "at least 10 characters";
-  if (!/[a-z]/i.test(pw) || !/\d/.test(pw)) return "letters and at least one digit";
-  return null;
-}
+// the rule itself lives in lib/pwrule so the Access screen enforces the SAME one
+export { passwordProblem } from "./pwrule";
+
 
 // ---- accounts ----------------------------------------------------------------
 
