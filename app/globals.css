@@ -1643,10 +1643,10 @@ body:has(.lp) { overflow: auto; }
 .lk2-box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--ink); font-size: 15px; padding: 11px 13px; font-family: var(--font-mono); letter-spacing: .01em; }
 .lk2-box input::placeholder { color: var(--ink-4); }
 .lk2-box button { background: var(--accent); color: #140a04; border: 0; cursor: pointer; font-weight: 600; font-size: 14px; padding: 0 20px; border-radius: var(--r-sm); white-space: nowrap; transition: background .14s; }
-.lk2-box button:disabled { opacity: .4; cursor: default; }
+.lk2-box button:disabled { background: var(--bg-3); color: var(--ink-4); cursor: default; box-shadow: none; }
 .lk2-box button:not(:disabled):hover { background: var(--accent-hover); }
 
-.lk2-err { color: var(--sev-crit); font-size: 14px; margin: 16px 0 0; }
+.lk2-hero > .lk2-err, .lk2-verify > .lk2-err, .lk2-err { color: var(--sev-crit); font-size: 14px; margin: 16px auto 0; }
 .lk2-link { background: none; border: 0; color: var(--ink-3); font-size: 13px; cursor: pointer; margin-top: 18px; transition: color .14s; }
 .lk2-link:hover { color: var(--ink-2); text-decoration: underline; }
 
@@ -1655,7 +1655,7 @@ body:has(.lp) { overflow: auto; }
 .lk2-reveal > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
 .lk2-reveal em { font-style: normal; font-size: 12.5px; color: var(--ink-2); font-family: var(--font-mono); border: 1px solid var(--bd); background: var(--bg-1); border-radius: var(--r-xs); padding: 6px 11px; animation: lk2-rise .4s var(--ease) both; animation-delay: calc(var(--i) * 40ms + .15s); }
 .lk2-reveal em:first-child, .lk2-reveal em:nth-child(2) { border-color: var(--sev-crit-bd); color: var(--sev-crit); }
-.lk2-fine { max-width: 540px; margin: 32px auto 0; color: var(--ink-4); font-size: 13px; line-height: 1.55; }
+.lk2-hero > .lk2-fine, .lk2-fine { max-width: 540px; margin: 32px auto 0; color: var(--ink-4); font-size: 13px; line-height: 1.55; }
 .lk2-fine b { color: var(--ink-2); font-weight: 500; }
 
 /* ---- verify ---- */
