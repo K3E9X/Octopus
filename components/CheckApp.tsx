@@ -13,7 +13,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { OctoMark } from "./OctoMark";
+
+// the constellation view is SVG-heavy and only needed once a report exists
+const LeakOrbit = dynamic(() => import("./LeakOrbit"), { ssr: false });
 
 type Sev = "critical" | "high" | "medium" | "low";
 interface Finding { category: string; severity: Sev; label: string; value: string; source: string; masked?: boolean }
@@ -32,7 +36,7 @@ interface Report {
 }
 
 type Step = "enter" | "verify" | "loading" | "report";
-type View = "category" | "source" | "timeline";
+type View = "orbit" | "category" | "source" | "timeline";
 
 const SEV_LABEL: Record<Sev, string> = { critical: "critical", high: "high", medium: "notable", low: "minor" };
 const SENSITIVE = new Set(["password", "financial", "document"]);
@@ -66,7 +70,8 @@ export default function CheckApp() {
     const wait = Math.max(0, 1100 - (Date.now() - started));
     await new Promise((r) => setTimeout(r, wait));
     if (status === 200 && data.report) {
-      setReport(data.report); setHeadline(data.headline || ""); setView("category"); setStep("report");
+      setReport(data.report); setHeadline(data.headline || "");
+      setView(data.report.verdict === "clear" ? "category" : "orbit"); setStep("report");
       if (typeof data.balance === "number") setAccount((a) => (a ? { ...a, balance: data.balance } : a));
       return;
     }
@@ -198,12 +203,14 @@ function ReportView({ report, headline, view, setView, reset }: {
       {hasHi && <Critical hi={report.highlights} />}
 
       <div className="lk2-tabs">
-        {([["category", `By type · ${report.categories.length}`], ["source", `By breach · ${report.breachCount}`], ["timeline", "Timeline"]] as [View, string][])
+        {([["orbit", "Orbit"], ["category", `By type · ${report.categories.length}`], ["source", `By breach · ${report.breachCount}`], ["timeline", "Timeline"]] as [View, string][])
           .map(([v, lbl]) => (
             <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}
-              disabled={v === "timeline" && report.timeline.length === 0}>{lbl}</button>
+              disabled={(v === "timeline" && report.timeline.length === 0) || (v === "orbit" && report.verdict === "clear")}>{lbl}</button>
           ))}
       </div>
+
+      {view === "orbit" && <LeakOrbit report={report} />}
 
       {/* All three views stay mounted; only the open one shows on screen. Print shows
           every view so the PDF is the complete report whichever tab was open. */}

@@ -1809,3 +1809,62 @@ body:has(.lp) { overflow: auto; }
   .lk2-brand b { color: #111; }
   .lk2-val { background: #f4f4f4; }
 }
+
+/* ---- Orbit view: the constellation of your exposure ---- */
+.lk2-orbit { display: grid; grid-template-columns: 1fr 260px; gap: 16px; align-items: start; }
+.lk2-orbit-svg { width: 100%; height: auto; border: 1px solid var(--lk-bd); border-radius: 16px; background: radial-gradient(120% 120% at 50% 45%, rgba(255,138,61,.05), transparent 60%), var(--lk-card); }
+.lk2-orbit-ring { fill: none; stroke: var(--lk-bd); stroke-dasharray: 2 6; opacity: .5; animation: lk2-spin 160s linear infinite; transform-origin: 500px 332px; }
+
+.lk2-link { stroke: var(--lk-bd); stroke-width: 1; opacity: .5; stroke-dasharray: 300; stroke-dashoffset: 300; animation: lk2-draw .8s ease-out forwards; animation-delay: calc(var(--i) * 70ms + .2s); transition: opacity .2s; }
+.lk2-link.dim { opacity: .12; }
+
+.lk2-arc { fill: none; stroke-width: 1.4; opacity: 0; stroke-dasharray: 400; stroke-dashoffset: 400; animation: lk2-draw 1s ease-out forwards, lk2-arc-in .6s ease-out forwards; animation-delay: calc(var(--i) * 90ms + .6s); }
+.lk2-arc.dim { opacity: .08 !important; }
+
+.lk2-sat { opacity: 0; animation: lk2-pop .4s ease-out forwards; animation-delay: calc(var(--i) * 30ms + .5s); transition: opacity .2s, r .2s; }
+.lk2-sat.dim { opacity: .18 !important; }
+
+.lk2-node { cursor: pointer; opacity: 0; animation: lk2-pop .5s ease-out forwards; animation-delay: calc(var(--i) * 80ms + .3s); transition: opacity .2s; }
+.lk2-node.dim { opacity: .3; }
+.lk2-node-c { fill: var(--void-2); stroke-width: 2.2; transition: transform .2s; transform-box: fill-box; transform-origin: center; }
+.lk2-node.on .lk2-node-c { transform: scale(1.12); }
+.lk2-node-n { fill: var(--lk-ink); font-family: var(--mono); font-size: 13px; font-weight: 600; dominant-baseline: middle; pointer-events: none; }
+.lk2-node-l { fill: var(--lk-ink-2); font-family: var(--mono); font-size: 11px; dominant-baseline: middle; pointer-events: none; letter-spacing: .02em; }
+.lk2-node.on .lk2-node-l { fill: var(--lk-ink); }
+
+.lk2-core-halo { animation: lk2-breathe 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.lk2-core { fill: var(--void-2); stroke: var(--accent); stroke-width: 2; }
+.lk2-core-x { fill: var(--accent); font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .18em; dominant-baseline: middle; }
+.lk2-core-sub { fill: var(--lk-ink-2); font-family: var(--mono); font-size: 12px; dominant-baseline: middle; }
+
+.lk2-orbit-side { position: sticky; top: 16px; }
+.lk2-orbit-card, .lk2-orbit-hint { border: 1px solid var(--lk-bd); border-radius: 14px; padding: 16px; background: var(--lk-card); }
+.lk2-orbit-card-h { display: flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--lk-ink); margin-bottom: 4px; }
+.lk2-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.lk2-dot.s-critical { background: var(--crit); } .lk2-dot.s-high { background: var(--high); } .lk2-dot.s-medium { background: var(--med); } .lk2-dot.s-low { background: var(--low); }
+.lk2-orbit-date { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-bottom: 10px; }
+.lk2-orbit-card ul, .lk2-orbit-legend { list-style: none; padding: 0; margin: 0; }
+.lk2-orbit-card li { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--lk-ink-2); padding: 4px 0; }
+.lk2-orbit-card li i, .lk2-orbit-legend i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.lk2-orbit-hint p { color: var(--lk-ink-2); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.lk2-orbit-legend { display: flex; flex-direction: column; gap: 7px; }
+.lk2-orbit-legend span { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--lk-ink-2); }
+.lk2-orbit-note { margin-top: 14px !important; font-size: 12px !important; color: var(--lk-ink-3) !important; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+
+@keyframes lk2-draw { to { stroke-dashoffset: 0; } }
+@keyframes lk2-arc-in { to { opacity: .55; } }
+@keyframes lk2-pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+@keyframes lk2-spin { to { transform: rotate(360deg); } }
+@keyframes lk2-breathe { 0%,100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lk2-orbit-ring, .lk2-core-halo { animation: none !important; }
+  .lk2-link, .lk2-arc { stroke-dashoffset: 0 !important; animation: none !important; opacity: .5 !important; }
+  .lk2-arc { opacity: .4 !important; }
+  .lk2-sat, .lk2-node { opacity: 1 !important; animation: none !important; }
+}
+@media (max-width: 720px) {
+  .lk2-orbit { grid-template-columns: 1fr; }
+  .lk2-orbit-side { position: static; }
+}
+@media print { .lk2-orbit { display: none; } }
