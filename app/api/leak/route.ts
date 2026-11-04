@@ -75,8 +75,8 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const limit = Math.max(100, Math.min(10000, Number(body?.limit) || cfg.leakosintLimit || 100));
-  const lang = String(body?.lang || cfg.leakosintLang || "en");
+  const limit = Math.max(100, Math.min(10000, Number(body?.limit) || cfg.leakosintLimit || Number(process.env.LEAKOSINT_LIMIT) || 100));
+  const lang = String(body?.lang || cfg.leakosintLang || process.env.LEAKOSINT_LANG || "en");
   const collectedAt = new Date().toISOString();
 
   // Metering. When a database is configured every query is charged to the signed-in

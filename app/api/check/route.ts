@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This deployment has no leak-data source configured.", configured: false }, { status: 400 });
   }
 
-  const limit = Math.max(100, Math.min(10000, Number(body?.limit) || cfg.leakosintLimit || 100));
+  const limit = Math.max(100, Math.min(10000, Number(body?.limit) || cfg.leakosintLimit || Number(process.env.LEAKOSINT_LIMIT) || 100));
   const price = priceCredits(estimateCost(subject, limit));
 
   if (creditsEnabled) {
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const res = await leakOsint({ token, request: subject, limit, lang: cfg.leakosintLang || "en" });
+    const res = await leakOsint({ token, request: subject, limit, lang: cfg.leakosintLang || process.env.LEAKOSINT_LANG || "en" });
     if (res.error) {
       await refund(user.id, price, `refund: ${res.error}`);
       return NextResponse.json({ error: "The leak source did not answer — you were not charged.", balance: await balanceOf(user.id) }, { status: 502 });
