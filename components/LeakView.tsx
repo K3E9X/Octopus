@@ -19,9 +19,12 @@ import type { Signal } from "@/lib/signals";
 
 interface Quote {
   limit: number;
-  total: number;
-  formatted: string;
-  breakdown: { query: string; words: string[]; ignored: string[]; complexity: number; cost: number }[];
+  metered: boolean;
+  credits: number;
+  cost: number;
+  formatted: string;   // credits when metered, dollars otherwise
+  usd: string;
+  breakdown: { query: string; words: string[]; ignored: string[]; complexity: number; cost: number; credits: number }[];
 }
 
 interface LeakResult {
@@ -36,16 +39,23 @@ interface LeakResult {
   hint?: string;
   configured?: boolean;
   empty?: boolean;
+  charged?: number;
+  balance?: number;
+  insufficient?: boolean;
+  needsAuth?: boolean;
+  price?: number;
 }
 
 const LIMITS = [100, 300, 1000, 3000, 10000];
 
 export default function LeakView({
-  cfgHeaders, onIngest, onOpenSources,
+  cfgHeaders, onIngest, onOpenSources, balance, onBalance,
 }: {
   cfgHeaders: () => Record<string, string>;
   onIngest: (signals: Signal[], seed: string) => number;
   onOpenSources: () => void;
+  balance?: number;        // current credit balance, or undefined when unmetered / signed out
+  onBalance?: (b: number) => void;
 }) {
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(100);
@@ -82,6 +92,7 @@ export default function LeakView({
       });
       const d: LeakResult = await r.json();
       setRes(d);
+      if (typeof d.balance === "number" && onBalance) onBalance(d.balance);
       if (d.signals?.length) setAdded(onIngest(d.signals, text));
     } catch {
       setRes({ error: "network unavailable" });
@@ -159,11 +170,20 @@ export default function LeakView({
         </div>
       )}
 
+      {typeof balance === "number" && (
+        <div className="lk-balance">balance <b>{balance.toLocaleString("en-US")} cr</b></div>
+      )}
+
       {res?.error && (
-        <div className="lk-err">
-          <b>{res.error}</b>
-          {res.hint && <span>{res.hint}</span>}
+        <div className={"lk-err" + (res.insufficient ? " is-money" : "")}>
+          <b>{res.insufficient ? "Not enough credits" : res.needsAuth ? "Sign in to search" : res.error}</b>
+          <span>{res.insufficient
+            ? `${res.error}. An administrator tops up your balance, or reduce the limit to lower the price.`
+            : res.needsAuth
+              ? "This deployment meters searches against your account."
+              : res.hint || ""}</span>
           {res.configured === false && <button onClick={onOpenSources}>Open Sources →</button>}
+          {res.needsAuth && <a className="lk-signin" href="/signin">Sign in →</a>}
         </div>
       )}
 

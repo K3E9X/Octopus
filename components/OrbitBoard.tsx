@@ -91,6 +91,9 @@ export default function OrbitBoard() {
   const readLayoutRef = useRef<() => OrbitLayout | null>(() => null);
 
   const [seed, setSeed] = useState(SEED);
+  // the signed-in operator and their credit balance, for the chrome meter and the
+  // LEAK view. undefined balance = unmetered (single-operator) or signed out.
+  const [account, setAccount] = useState<{ metered: boolean; balance?: number; email?: string } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
   const [scanning, setScanning] = useState(false);
@@ -573,7 +576,9 @@ export default function OrbitBoard() {
   const enabledRef = useRef(enabled);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { migrateLegacyStorage(); listCases().then(setCases).catch(() => {}); setEnabled(loadEnabled()); setSettings(loadSettings()); }, []);
+  useEffect(() => { migrateLegacyStorage(); listCases().then(setCases).catch(() => {}); setEnabled(loadEnabled()); setSettings(loadSettings());
+    fetch("/api/auth").then((r) => r.json()).then((d) => setAccount({ metered: !!d.metered, balance: d.balance, email: d.me?.email })).catch(() => {});
+  }, []);
 
   function updateSettings(patch: Partial<OctopusSettings>) {
     setSettings((s) => { const n = { ...s, ...patch }; saveSettings(n); return n; });
@@ -1996,6 +2001,8 @@ export default function OrbitBoard() {
         <LeakView
           cfgHeaders={() => ({ ...cfgHeaders(), ...tradecraftHeaders() })}
           onOpenSources={() => setRail({ id: "sources", top: 120 })}
+          balance={account?.metered ? account.balance : undefined}
+          onBalance={(b) => setAccount((a) => (a ? { ...a, balance: b } : a))}
           onIngest={(sigs, seedTerm) => {
             // straight onto the graph, through the same merge every other source uses
             if (!seedRef.current) { seedRef.current = seedTerm; setSeed(seedTerm); }
@@ -2169,6 +2176,11 @@ export default function OrbitBoard() {
           {isDemo && !scanMsg && !deepStatus && <span className="demo-tag hide-md">sample data — scan a seed to start</span>}
           <span className="hide-md"><span className="dotpulse" /><b>{total}</b> signals</span>
           <span className="hide-md"><b style={{ color: "var(--confirm)" }}>{confirmedCount}</b> confirmed</span>
+          {account?.metered && typeof account.balance === "number" && (
+            <span className={"cr-meter hide-md" + (account.balance < 5000 ? " low" : "")} title="credit balance — each leak search is billed to your account">
+              <b>{account.balance.toLocaleString("en-US")}</b> cr
+            </span>
+          )}
         </div>
         <div className="viewtoggle">
           <button className={view === "leak" ? "on" : ""} onClick={() => setView("leak")}>LEAK</button>

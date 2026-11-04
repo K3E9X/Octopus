@@ -1525,3 +1525,22 @@ body:has(.lp) { overflow: auto; }
 .lk-lead:hover .lk-lg { opacity: 1; }
 .lk-note { font-size: calc(11px * var(--ui)); color: var(--ink-3); line-height: 1.7; margin: 24px 0 0; max-width: 72ch; }
 @media (hover: none) { .lk-lg { opacity: 1; } }
+
+/* ---- credits: the business layer surfacing in the UI ---- */
+.lk-balance { max-width: 900px; margin-top: 10px; font-size: calc(11px * var(--ui)); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3); }
+.lk-balance b { color: var(--accent); font-weight: 400; font-variant-numeric: tabular-nums; }
+.lk-err.is-money { border-left-color: var(--type-email); }
+.lk-err.is-money b { color: var(--type-email); }
+.lk-signin { display: inline-block; margin-top: 10px; color: var(--accent); font-size: calc(11px * var(--ui)); text-decoration: none; border-bottom: 1px solid currentColor; }
+/* the credit meter in the cockpit chrome */
+.cr-meter { display: inline-flex; align-items: baseline; gap: 6px; font-size: calc(10.5px * var(--ui));
+  letter-spacing: .1em; color: var(--ink-3); border: 1px solid var(--ctl-bd); padding: 5px 10px; border-radius: 3px; white-space: nowrap; }
+.cr-meter b { color: var(--accent); font-weight: 400; font-variant-numeric: tabular-nums; }
+.cr-meter.low b { color: var(--type-email); }
+.cr-meter.low { border-color: color-mix(in srgb, var(--type-email) 45%, transparent); }
+.adm-credits { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.adm-credits span { color: var(--accent); }
+.adm-grant { margin-left: 10px; background: transparent; border: 1px solid var(--ctl-bd); color: var(--ctl);
+  font-family: var(--mono); font-size: calc(9.5px * var(--ui)); padding: 3px 9px; cursor: pointer; }
+.adm-grant:hover { border-color: var(--accent); color: var(--accent); }

@@ -2,6 +2,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createUser, verifyUser, countUsers, signSession, SESSION_COOKIE, SESSION_MAX_AGE, authEnabled, sessionsUsable } from "@/lib/auth";
+import { currentUser } from "@/lib/session-server";
+import { seedStarter, balanceOf, creditsEnabled } from "@/lib/credits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
   if (action === "register") {
     const r = await createUser(email, password, body?.name ? String(body.name).slice(0, 80) : undefined);
     if (r.error || !r.user) return NextResponse.json({ error: r.error || "could not create the account" }, { status: 400 });
+    await seedStarter(r.user.id);   // a welcome balance so the first search needs no admin round-trip
     const res = NextResponse.json({ ok: true, user: r.user, firstAccount: r.user.role === "admin" });
     setCookie(res, signSession(r.user.id));
     return res;
@@ -53,9 +56,13 @@ export async function POST(req: NextRequest) {
 
 // GET → what the sign-in page needs to render itself honestly
 export async function GET() {
+  const me = authEnabled ? await currentUser() : null;
   return NextResponse.json({
     authEnabled,
     sessionsUsable: sessionsUsable(),
     firstAccount: authEnabled ? (await countUsers()) === 0 : false,
+    metered: creditsEnabled,
+    me: me ? { id: me.id, email: me.email, name: me.name, role: me.role } : null,
+    balance: me ? await balanceOf(me.id) : undefined,
   });
 }

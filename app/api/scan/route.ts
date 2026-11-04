@@ -13,6 +13,9 @@ import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
 import { breachExposure, breachSignal } from "@/lib/breaches";
 import { leakOsint } from "@/lib/leakosint";
 import { leakOsintSignals } from "@/lib/leaknode";
+import { currentUser } from "@/lib/session-server";
+import { creditsEnabled, priceCredits, debit, refund } from "@/lib/credits";
+import { estimateCost } from "@/lib/leakosint";
 import { leadPlan, type Lead } from "@/lib/leads";
 import { nodesFromExposure, applyReuse } from "@/lib/leaknodes";
 import { leakApis, anyLeakKey } from "@/lib/leakapis";
@@ -639,16 +642,21 @@ export async function GET(req: NextRequest) {
     // like the rest and silent without a token — never a surprise charge.
     const loToken = clientCfg.leakosint || process.env.LEAKOSINT_TOKEN || "";
     if (loToken && (!enabled || enabled.has("leakosint"))) {
-      try {
-        const term = isEmail ? q : matchTarget;
-        const lo = await leakOsint({
-          token: loToken,
-          request: term,
-          limit: clientCfg.leakosintLimit || 100,
-          lang: clientCfg.leakosintLang || "en",
-        });
-        signals.push(...leakOsintSignals(term, lo, collectedAt));
-      } catch { /* a refused source is a missing source, never a failed scan */ }
+      const term = isEmail ? q : matchTarget;
+      const loLimit = clientCfg.leakosintLimit || 100;
+      // metered exactly like the dedicated route: charge before, refund if it fails
+      const loPrice = priceCredits(estimateCost(term, loLimit));
+      const loUser = creditsEnabled ? await currentUser() : null;
+      const loCharged = creditsEnabled && loUser ? (await debit(loUser.id, loPrice, `scan: ${term.slice(0, 48)}`)).ok : !creditsEnabled;
+      if (loCharged) {
+        try {
+          const lo = await leakOsint({ token: loToken, request: term, limit: loLimit, lang: clientCfg.leakosintLang || "en" });
+          if (loUser && lo.error) await refund(loUser.id, loPrice, `refund: ${lo.error}`);
+          signals.push(...leakOsintSignals(term, lo, collectedAt));
+        } catch {
+          if (loUser) await refund(loUser.id, loPrice, "refund: scan threw");
+        }
+      }
     }
 
     // infostealer intel (Hudson Rock — free) — reveals compromise + services used

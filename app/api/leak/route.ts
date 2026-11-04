@@ -4,6 +4,8 @@ import { leakOsint, estimateCost, complexityOf, tokenize, isBillableWord, format
 import { leakOsintSignals } from "@/lib/leaknode";
 import { nodesFromExposure, applyReuse } from "@/lib/leaknodes";
 import { normId } from "@/lib/extract";
+import { currentUser } from "@/lib/session-server";
+import { creditsEnabled, priceCredits, debit, refund, balanceOf, fmtCredits, fmtUSD, toUSD, markup } from "@/lib/credits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,20 +29,28 @@ export async function GET(req: NextRequest) {
   const queries = q.split("\n").map((x) => x.trim()).filter(Boolean);
   const breakdown = queries.map((one) => {
     const toks = tokenize(one);
+    const raw = estimateCost(one, limit);
     return {
       query: one,
       words: toks.filter(isBillableWord),
       // the ones that are free: dates, anything under 4 characters, short numbers
       ignored: toks.filter((t) => !isBillableWord(t)),
       complexity: complexityOf(one),
-      cost: estimateCost(one, limit),
+      cost: raw,
+      // what the operator actually pays, in credits, with the resale markup applied
+      credits: priceCredits(raw),
     };
   });
 
+  const rawTotal = estimateCost(queries, limit);
+  const creditsTotal = breakdown.reduce((n, b) => n + b.credits, 0);
   return NextResponse.json({
     limit,
-    total: estimateCost(queries, limit),
-    formatted: formatCost(estimateCost(queries, limit)),
+    metered: creditsEnabled,
+    cost: rawTotal,
+    credits: creditsTotal,
+    formatted: creditsEnabled ? fmtCredits(creditsTotal) : formatCost(rawTotal),
+    usd: fmtUSD(creditsTotal),
     breakdown,
   });
 }
@@ -69,8 +79,25 @@ export async function POST(req: NextRequest) {
   const lang = String(body?.lang || cfg.leakosintLang || "en");
   const collectedAt = new Date().toISOString();
 
+  // Metering. When a database is configured every query is charged to the signed-in
+  // operator's balance BEFORE it runs, atomically, and refunded if the API does not
+  // actually answer. Without a database the tool is single-operator and unmetered.
+  const price = priceCredits(estimateCost(request, limit));
+  const user = creditsEnabled ? await currentUser() : null;
+  if (creditsEnabled) {
+    if (!user) {
+      return NextResponse.json({ error: "sign in to run a metered search", needsAuth: true }, { status: 401 });
+    }
+    const charge = await debit(user.id, price, `leak: ${(Array.isArray(request) ? request[0] : request).slice(0, 48)}`);
+    if (!charge.ok) {
+      return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
+    }
+  }
+
   try {
     const res = await leakOsint({ token, request, limit, lang });
+    // the money moved but the query did not run — give it back
+    if (user && res.error) await refund(user.id, price, `refund: ${res.error}`);
     const term = Array.isArray(request) ? request[0] : String(request);
     const signals = leakOsintSignals(term, res, collectedAt);
 
@@ -88,6 +115,8 @@ export async function POST(req: NextRequest) {
         rowCount: res.rowCount, cost: res.cost, formatted: formatCost(res.cost), limit,
         leads: leads.map((l) => ({ kind: l.kind, value: l.value, why: l.why })),
         error: res.error,
+        charged: creditsEnabled ? price : 0,
+        balance: user ? await balanceOf(user.id) : undefined,
       });
     }
 
@@ -97,6 +126,9 @@ export async function POST(req: NextRequest) {
       error: res.error,
       // the query ran and matched nothing — bounded, not cleared
       empty: res.empty && !res.error,
+      // a miss was still a real search: it is charged. an API error was refunded above.
+      charged: creditsEnabled && !res.error ? price : 0,
+      balance: user ? await balanceOf(user.id) : undefined,
     });
   } catch (e) {
     return NextResponse.json({ error: "search failed", detail: String(e) }, { status: 500 });

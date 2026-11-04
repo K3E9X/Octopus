@@ -8,19 +8,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "./Logo";
 
-interface U { id: string; email: string; name?: string; role: string; createdAt: number; lastSeen?: number }
+interface U { id: string; email: string; name?: string; role: string; createdAt: number; lastSeen?: number; credits?: number }
 interface A { id: number; at: number; operator: string; kind: string; selector: string; legalBasis: string; caseId?: string }
 
 export default function Admin({ me, disabledReason }: { me?: { id: string; email: string }; disabledReason?: string }) {
   const [users, setUsers] = useState<U[]>([]);
   const [activity, setActivity] = useState<A[]>([]);
   const [chain, setChain] = useState<{ intact: boolean; checked: number; brokenAt?: number } | null>(null);
+  const [metered, setMetered] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function load() {
     const r = await fetch("/api/admin");
     const d = await r.json();
     if (d?.users) { setUsers(d.users); setActivity(d.activity || []); setChain(d.chain || null); }
+      setMetered(!!d.metered);
   }
   useEffect(() => { if (!disabledReason) load(); }, [disabledReason]);
 
@@ -29,6 +31,18 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
     const d = await r.json();
     setMsg(d?.error || "role updated");
     setTimeout(() => setMsg(""), 4000);
+    load();
+  }
+
+  async function grant(id: string, email: string) {
+    const raw = window.prompt(`Credit ${email} — amount in US$ (negative to claw back):`, "5");
+    if (raw === null) return;
+    const usd = Number(raw);
+    if (!Number.isFinite(usd) || usd === 0) { setMsg("enter a non-zero dollar amount"); return; }
+    const r = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "grant", id, usd }) });
+    const d = await r.json();
+    if (!r.ok) { setMsg(d.error || "grant failed"); return; }
+    setMsg(`${email}: balance now ${(d.balance ?? 0).toLocaleString("en-US")} cr`);
     load();
   }
 
@@ -56,7 +70,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
       <section>
         <h2>Accounts <em>{users.length}</em></h2>
         <table className="datatable">
-          <thead><tr><th>email</th><th>name</th><th>role</th><th>created</th><th>last seen</th></tr></thead>
+          <thead><tr><th>email</th><th>name</th><th>role</th>{metered && <th>credits</th>}<th>created</th><th>last seen</th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
@@ -69,11 +83,17 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
                     <option value="disabled">disabled</option>
                   </select>
                 </td>
+                {metered && (
+                  <td className="adm-credits">
+                    <span>{(u.credits ?? 0).toLocaleString("en-US")}</span>
+                    <button className="adm-grant" onClick={() => grant(u.id, u.email)}>top up</button>
+                  </td>
+                )}
                 <td>{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td>{u.lastSeen ? new Date(u.lastSeen).toLocaleString() : "never"}</td>
               </tr>
             ))}
-            {users.length === 0 && <tr><td className="t-empty" colSpan={5}>no account yet</td></tr>}
+            {users.length === 0 && <tr><td className="t-empty" colSpan={metered ? 6 : 5}>no account yet</td></tr>}
           </tbody>
         </table>
       </section>
