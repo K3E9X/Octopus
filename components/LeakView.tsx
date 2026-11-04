@@ -105,6 +105,47 @@ export default function LeakView({
   const ignored = useMemo(() => quote?.breakdown.flatMap((b) => b.ignored) ?? [], [quote]);
   const complexity = quote?.breakdown.reduce((m, b) => Math.max(m, b.complexity), 1) ?? 1;
 
+  // Order the recovered fields the way an analyst reads them, from the signals the
+  // search already returned. Credentials first, then who the person is, then how to
+  // reach them, then infrastructure, then the rest — and the raw row-pair lines last.
+  const FIELD_ORDER: Record<string, number> = {
+    credential: 0, name: 1, identifier: 1, email: 2, phone: 2, address: 3, document: 4,
+    ip: 5, login: 5, date: 6, breach: 9, record: 9, other: 7,
+  };
+  type Field = { kind: string; label: string; value: string; masked?: boolean };
+  type DB = { name: string; info: string; fields: Field[] };
+
+  const dbs = useMemo<DB[]>(() => {
+    const out: DB[] = [];
+    for (const sig of res?.signals ?? []) {
+      const exp = (sig as any).exposure as Field[] | undefined;
+      if (!exp || sig.platform === "LEAKOSINT") continue;      // skip the roll-up root
+      const info = exp.find((f) => f.kind === "breach");
+      const fields = exp
+        .filter((f) => f.kind !== "breach")
+        .sort((a, b) => (FIELD_ORDER[a.kind] ?? 7) - (FIELD_ORDER[b.kind] ?? 7));
+      out.push({ name: sig.platform, info: info?.value || "", fields });
+    }
+    return out;
+  }, [res]);
+
+  // Correlation: a value that shows up in more than one database is the strongest thing
+  // a multi-source search produces — the same fact, independently, in two dumps.
+  const correlations = useMemo(() => {
+    const seen = new Map<string, { kind: string; value: string; dbs: Set<string> }>();
+    for (const db of dbs) {
+      for (const f of db.fields) {
+        if (f.masked || f.kind === "record" || f.kind === "date") continue;
+        const k = f.kind + "\u0000" + f.value.toLowerCase();
+        const e = seen.get(k) || { kind: f.kind, value: f.value, dbs: new Set<string>() };
+        e.dbs.add(db.name);
+        seen.set(k, e);
+      }
+    }
+    return [...seen.values()].filter((e) => e.dbs.size > 1).sort((a, b) => b.dbs.size - a.dbs.size);
+  }, [dbs]);
+
+
   return (
     <div className="lk">
       <div className="lk-head">
@@ -196,13 +237,34 @@ export default function LeakView({
             {added !== null && added > 0 && <span className="lk-added">+{added} node(s) on the graph</span>}
           </div>
 
-          {res.databases?.map((d) => (
+          {correlations.length > 0 && (
+            <div className="lk-corr">
+              <div className="lk-corr-h">confirmed across sources</div>
+              {correlations.slice(0, 8).map((c, i) => (
+                <div className="lk-corr-row" key={i}>
+                  <span className={"lk-ck k-" + c.kind}>{c.kind}</span>
+                  <span className="lk-cv">{c.value}</span>
+                  <span className="lk-cn">{c.dbs.size} sources</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {dbs.map((d) => (
             <div className="lk-db" key={d.name}>
               <div className="lk-db-h">
                 <span className="lk-db-n">{d.name}</span>
-                <span className="lk-db-c">{d.rows} row(s)</span>
+                <span className="lk-db-c">{d.fields.filter((f) => f.kind !== "record").length} field(s)</span>
               </div>
               {d.info && <p className="lk-db-i">{d.info}</p>}
+              <div className="lk-fields">
+                {d.fields.filter((f) => f.kind !== "record").map((f, i) => (
+                  <div className={"lk-f" + (f.masked ? " masked" : "")} key={i}>
+                    <span className="lk-fl">{f.label}</span>
+                    <span className="lk-fv">{f.value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
 

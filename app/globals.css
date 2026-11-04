@@ -1544,3 +1544,17 @@ body:has(.lp) { overflow: auto; }
 .adm-grant { margin-left: 10px; background: transparent; border: 1px solid var(--ctl-bd); color: var(--ctl);
   font-family: var(--mono); font-size: calc(9.5px * var(--ui)); padding: 3px 9px; cursor: pointer; }
 .adm-grant:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- LEAK results: the data itself, ordered and correlated ---- */
+.lk-corr { max-width: 900px; border: 1px solid color-mix(in srgb, var(--confirm) 36%, transparent); padding: 10px 14px 12px; margin: 0 0 22px; }
+.lk-corr-h { font-size: calc(9.5px * var(--ui)); letter-spacing: .2em; text-transform: uppercase; color: var(--confirm); margin-bottom: 6px; }
+.lk-corr-row { display: flex; align-items: baseline; gap: 12px; padding: 4px 0; border-top: 1px solid var(--line-soft); }
+.lk-corr-row:first-of-type { border-top: 0; }
+.lk-ck { flex: none; min-width: 78px; font-size: calc(9px * var(--ui)); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); }
+.lk-cv { flex: 1; min-width: 0; word-break: break-all; color: var(--ink); font-size: calc(12.5px * var(--ui)); }
+.lk-cn { flex: none; font-size: calc(10px * var(--ui)); color: var(--confirm); font-variant-numeric: tabular-nums; }
+.lk-fields { margin-top: 8px; }
+.lk-f { display: flex; align-items: baseline; gap: 14px; padding: 3px 0; }
+.lk-fl { flex: none; min-width: 140px; font-size: calc(10px * var(--ui)); letter-spacing: .04em; color: var(--ink-3); }
+.lk-fv { flex: 1; min-width: 0; word-break: break-all; color: var(--ink); font-size: calc(12.5px * var(--ui)); }
+.lk-f.masked .lk-fv { color: var(--ink-4); }

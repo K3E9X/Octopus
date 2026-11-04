@@ -48,7 +48,7 @@ export default function MarineSnow() {
 
     function build() {
       // density by area, capped: a 4K screen must not get four times the work
-      const n = Math.min(340, Math.round((W * H) / 7000));
+      const n = Math.min(200, Math.round((W * H) / 12000));   // épurée: sparser than before
       flakes = Array.from({ length: n }, () => spawn(Math.random() * H));
     }
 
@@ -62,7 +62,7 @@ export default function MarineSnow() {
         // terminal velocity rises with size — this is what gives the field depth
         vy: 0.12 + z * 0.55,
         sway: Math.random() * Math.PI * 2,
-        lit: Math.random() < 0.06,
+        lit: Math.random() < 0.035,
       };
     }
 
@@ -94,7 +94,7 @@ export default function MarineSnow() {
         if (f.x < -8) f.x = W + 8;
         else if (f.x > W + 8) f.x = -8;
 
-        ctx.globalAlpha = (0.1 + f.z * 0.42) * visible;
+        ctx.globalAlpha = (0.06 + f.z * 0.26) * visible;   // quieter
         ctx.fillStyle = f.lit ? accent : ink;
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
@@ -110,7 +110,7 @@ export default function MarineSnow() {
       // draw the water column once and leave it: falling matter IS the animation
       const accent = cssv("--accent") || "#FF8A3D", ink = cssv("--ink-3") || "#5F7476";
       for (const f of flakes) {
-        ctx.globalAlpha = 0.1 + f.z * 0.42;
+        ctx.globalAlpha = 0.06 + f.z * 0.26;
         ctx.fillStyle = f.lit ? accent : ink;
         ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
       }
