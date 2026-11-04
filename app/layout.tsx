@@ -1,17 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Syne, IBM_Plex_Mono } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 // next/font SELF-HOSTS these at build time. That matters more here than convenience:
-// a <link> to Google Fonts would make every page load of an OSINT tool call a third
+// a <link> to Google Fonts would make every page load of a leak-data tool call a third
 // party, which is the one thing this app's egress posture exists to avoid.
-const display = Syne({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-display", display: "swap" });
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" });
+// Space Grotesk reads sharper and more technical than the old display face — the right
+// register for Octopus Leak; JetBrains Mono carries the data, where legibility of a raw
+// value (an IBAN, a hash) is the whole job.
+const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Octopus OSINT",
+  title: "Octopus Leak",
   description:
-    "Octopus OSINT — resolve one identity across everything, and know when it cannot be resolved. Orbit is one view inside it.",
+    "Octopus Leak — see exactly what has leaked about you across known breaches, and what to do about each exposure.",
 };
 
 export const viewport: Viewport = {
