@@ -7,11 +7,16 @@
    carried forward unchanged rather than deleted.
    ========================================================================== */
 :root {
-  /* ground — deep water, colder and bluer than the old neutral void */
-  --void: #04080B;
-  --void-2: #0A1015;
-  --line: rgba(255, 196, 150, .14);        /* hairlines take a faint warm cast */
-  --line-soft: rgba(255, 196, 150, .06);
+  /* ground — the Check surface's calmer teal water, now the whole product's ground.
+     A touch lighter than the old near-black void so the warm/cool glows below read. */
+  --void: #0B1519;
+  --void-2: #122630;
+  /* the two signature glows from /check — warm top-right, cool bottom-left — lifted
+     to tokens so light mode can tone them down without a second body rule */
+  --glow-warm: rgba(255, 138, 61, .10);
+  --glow-cool: rgba(91, 214, 166, .07);
+  --line: rgba(230, 242, 240, .10);        /* clean cool-white hairlines, as on /check */
+  --line-soft: rgba(230, 242, 240, .05);
 
   /* ink — warm-neutral, so text sits on the blue ground without a colour clash */
   --ink: #E9F4F3;
@@ -42,13 +47,13 @@
   --type-leak: #D69090;
   --type-person: #E6DFA0;
 
-  --panel: rgba(8, 14, 19, .74);
+  --panel: rgba(14, 26, 30, .76);
 
   /* Controls get their own tokens. Everything clickable used --ink-3, which
      measured 2.89:1 on the old void — a button the eye has to hunt for. */
   --ctl: #C9D8D6;
-  --ctl-bd: rgba(255, 196, 150, .24);
-  --ctl-bg: rgba(255, 196, 150, .05);
+  --ctl-bd: rgba(230, 242, 240, .2);
+  --ctl-bg: rgba(230, 242, 240, .045);
 
   /* type — a display face for headings; mono stays everywhere data is shown */
   --mono: var(--font-mono), ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -60,6 +65,7 @@
    copy inside a media query to drift out of step with this one. */
 :root[data-theme="light"] {
   --void: #FBF7F3; --void-2: #F3ECE4;
+  --glow-warm: rgba(255, 138, 61, .07); --glow-cool: rgba(47, 107, 65, .05);
   --line: rgba(40, 24, 12, .14); --line-soft: rgba(40, 24, 12, .06);
   --ink: #1A140E; --ink-2: #55483C; --ink-3: #7A6A5C; --ink-4: #877868;
   /* Measured, not assumed: the handoff's #C25A12 came out at 4.13:1 on this ground,
@@ -83,9 +89,16 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  background: var(--void); color: var(--ink);
+  background:
+    radial-gradient(1100px 600px at 82% -8%, var(--glow-warm), transparent 60%),
+    radial-gradient(900px 700px at 8% 108%, var(--glow-cool), transparent 55%),
+    var(--void);
+  background-attachment: fixed;
+  color: var(--ink);
   font-family: var(--mono); overflow: hidden; -webkit-font-smoothing: antialiased;
 }
+/* The consumer surface (/check) and the landing scroll; the cockpit stage does not. */
+body:has(.chk) { overflow: auto; }
 
 #stage { position: fixed; inset: 0; }
 #stage canvas { position: absolute; inset: 0; display: block; }
