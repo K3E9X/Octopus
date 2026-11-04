@@ -1,17 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, JetBrains_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// next/font SELF-HOSTS these at build time. That matters more here than convenience:
-// a <link> to Google Fonts would make every page load of a leak-data tool call a third
-// party, which is the one thing this app's egress posture exists to avoid.
+// The font files are committed in app/fonts and loaded with next/font/LOCAL, on purpose.
+// next/font/google fetches font metadata from Google AT BUILD TIME, and that fetch fails
+// intermittently on CI ("Cannot read properties of null" in the font loader), breaking the
+// build for no reason in the code. Self-hosting the files removes the network from the
+// build entirely — and keeps page loads from calling a third party, which this app's
+// egress posture wants anyway. These are the variable woff2s (latin, which covers French),
+// one file per family spanning its whole weight axis.
 // A three-face system, each with one job: Space Grotesk is the DISPLAY face (headings +
 // the big numerals only — a display grotesque hurts readability below ~16px); Inter is
 // the neutral workhorse for body and UI text; JetBrains Mono carries the data, where the
 // legibility of a raw value (an IBAN, a hash) and tabular figures are the whole job.
-const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display", display: "swap" });
-const sans = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-sans", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
+const display = localFont({ src: "./fonts/SpaceGrotesk.woff2", weight: "500 700", variable: "--font-display", display: "swap" });
+const sans = localFont({ src: "./fonts/Inter.woff2", weight: "400 600", variable: "--font-sans", display: "swap" });
+const mono = localFont({ src: "./fonts/JetBrainsMono.woff2", weight: "400 600", variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Octopus Leak",
