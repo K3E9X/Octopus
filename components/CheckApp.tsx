@@ -91,7 +91,7 @@ export default function CheckApp() {
         {step === "enter" && (
           <section className="chk-hero">
             <h1>What has leaked<br />about <span>you</span>?</h1>
-            <p>Enter your own email or phone. We confirm it is yours, then show you exactly what is exposed in breach data — and what to do about it.</p>
+            <p>Enter an email or phone you own. Once you've proven it is yours, we reveal everything in breach data linked to you — your name, usernames, address, passwords, even bank details — and what to do about each.</p>
 
             <div className="chk-box">
               <input
@@ -102,7 +102,16 @@ export default function CheckApp() {
               <button onClick={begin} disabled={busy || !subject.trim()}>{busy ? "…" : "Check my exposure"}</button>
             </div>
             {err && <p className="chk-err">{err}</p>}
-            <p className="chk-fine">Only you can run this, and only for an address or number you can prove you control. We do not look people up by name.</p>
+
+            <div className="chk-reveal">
+              <span>What we uncover about you</span>
+              <div>
+                {["Passwords", "Bank details · RIB / IBAN", "Full name", "Usernames", "Email", "Phone", "Address", "ID documents"]
+                  .map((t) => <em key={t}>{t}</em>)}
+              </div>
+            </div>
+
+            <p className="chk-fine">You enter an email or phone so we can prove it is <b>yours</b> — your name, pseudonym and the rest then surface <b>in the report</b>. You can only check an identifier you control, never look someone else up: that proof is the whole point.</p>
           </section>
         )}
 
