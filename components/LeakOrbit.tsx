@@ -19,15 +19,16 @@ interface Finding { category: string; severity: Sev; label: string; value: strin
 interface SrcReport { name: string; info: string; date?: string; sortDate: number; findings: Finding[]; severity: Sev }
 interface Report { subject: string; sources: SrcReport[]; breachCount: number; dataPoints: number }
 
-const SEV_COLOR: Record<Sev, string> = { critical: "#FF6B6B", high: "#FF9F45", medium: "#FFD24D", low: "#5BD6A6" };
+// aligned to the CSS severity ramp (hsl → hex), off the brand orange on purpose
+const SEV_COLOR: Record<Sev, string> = { critical: "#ED455C", high: "#F06338", medium: "#F4B02A", low: "#56B5BD" };
 const CAT_COLOR: Record<string, string> = {
-  password: "#FF6B6B", financial: "#FF6B6B", document: "#FF9F45", identity: "#FFB454",
-  location: "#FFD24D", email: "#8FC7A0", phone: "#8FB4D6", online: "#B3A6D6",
-  professional: "#D6B98F", other: "#93A8AA",
+  password: "#ED455C", financial: "#ED455C", document: "#F06338", identity: "#F06338",
+  location: "#F4B02A", email: "#56B5BD", phone: "#56B5BD", online: "#9A8FD1",
+  professional: "#C8A98A", other: "#7E9397",
 };
 const catColor = (c: string) => CAT_COLOR[c] || "#93A8AA";
 
-const W = 1000, H = 680, CX = 500, CY = 332;
+const W = 1000, H = 560, CX = 500, CY = 288;
 
 export default function LeakOrbit({ report }: { report: Report }) {
   const [focus, setFocus] = useState<string | null>(null);
@@ -35,7 +36,8 @@ export default function LeakOrbit({ report }: { report: Report }) {
   const layout = useMemo(() => {
     const srcs = report.sources.filter((s) => s.findings.length > 0);
     const n = Math.max(1, srcs.length);
-    const ringR = Math.min(258, 150 + n * 9);
+    const ringR = Math.min(200, 140 + n * 8);
+    const RX = 1.45, RY = 0.9;   // a wide ellipse fits the wide card
 
     // where each value lives, so a value in >1 breach can be drawn as a correlation
     const valueHomes = new Map<string, Set<string>>();
@@ -46,11 +48,12 @@ export default function LeakOrbit({ report }: { report: Report }) {
 
     const nodes = srcs.map((s, i) => {
       const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
-      const x = CX + ringR * Math.cos(ang), y = CY + ringR * Math.sin(ang) * 0.82;
-      const r = Math.max(15, Math.min(34, 13 + s.findings.length * 2.2));
+      const x = CX + ringR * RX * Math.cos(ang), y = CY + ringR * RY * Math.sin(ang);
+      const r = Math.max(18, Math.min(36, 14 + s.findings.length * 2.4));
       const show = s.findings.slice(0, 12);
       const sats = show.map((f, j) => {
-        const sa = (j / Math.max(1, show.length)) * Math.PI * 2 + i;
+        // satellites ride the upper arc only (-207° → +27°), keeping the label below the node clear
+        const sa = -Math.PI * 1.15 + (show.length > 1 ? j / (show.length - 1) : 0.5) * Math.PI * 1.3;
         const sr = r + 16 + (j % 2) * 9;
         return { f, x: x + sr * Math.cos(sa), y: y + sr * Math.sin(sa) };
       });
@@ -72,7 +75,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
         arcs.push({ a: arr[a], b: arr[b], value, category });
       }
     }
-    return { nodes, arcs, posByName, count: srcs.length };
+    return { nodes, arcs, posByName, count: srcs.length, rx: ringR * RX, ry: ringR * RY };
   }, [report]);
 
   if (!layout.count) return <p className="lk2-clear">Nothing to plot — no breach held a field tied to you.</p>;
@@ -89,12 +92,12 @@ export default function LeakOrbit({ report }: { report: Report }) {
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
           </radialGradient>
           <filter id="lkGlow" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            <feGaussianBlur stdDeviation="2.4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
 
         {/* faint orbit guide */}
-        <ellipse cx={CX} cy={CY} rx={Math.min(258, 150 + layout.count * 9)} ry={Math.min(258, 150 + layout.count * 9) * 0.82}
+        <ellipse cx={CX} cy={CY} rx={layout.rx} ry={layout.ry}
           className="lk2-orbit-ring" />
 
         {/* correlation arcs (behind nodes) */}
@@ -175,7 +178,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
           <div className="lk2-orbit-hint">
             <p>Hover a breach to read what it holds.</p>
             <div className="lk2-orbit-legend">
-              {[["Passwords / financial", "#FF6B6B"], ["Identity / documents", "#FF9F45"], ["Address", "#FFD24D"], ["Contact", "#8FC7A0"], ["Accounts / work", "#B3A6D6"]]
+              {[["Passwords / financial", "#ED455C"], ["Identity / documents", "#F06338"], ["Address", "#F4B02A"], ["Contact", "#56B5BD"], ["Accounts / work", "#9A8FD1"]]
                 .map(([l, c]) => <span key={l}><i style={{ background: c as string }} />{l}</span>)}
             </div>
             {layout.arcs.length > 0 && <p className="lk2-orbit-note">{layout.arcs.length} value(s) recur across breaches — the arcs — which is how separate leaks tie back to one person.</p>}

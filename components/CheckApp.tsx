@@ -41,6 +41,18 @@ type View = "orbit" | "category" | "source" | "timeline";
 const SEV_LABEL: Record<Sev, string> = { critical: "critical", high: "high", medium: "notable", low: "minor" };
 const SENSITIVE = new Set(["password", "financial", "document"]);
 
+// Inline icons — a consistent 1.5px stroke set, never emoji.
+const IconWarn = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+  </svg>
+);
+const IconShield = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
 export default function CheckApp() {
   const [step, setStep] = useState<Step>("enter");
   const [subject, setSubject] = useState("");
@@ -161,7 +173,7 @@ function Enter({ subject, setSubject, begin, busy, err }: any) {
 function Verify({ subject, code, setCode, confirm, busy, err, msg, reset }: any) {
   return (
     <section className="lk2-verify">
-      <div className="lk2-lock">⬡</div>
+      <div className="lk2-ico"><IconShield /></div>
       <h2>Prove it is yours</h2>
       <p>{msg || `We sent a code to ${subject}.`}</p>
       <div className="lk2-box lk2-box-sm">
@@ -280,7 +292,7 @@ function Verdict({ report, headline }: { report: Report; headline: string }) {
 function Critical({ hi }: { hi: Report["highlights"] }) {
   return (
     <div className="lk2-critical">
-      <div className="lk2-crit-h">⚠ Act on these first</div>
+      <div className="lk2-crit-h"><IconWarn /> Act on these first</div>
       <div className="lk2-crit-grid">
         {hi.financial.map((f, i) => <Value key={"f" + i} f={f} tag="bank / financial" />)}
         {hi.passwords.map((f, i) => <Value key={"p" + i} f={f} tag="password" />)}

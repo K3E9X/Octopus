@@ -1,14 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
 // next/font SELF-HOSTS these at build time. That matters more here than convenience:
 // a <link> to Google Fonts would make every page load of a leak-data tool call a third
 // party, which is the one thing this app's egress posture exists to avoid.
-// Space Grotesk reads sharper and more technical than the old display face — the right
-// register for Octopus Leak; JetBrains Mono carries the data, where legibility of a raw
-// value (an IBAN, a hash) is the whole job.
+// A three-face system, each with one job: Space Grotesk is the DISPLAY face (headings +
+// the big numerals only — a display grotesque hurts readability below ~16px); Inter is
+// the neutral workhorse for body and UI text; JetBrains Mono carries the data, where the
+// legibility of a raw value (an IBAN, a hash) and tabular figures are the whole job.
 const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display", display: "swap" });
+const sans = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-sans", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
@@ -40,7 +42,7 @@ const THEME_BOOT =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${display.variable} ${mono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <head><script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} /></head>
       <body>{children}</body>
     </html>
