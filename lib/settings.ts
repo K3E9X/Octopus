@@ -5,6 +5,13 @@
 // vars still work in production.
 
 export interface OctopusSettings {
+  // --- LeakOSINT: the primary leak source ---
+  /** personal token from the bot's /api command */
+  leakosint?: string;
+  /** 100-10000. Raises the result count AND the price AND the slice searched. */
+  leakosintLimit?: number;
+  /** result language, default "en" */
+  leakosintLang?: string;
   intelx?: string;
   intelxUrl?: string;
   recordedfuture?: string;
@@ -48,6 +55,9 @@ export function saveSettings(s: OctopusSettings): void {
 /** Server-shaped config object (matches lib/reqconfig.ClientConfig). */
 export function toClientConfig(s: OctopusSettings) {
   return {
+    leakosint: s.leakosint || undefined,
+    leakosintLimit: s.leakosintLimit || undefined,
+    leakosintLang: s.leakosintLang || undefined,
     intelx: s.intelx || undefined,
     intelxUrl: s.intelxUrl || undefined,
     recordedfuture: s.recordedfuture || undefined,

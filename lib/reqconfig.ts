@@ -7,6 +7,9 @@ import type { NextRequest } from "next/server";
 import type { LLMConfig } from "./llmconfig";
 
 export interface ClientConfig {
+  leakosint?: string;
+  leakosintLimit?: number;
+  leakosintLang?: string;
   intelx?: string;
   intelxUrl?: string;
   recordedfuture?: string;

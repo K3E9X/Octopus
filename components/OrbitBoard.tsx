@@ -26,6 +26,7 @@ import { loadCasefile, saveCasefile, addCard, updateCard, correlatable, emptyCas
 import { Glyph, type GlyphName } from "./Glyph";
 import ExposurePanel from "./ExposurePanel";
 import ReuseView from "./ReuseView";
+import LeakView from "./LeakView";
 import { exposureSummary } from "@/lib/exposure";
 import { handleRarity } from "@/lib/rarity";
 import { usernameVariants } from "@/lib/variants";
@@ -108,7 +109,9 @@ export default function OrbitBoard() {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [dossier, setDossier] = useState<Dossier | null>(null);
-  const [view, setView] = useState<"board" | "case" | "table" | "timeline" | "map" | "reuse">("board");
+  // LEAK is the default surface: it is the one that produces the material the
+  // other views correlate, so starting anywhere else starts on an empty graph.
+  const [view, setView] = useState<"leak" | "board" | "case" | "table" | "timeline" | "map" | "reuse">("leak");
   const [monitor, setMonitor] = useState<MonitorDiff | null>(null);
   const [monitoring, setMonitoring] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -233,6 +236,7 @@ export default function OrbitBoard() {
     { group: "Enrich", label: "Face match", hint: "The same person across different photos", run: faceMatch },
     { group: "Enrich", label: "Open hidden service", hint: "Retrieve a .onion through Tor — emails, wallets, keys, handles", run: openOnion },
     { group: "Enrich", label: "Add a finding", hint: "Your manual discovery, run through the same engine", run: () => openAddForm() },
+    { group: "View", label: "Leak search", hint: "The primary source — the records themselves, quoted before they are billed", run: () => setView("leak"), key: "0" },
     { group: "View", label: "Orbit", hint: "The correlation graph — confidence as gravity", run: () => setView("board"), key: "1" },
     { group: "View", label: "Investigator's board", hint: "Your own cards, links and theories, correlated with the graph", run: () => setView("case"), key: "2" },
     { group: "View", label: "Table", hint: "Every node, sortable and filterable", run: () => setView("table"), key: "3" },
@@ -1988,6 +1992,17 @@ export default function OrbitBoard() {
 
       {view === "map" && <MapView signals={currentSignals()} onSelect={(id) => setSelectedId(id)} />}
       {view === "reuse" && <ReuseView signals={currentSignals()} onPivot={(v) => pivotOnValue(v)} />}
+      {view === "leak" && (
+        <LeakView
+          cfgHeaders={() => ({ ...cfgHeaders(), ...tradecraftHeaders() })}
+          onOpenSources={() => setRail({ id: "sources", top: 120 })}
+          onIngest={(sigs, seedTerm) => {
+            // straight onto the graph, through the same merge every other source uses
+            if (!seedRef.current) { seedRef.current = seedTerm; setSeed(seedTerm); }
+            return mergeRef.current(sigs, "", normId(seedTerm));
+          }}
+        />
+      )}
 
       {view === "case" && (
         <CaseBoard
@@ -2156,6 +2171,7 @@ export default function OrbitBoard() {
           <span className="hide-md"><b style={{ color: "var(--confirm)" }}>{confirmedCount}</b> confirmed</span>
         </div>
         <div className="viewtoggle">
+          <button className={view === "leak" ? "on" : ""} onClick={() => setView("leak")}>LEAK</button>
           <button className={view === "board" ? "on" : ""} onClick={() => setView("board")}>ORBIT</button>
           <button className={view === "case" ? "on" : ""} onClick={() => setView("case")}>BOARD</button>
           <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>TABLE</button>
@@ -2436,7 +2452,17 @@ export default function OrbitBoard() {
               <label className="api-check"><input type="checkbox" checked={!!settings.llmWeb} onChange={(e) => updateSettings({ llmWeb: e.target.checked })} /> allow web search (OpenRouter <b>:online</b>) — lets the assistant look up what our connectors can&apos;t reach</label>
               <PingDot svc="llm" />
 
-              <div className="guide-sect" id="api-leak">Leak / breach sources</div>
+              <div className="guide-sect" id="api-leak">LeakOSINT — the primary source</div>
+              <div className="add-cols">
+                <label className="add-field"><span>LeakOSINT token</span><input type="password" value={settings.leakosint || ""} placeholder="from the bot's /api command" onChange={(e) => updateSettings({ leakosint: e.target.value })} /></label>
+              </div>
+              <div className="add-cols">
+                <label className="add-field"><span>search limit (100–10000)</span><input type="number" min={100} max={10000} step={100} value={settings.leakosintLimit || 100} onChange={(e) => updateSettings({ leakosintLimit: Math.max(100, Math.min(10000, Number(e.target.value) || 100)) })} /></label>
+                <label className="add-field"><span>result language</span><input value={settings.leakosintLang || "en"} placeholder="en" onChange={(e) => updateSettings({ leakosintLang: e.target.value })} /></label>
+              </div>
+              <div className="api-note">This source BILLS PER REQUEST. The limit raises the result count, the price and the slice of the index searched, all at once — so a miss at 100 is an unfinished search, not a clean identity. Every query is quoted in the LEAK view before it runs; the formula is 0.0002 × (5 + √(limit × complexity)), and complexity is 1 / 5 / 16 / 40 for one to four or more billable words. Quote a phrase in double quotes to keep it as one word.</div>
+
+              <div className="guide-sect">Other leak / breach sources</div>
               <div className="add-cols">
                 <label className="add-field"><span>Intelligence X key</span><input type="password" value={settings.intelx || ""} placeholder="freemium key" onChange={(e) => updateSettings({ intelx: e.target.value })} /></label>
                 <div className="api-testcol"><PingDot svc="intelx" /></div>

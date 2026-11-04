@@ -21,6 +21,10 @@ export type ExposureKind =
   | "identifier"  // the login the credential belongs to (an address, a username)
   | "login"       // a service URL the victim was signed into
   | "email"
+  | "phone"      // a number tied to the identity in a dump
+  | "name"       // a real name, which most credential indexes never return
+  | "address"    // postal / geographic
+  | "document"   // passport, national id, licence — identity-grade, handle accordingly
   | "ip"
   | "breach"      // a named dump this identity appears in
   | "field"       // a field CLASS a breach exposed ("passwords", "phone numbers")
@@ -221,7 +225,7 @@ export function harvestText(lines: string[], label = "Record"): ExposureItem[] {
   return out;
 }
 
-const ORDER: ExposureKind[] = ["credential", "identifier", "login", "email", "record", "breach", "field", "ip", "machine", "malware", "date", "count", "other"];
+const ORDER: ExposureKind[] = ["credential", "identifier", "name", "email", "phone", "address", "document", "login", "record", "breach", "field", "ip", "machine", "malware", "date", "count", "other"];
 
 /** Credentials first, and inside every group the CLEAR values before the masked ones. */
 export function sortExposure(items: ExposureItem[]): ExposureItem[] {
@@ -264,6 +268,10 @@ export function exposureSummary(items: ExposureItem[]): string {
   if (cred.total) parts.push(cred.clear ? `${cred.clear} credential${cred.clear > 1 ? "s" : ""} in clear` : `${cred.total} credential${cred.total > 1 ? "s" : ""} (masked)`);
   if (n("login")) parts.push(`${n("login")} service${n("login") > 1 ? "s" : ""}`);
   if (n("breach")) parts.push(`${n("breach")} breach${n("breach") > 1 ? "es" : ""}`);
+  if (n("name")) parts.push(`${n("name")} name${n("name") > 1 ? "s" : ""}`);
+  if (n("phone")) parts.push(`${n("phone")} phone${n("phone") > 1 ? "s" : ""}`);
+  if (n("address")) parts.push(`${n("address")} address${n("address") > 1 ? "es" : ""}`);
+  if (n("document")) parts.push(`${n("document")} document${n("document") > 1 ? "s" : ""}`);
   if (n("email") + n("identifier")) parts.push(`${n("email") + n("identifier")} identifier${n("email") + n("identifier") > 1 ? "s" : ""}`);
   if (n("record")) parts.push(`${n("record")} record${n("record") > 1 ? "s" : ""}`);
   if (n("ip")) parts.push(`${n("ip")} IP${n("ip") > 1 ? "s" : ""}`);

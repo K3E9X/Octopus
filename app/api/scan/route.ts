@@ -11,6 +11,8 @@ import { recordedFutureLookup, recordedFutureConfigured } from "@/lib/recordedfu
 import { readClientConfig } from "@/lib/reqconfig";
 import { hudsonRockEmail, hudsonRockUsername } from "@/lib/hudsonrock";
 import { breachExposure, breachSignal } from "@/lib/breaches";
+import { leakOsint } from "@/lib/leakosint";
+import { leakOsintSignals } from "@/lib/leaknode";
 import { leadPlan, type Lead } from "@/lib/leads";
 import { nodesFromExposure, applyReuse } from "@/lib/leaknodes";
 import { leakApis, anyLeakKey } from "@/lib/leakapis";
@@ -625,6 +627,28 @@ export async function GET(req: NextRequest) {
     if (intelxConfigured(clientCfg.intelx ? { key: clientCfg.intelx, url: clientCfg.intelxUrl } : undefined) && (!enabled || enabled.has("intelx"))) {
       const leaks = await searchIntelX(isEmail ? q : matchTarget, { key: clientCfg.intelx, url: clientCfg.intelxUrl });
       signals.push(...leaks);
+    }
+
+    // --- LeakOSINT: the PRIMARY leak source ------------------------------------
+    // It runs first and leads, because it is the only source here that returns the
+    // records themselves — which database, what that database was, and the rows:
+    // names, phones, addresses, documents, credentials. Everything below it adds
+    // corroboration to what this one finds rather than the other way round.
+    //
+    // It is also the only source that SPENDS MONEY, so it is opt-out by connector
+    // like the rest and silent without a token — never a surprise charge.
+    const loToken = clientCfg.leakosint || process.env.LEAKOSINT_TOKEN || "";
+    if (loToken && (!enabled || enabled.has("leakosint"))) {
+      try {
+        const term = isEmail ? q : matchTarget;
+        const lo = await leakOsint({
+          token: loToken,
+          request: term,
+          limit: clientCfg.leakosintLimit || 100,
+          lang: clientCfg.leakosintLang || "en",
+        });
+        signals.push(...leakOsintSignals(term, lo, collectedAt));
+      } catch { /* a refused source is a missing source, never a failed scan */ }
     }
 
     // infostealer intel (Hudson Rock — free) — reveals compromise + services used
