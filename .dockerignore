@@ -7,11 +7,8 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 README.md
-docs
 tests
 scratchpad
-k8s
 *.tsbuildinfo
 .vercel
 .env*.local
-collector

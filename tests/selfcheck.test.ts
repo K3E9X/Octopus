@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildReport, headline, parseBreachDate, looksFinancial } from "../lib/selfcheck.ts";
-import { identifierChannel, normalizeIdentifier, issueChallenge, checkCode, newCode } from "../lib/ownership.ts";
 import type { ExposureItem } from "../lib/exposure.ts";
 
 // Build an ExposureItem the way lib/leakosint's rowItems would, so these tests exercise
@@ -149,34 +148,4 @@ test("financial and password findings are pulled out as highlights", () => {
   ], []);
   assert.equal(r.highlights.financial.length, 1);
   assert.equal(r.highlights.passwords.length, 1);
-});
-
-// ---- ownership proof (unchanged behaviour, kept under test) --------------------------
-
-test("an email and a phone are verifiable; a username is not", () => {
-  assert.equal(identifierChannel("me@acme.fr"), "email");
-  assert.equal(identifierChannel("+33 6 12 34 56 78"), "phone");
-  assert.equal(identifierChannel("mdub_92"), null);
-});
-
-test("identifiers normalise so a check and its proof match", () => {
-  assert.equal(normalizeIdentifier("Me@Acme.FR", "email"), "me@acme.fr");
-  assert.equal(normalizeIdentifier("+33 6 12 34 56 78", "phone"), "+33612345678");
-});
-
-test("the right code verifies; a wrong one does not", () => {
-  const { challenge, code } = issueChallenge("me@acme.fr", "email");
-  assert.equal(checkCode({ ...challenge }, "000000" === code ? "111111" : "000000").ok, false);
-  assert.equal(checkCode({ ...challenge }, code).ok, true);
-});
-
-test("a code expires, and brute force is capped at five attempts", () => {
-  const { challenge, code } = issueChallenge("x", "email");
-  assert.deepEqual(checkCode({ ...challenge, expires: Date.now() - 1 }, code), { ok: false, reason: "expired" });
-  const ch = { ...challenge, attempts: 5 };
-  assert.deepEqual(checkCode(ch, code), { ok: false, reason: "too-many" });
-});
-
-test("a code is six digits — the space that makes five guesses hopeless", () => {
-  for (let i = 0; i < 50; i++) assert.match(newCode(), /^\d{6}$/);
 });

@@ -1,47 +1,56 @@
-// Pure selector predicates — no network, no node builtins, no bundler surprises.
+// What kind of subject is this?
 //
-// These used to live inside the modules that USE them (lib/infra, lib/domain), which
-// meant asking "is this a hash?" dragged node:net and node:tls behind it. That is fine
-// on a server route and fatal in a client component: the landing page needs exactly
-// these answers, and the build refused to bundle them.
+// The product accepts exactly two selectors: an email address and a phone number. Both
+// resolve to ONE person — that is the whole reason they are the only two. A name does
+// not, which is why there is no name search: it would return a stranger's data as often
+// as the subject's, and no amount of interface makes that a product.
 //
-// The dependency now points the right way — the server modules import from here.
+// Pure and dependency-light on purpose: the landing page, the search form and the API
+// route all have to agree on what a valid subject is, and a client component cannot
+// drag a server module in to find out.
 
-export type HashKind = "md5" | "sha1" | "sha256" | "sha512";
+import { looksLikePhone, phoneIntel } from "./phone";
 
-/** A bare hex digest of a known length. Anything else is not a hash. */
-export function hashKind(s: string): HashKind | null {
-  const t = String(s || "").trim().toLowerCase();
-  if (!/^[a-f0-9]+$/.test(t)) return null;
-  if (t.length === 32) return "md5";
-  if (t.length === 40) return "sha1";
-  if (t.length === 64) return "sha256";
-  if (t.length === 128) return "sha512";
+export type SubjectKind = "email" | "phone";
+
+// Deliberately permissive on the local part and strict on the shape. An address this
+// rejects is one the leak source would not match either.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export function isEmail(s: string): boolean {
+  const t = String(s || "").trim();
+  return t.length <= 254 && EMAIL_RE.test(t);
+}
+
+/** A phone number in any common notation — "+33 6 12 34 56 78", "06.12.34.56.78", "+1 (415) 555-0100". */
+export function isPhone(s: string): boolean {
+  return looksLikePhone(String(s || ""));
+}
+
+/** The kind, or null when the input is neither — which is what the form has to say. */
+export function subjectKind(s: string): SubjectKind | null {
+  const t = String(s || "").trim();
+  if (!t) return null;
+  if (isEmail(t)) return "email";
+  if (isPhone(t)) return "phone";
   return null;
 }
 
-export function looksLikeHash(s: string): boolean {
-  return hashKind(s) !== null;
-}
-
-const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
-
 /**
- * Loose IP recognition for the browser. The server uses node:net, which is stricter;
- * this only has to be right enough to name the mode a visitor would get.
+ * The canonical form we search on and bill for.
+ *
+ * An email is lower-cased — addresses are case-insensitive in practice and a dump that
+ * stored "John@" must still match a search for "john@". A phone is normalised to E.164
+ * when it parses, because a dump holding "+33612345678" and a user typing "06 12 34 56 78"
+ * are the same number and only one of them is a stable key. `defaultCountry` decides how
+ * a national-format number is read; it is a real choice, not a default to ignore.
  */
-export function looksLikeIpLoose(s: string): boolean {
+export function canonicalSubject(s: string, defaultCountry = "FR"): string {
   const t = String(s || "").trim();
-  if (IPV4.test(t)) return true;
-  return t.includes(":") && /^[a-f0-9:]+$/i.test(t) && (t.match(/:/g) || []).length >= 2;
-}
-
-const TLD = /\.[a-z]{2,24}$/i;
-
-/** A hostname, not a URL and not an email. */
-export function looksLikeDomainName(s: string): boolean {
-  const t = String(s || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  if (!t || t.includes("@") || t.includes(" ")) return false;
-  if (looksLikeIpLoose(t)) return false;
-  return /^[a-z0-9.-]+$/.test(t) && t.includes(".") && TLD.test(t) && t.length <= 253;
+  if (isEmail(t)) return t.toLowerCase();
+  if (isPhone(t)) {
+    const intel = phoneIntel(t, defaultCountry);
+    return intel.e164 || t.replace(/[^\d+]/g, "");
+  }
+  return t;
 }

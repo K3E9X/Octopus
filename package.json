@@ -2,22 +2,16 @@
   "name": "octopus",
   "version": "0.1.0",
   "private": true,
-  "description": "Octopus — OSINT identity correlation platform (Orbit view)",
+  "description": "Octopus Leak — email / phone subject lookup over breach data",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --no-warnings --import ./tests/register.mjs --test tests/*.test.ts",
-    "fetch-face-models": "node scripts/fetch-face-models.mjs",
-    "fetch-wmn": "node scripts/fetch-wmn.mjs"
+    "test": "node --no-warnings --import ./tests/register.mjs --test tests/*.test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
-    "@vladmandic/face-api": "^1.7.15",
-    "exifr": "^7.1.3",
-    "jimp": "^0.22.12",
-    "leaflet": "^1.9.4",
     "libphonenumber-js": "^1.13.8",
     "next": "^14.2.35",
     "react": "18.3.1",
@@ -25,7 +19,6 @@
     "three": "^0.160.0"
   },
   "devDependencies": {
-    "@types/leaflet": "^1.9.21",
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",

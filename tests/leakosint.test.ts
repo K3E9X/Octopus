@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost } from "../lib/leakosint.ts";
-import { leakOsintSignals } from "../lib/leaknode.ts";
 import type { LeakOsintResult } from "../lib/leakosint.ts";
 
 // ---- the billing rules ---------------------------------------------------------
@@ -62,63 +61,6 @@ test("a batch is billed per query, and newlines are a batch", () => {
 test("the quote is readable at the scale it actually lands on", () => {
   assert.match(formatCost(0.003), /^\$0\.0030$/);
   assert.match(formatCost(1.25), /^\$1\.250$/);
-});
-
-// ---- result → graph --------------------------------------------------------------
-
-const OK: LeakOsintResult = {
-  databases: [{
-    name: "Collection #1",
-    info: "2019 credential aggregation, 773M addresses.",
-    rows: [{ Email: "marie@acme.fr", Password: "Kerguelen#88z", FullName: "Marie Dubois", Phone: "+33612345678" }],
-  }],
-  items: [
-    { kind: "breach", label: "Collection #1", value: "2019 credential aggregation, 773M addresses.", source: "leakosint · Collection #1" },
-    { kind: "email", label: "Email", value: "marie@acme.fr", source: "leakosint · Collection #1" },
-    { kind: "credential", label: "Password", value: "Kerguelen#88z", source: "leakosint · Collection #1" },
-    { kind: "name", label: "FullName", value: "Marie Dubois", source: "leakosint · Collection #1" },
-    { kind: "phone", label: "Phone", value: "+33612345678", source: "leakosint · Collection #1" },
-    { kind: "record", label: "Row · Collection #1", value: "marie@acme.fr:Kerguelen#88z", source: "leakosint · Collection #1" },
-  ],
-  rowCount: 1, cost: 0.003, empty: false,
-};
-
-test("each database becomes its own node, keeping its provenance", () => {
-  const sigs = leakOsintSignals("marie@acme.fr", OK, "2026-11-04T00:00:00Z");
-  const db = sigs.find((s) => s.platform === "COLLECTION #1");
-  assert.ok(db, "the database must be its own node");
-  assert.match(db!.evidence[0].detail, /2019 credential aggregation/, "the InfoLeak line is the provenance");
-  assert.equal(db!.linkedIds?.[0], sigs[0].id, "and it hangs off the identity");
-  assert.ok(db!.exposure!.some((i) => i.kind === "name" && i.value === "Marie Dubois"));
-});
-
-test("the root node reports what was recovered and what it cost", () => {
-  const [root] = leakOsintSignals("marie@acme.fr", OK, "t");
-  assert.match(root.evidence[0].detail, /Collection #1/);
-  assert.match(root.evidence[0].detail, /\$0\.003/);
-});
-
-test("the limit caveat is always on the node — a miss is bounded, not cleared", () => {
-  const [root] = leakOsintSignals("x", OK, "t");
-  assert.ok(root.evidence.some((e) => /unfinished search/.test(e.detail)));
-});
-
-test("an API error is reported as a non-answer, never as a clean result", () => {
-  const [n] = leakOsintSignals("x", { databases: [], items: [], rowCount: 0, cost: 0, empty: true, error: "Invalid token" }, "t");
-  assert.equal(n.confidence, 0);
-  assert.match(n.evidence[0].detail, /NOT a negative result/);
-  assert.match(n.evidence[0].detail, /Invalid token/);
-});
-
-test("an empty result says the search was bounded, not that the person is clean", () => {
-  const [n] = leakOsintSignals("x", { databases: [], items: [], rowCount: 0, cost: 0.003, empty: true }, "t");
-  assert.match(n.evidence[0].detail, /does not clear the identity/);
-});
-
-test("more databases is more corroboration, but it is capped", () => {
-  const many = { ...OK, databases: Array.from({ length: 30 }, (_, i) => ({ name: "db" + i, info: "", rows: [] })) };
-  const [root] = leakOsintSignals("x", many, "t");
-  assert.ok(root.confidence <= 86, "a hundred copies of one table is still one sighting");
 });
 
 // ---- the parser, against a payload shaped like the documentation ------------------

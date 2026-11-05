@@ -1,25 +1,22 @@
-// Per-request config from the API panel. The client sends its keys (from the browser)
-// as a base64-encoded JSON blob in the `x-octopus-cfg` header; server routes read it and
-// use it to OVERRIDE env vars. This lets keys live in the UI (self-host, no redeploy)
-// while env vars still work in production. Keys are never logged or persisted server-side.
+// Per-request config from the operator's browser.
+//
+// The client sends its LeakOSINT token (entered in the UI, kept in localStorage) as a
+// base64-encoded JSON blob in the `x-octopus-cfg` header; server routes read it and use
+// it to OVERRIDE the environment. That is what lets a self-hosted instance change its
+// token without a redeploy, while a hosted deployment still runs purely on env vars.
+//
+// Keys are never logged and never persisted server-side. They exist for the duration of
+// the request that carried them.
 
 import type { NextRequest } from "next/server";
-import type { LLMConfig } from "./llmconfig";
 
 export interface ClientConfig {
+  /** LeakOSINT token — the only credential the product needs */
   leakosint?: string;
+  /** rows per query, 100–10000; raises both the result count and the price */
   leakosintLimit?: number;
+  /** report language passed through to the API (en, ru, …) */
   leakosintLang?: string;
-  intelx?: string;
-  intelxUrl?: string;
-  recordedfuture?: string;
-  collectorUrl?: string;
-  collectorToken?: string;
-  dehashed?: string;
-  snusbase?: string;
-  leakcheckPro?: string;
-  hudsonrockPro?: string;
-  llm?: Partial<LLMConfig>;
 }
 
 export function readClientConfig(req: NextRequest): ClientConfig {

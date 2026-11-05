@@ -1,15 +1,15 @@
-# Octopus web app — multi-stage build producing a tiny standalone image.
+# Octopus Leak — multi-stage build producing a tiny standalone image.
 # Runs anywhere Node runs: Linux or Windows containers, Docker, Kubernetes, bare VM.
 #
-#   docker build -t octopus .
-#   docker run -p 3000:3000 octopus
+#   docker build -t octopus-leak .
+#   docker run -p 3000:3000 octopus-leak
 #
-# Optional env (all features degrade gracefully if unset):
-#   COLLECTOR_URL, COLLECTOR_TOKEN  → deep scans (Maigret/Holehe/SpiderFoot worker)
-#   POSTGRES_URL                    → durable cases + snapshot history (else localStorage)
-#   INTELX_API_KEY                  → breach search (optional)
-#   RECORDED_FUTURE_API_KEY         → enterprise risk/exposure (optional bonus)
-#   LLM_API_URL / LLM_MODEL         → grounded synthesis (optional)
+# Env (the app runs without any of it, and says what is missing rather than faking it):
+#   LEAKOSINT_TOKEN          → the leak source. Absent: no report, stated as such.
+#   POSTGRES_URL             → accounts, credits, audit trail. Absent: single-operator,
+#                              unmetered, unlogged — never expose that publicly.
+#   OCTOPUS_SESSION_SECRET   → required for sessions to be issued at all.
+#   OCTOPUS_MARKUP           → resale margin over the raw API cost (default 1.6).
 
 # ---- deps ----
 FROM node:20-alpine AS deps
