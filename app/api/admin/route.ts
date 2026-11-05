@@ -8,6 +8,7 @@ import { listAudit, verifyAuditChain, auditEnabled } from "@/lib/audit";
 import { grant, balanceOf, ledgerOf, fromUSD, creditsEnabled } from "@/lib/credits";
 import { sourceFingerprint, setSourceToken, clearSourceToken, sourceToken, storedKeyAvailable } from "@/lib/sourcekey";
 import { leakOsint, estimateCost, formatCost } from "@/lib/leakosint";
+import { dbReachable } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,13 +24,17 @@ export async function GET() {
     // secret that leaks through a screenshot or a support ticket
     sourceFingerprint(),
   ]);
+  // A connection string is a configuration, not a connection, and this screen is
+  // exactly where that difference should be visible rather than inferred from a page
+  // that half-loads.
+  const database = await dbReachable();
   // balance per user, so the admin sees who is low without clicking into each
   const withBalance = creditsEnabled
     ? await Promise.all(users.map(async (u) => ({ ...u, credits: await balanceOf(u.id) })))
     : users;
   return NextResponse.json({
     configured: true, metered: creditsEnabled, users: withBalance, activity, chain,
-    source, storable: storedKeyAvailable,
+    source, storable: storedKeyAvailable, database,
   });
 }
 

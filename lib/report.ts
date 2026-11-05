@@ -24,6 +24,7 @@ import type { LeakDatabase } from "./leakosint";
 import { itemsFromRow } from "./leakosint";
 import { attributeRow, type Attribution } from "./attribution";
 import { consolidate, describe, type Identity } from "./identity";
+import { patternGroups } from "./pwpattern";
 
 export type Category =
   | "password" | "financial" | "document" | "identity"
@@ -109,6 +110,23 @@ export interface SearchReport {
   excluded: { partial: number; unrelated: number; total: number };
   /** on a non-unique subject: the other people the rows describe, kept separate */
   others: OtherSubject[];
+  /**
+   * Passwords that are the same habit wearing a different year.
+   *
+   * A list of leaked passwords tells someone their passwords leaked. Noticing that
+   * three of them are one stem with a rotating suffix tells them something they did
+   * not know and can act on: changing the current one changes nothing, because the
+   * next one is guessable from the last. Deterministic — it is string structure, not
+   * a judgement — so it can be shown without a hedge.
+   */
+  passwordHabits: PasswordHabit[];
+}
+
+export interface PasswordHabit {
+  /** the shared stem, shown so the reader can see what the habit IS */
+  stem: string;
+  /** the leaked passwords that share it, in the order they were found */
+  values: string[];
 }
 
 /**
@@ -445,6 +463,12 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     return findings.filter((f) => f.category === c && !seen.has(f.value.toLowerCase()) && seen.add(f.value.toLowerCase()));
   };
 
+  // The passwords attributed to the subject, read for structure rather than listed.
+  const secrets = [...new Set(findings.filter((f) => f.category === "password").map((f) => f.value))];
+  const passwordHabits: PasswordHabit[] = [...patternGroups(secrets)]
+    .map(([stem, values]) => ({ stem, values }))
+    .sort((a, b) => b.values.length - a.values.length);
+
   const others: OtherSubject[] = [...foreign.values()]
     .map((g) => ({ anchor: g.anchor, matched: [...g.matched], sources: [...g.sources].sort(), findings: g.findings }))
     .sort((a, b) => b.findings.length - a.findings.length || a.anchor.localeCompare(b.anchor));
@@ -462,6 +486,7 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     highlights: { financial: dedupeHi("financial"), passwords: dedupeHi("password") },
     excluded: { partial, unrelated, total: partial + unrelated },
     others,
+    passwordHabits,
   };
 }
 

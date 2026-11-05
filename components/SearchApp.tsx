@@ -38,6 +38,7 @@ interface Identity {
   corroboration: { facets: number; corroborated: number; databases: number };
 }
 interface OtherSubject { anchor: string; matched: string[]; sources: string[]; findings: Finding[] }
+interface PasswordHabit { stem: string; values: string[] }
 
 interface Report {
   subject: { raw: string; kind: Kind; canonical: string; unique: boolean; note?: string };
@@ -52,6 +53,7 @@ interface Report {
   highlights: { financial: Finding[]; passwords: Finding[] };
   excluded: { partial: number; unrelated: number; total: number };
   others: OtherSubject[];
+  passwordHabits: PasswordHabit[];
 }
 
 interface Quote {
@@ -315,6 +317,8 @@ function ReportView({ report, headline, view, setView, reset }: {
       <Verdict report={report} headline={headline} />
 
       {hasHi && <Critical hi={report.highlights} />}
+
+      {report.passwordHabits?.length > 0 && <Habits habits={report.passwordHabits} />}
 
       <div className="lk2-tabs">
         {([
@@ -654,6 +658,38 @@ function Others({ others, subject }: { others: OtherSubject[]; subject: Report["
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- password habits -------------------------------------------------------------
+//
+// A list of leaked passwords tells someone their passwords leaked. Noticing that three
+// of them are one stem with a rotating year tells them something they did not know and
+// can act on: rotating again changes nothing, because the next one is guessable from
+// the last. It is string structure, not a judgement, so it is stated without a hedge.
+
+function Habits({ habits }: { habits: PasswordHabit[] }) {
+  const [shown, setShown] = useState(false);
+  const n = habits.reduce((t, h) => t + h.values.length, 0);
+  return (
+    <div className="lk2-habit">
+      <div className="lk2-habit-h">
+        <b>{n} of these passwords are the same habit</b>
+        <button onClick={() => setShown((x) => !x)}>{shown ? "hide" : "reveal"}</button>
+      </div>
+      <p>
+        They share a stem and differ only in what follows it. Changing the newest one to
+        the next variation leaves the account guessable from the old leak — the stem is
+        what has to change.
+      </p>
+      {habits.map((h) => (
+        <div className="lk2-habit-row" key={h.stem}>
+          {h.values.map((v) => (
+            <code key={v}>{shown ? v : "•".repeat(Math.min(14, Math.max(6, v.length)))}</code>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

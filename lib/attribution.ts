@@ -203,13 +203,3 @@ export function attributeRow(subject: Subject, row: Record<string, string>): Row
   const all = inNameColumn.size === words.length;
   return { attribution: all ? "direct" : "partial", column, words: [...found] };
 }
-
-export interface RowVerdict<T> {
-  row: T;
-  match: RowMatch;
-}
-
-/** Judge every row of a database, keeping the verdict attached rather than filtering. */
-export function attributeRows<T extends Record<string, string>>(subject: Subject, rows: T[]): RowVerdict<T>[] {
-  return rows.map((row) => ({ row, match: attributeRow(subject, row) }));
-}

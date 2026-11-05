@@ -71,6 +71,17 @@ export interface LeakOsintResult {
   cost: number;
   /** the API said the query ran and matched nothing — NOT the same as an error */
   empty: boolean;
+  /**
+   * The endpoint answered with a body we could not read.
+   *
+   * This is a THIRD state, and conflating it with either of the other two is how the
+   * module's whole purpose fails. The caller builds its report from `databases`, so a
+   * payload the parser does not recognise produced an empty database list and rendered
+   * as "nothing found" — a clean bill of health off a response nobody understood. The
+   * salvage harvester was supposed to catch this, but its output lands in `items`,
+   * which no caller reads. So the fact is reported instead of being papered over.
+   */
+  unreadable?: boolean;
 }
 
 // ---- cost ----------------------------------------------------------------------
@@ -305,7 +316,9 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
     // payload rather than report a clean result off a response we simply failed to read.
     if (!items.length && data && Object.keys(data).length) {
       const salvaged = harvest(data).map((i) => ({ ...i, source: "leakosint · unparsed" }));
-      if (salvaged.length) return { databases: [], items: salvaged, rowCount: 0, cost, empty: false };
+      if (salvaged.length) {
+        return { databases: [], items: salvaged, rowCount: 0, cost, empty: false, unreadable: true };
+      }
     }
 
     const rowCount = databases.reduce((n, d) => n + d.rows.length, 0);

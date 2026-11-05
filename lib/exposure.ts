@@ -113,11 +113,6 @@ export function isContentFree(v: string): boolean {
   return v.replace(/[*•●\s\\/_|.,;:'"`~^\-–—+=()[\]{}<>!?@#$%&]/g, "").length < 1;
 }
 
-/** All a masked value actually tells you: the characters that survived, and a length. */
-export function maskPattern(v: string): string {
-  const kept = v.replace(/[*•●]/g, "");
-  return `${kept || "—"} · ${v.length} chars`;
-}
 
 export interface Usable { clear: number; masked: number; total: number }
 
@@ -233,25 +228,6 @@ export function sortExposure(items: ExposureItem[]): ExposureItem[] {
     ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || Number(!!a.masked) - Number(!!b.masked));
 }
 
-/**
- * Merge the same fact reported by several sources into one row that credits all of them,
- * and prefer the UNMASKED copy. This is the payoff for querying more than one index: if
- * Hudson Rock masks a password and a combolist has it in clear, the analyst should see
- * the clear one once, not both versions in two panels.
- */
-export function mergeExposure(items: ExposureItem[]): ExposureItem[] {
-  const byKey = new Map<string, ExposureItem>();
-  for (const it of items) {
-    // masked and clear copies of one secret differ as strings, so they cannot dedupe by
-    // value; they collapse on the group + the characters that survived the mask
-    const key = it.kind + " " + (it.masked ? it.value.replace(/[*•●]+/g, "*") : it.value);
-    const prev = byKey.get(key);
-    if (!prev) { byKey.set(key, { ...it }); continue; }
-    if (prev.masked && !it.masked) byKey.set(key, { ...it, source: joinSource(prev.source, it.source) });
-    else prev.source = joinSource(prev.source, it.source);
-  }
-  return [...byKey.values()];
-}
 
 function joinSource(a?: string, b?: string): string | undefined {
   const all = [...new Set([...(a || "").split(" · "), ...(b || "").split(" · ")].filter(Boolean))];
@@ -301,13 +277,3 @@ export function exposureText(items: ExposureItem[]): string {
     .join("\n");
 }
 
-/** Just the usable credentials, one per line — the format a password audit wants. */
-export function credentialsText(items: ExposureItem[]): string {
-  const byId = new Map<string, string>();
-  for (const i of items) if (i.kind === "identifier" || i.kind === "email") byId.set(i.value, i.value);
-  const ids = [...byId.keys()];
-  return items
-    .filter((i) => i.kind === "credential" && !i.masked)
-    .map((c) => (ids.length === 1 ? `${ids[0]}:${c.value}` : c.value))
-    .join("\n");
-}

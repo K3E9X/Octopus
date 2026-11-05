@@ -186,6 +186,20 @@ export async function POST(req: NextRequest) {
       }, { status: 502 });
     }
 
+    // A body the parser could not read is not a clean result. The report is built from
+    // `databases`, so an unrecognised shape yields an empty list and would otherwise
+    // render as "nothing found about this person" — the single most damaging thing this
+    // product could say off a response nobody understood. The money goes back, because
+    // what came back cannot be used.
+    if (res.unreadable) {
+      await giveBack("refund: unreadable response");
+      return NextResponse.json({
+        error: "The leak source answered in a shape this version cannot read. Nothing is claimed about this subject either way.",
+        reason: "unreadable",
+        refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
+      }, { status: 502 });
+    }
+
     // The region travels with the report: deciding whether two rows give the same
     // number means parsing both, and parsing a national-format number needs the same
     // region the search was made under.

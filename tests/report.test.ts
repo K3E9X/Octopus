@@ -266,3 +266,23 @@ test("a non-Latin name survives consolidation", () => {
   assert.equal(r.identity.facets.name![0].value, "Иван Иванов");
   assert.equal(r.identity.facets.name![0].sources.length, 2);
 });
+
+test("passwords that are one habit with a rotating suffix are called out as one habit", () => {
+  const r = buildReport(JANE, [
+    db("A", "", { Email: "jane.doe@example.com", Password: "Kerguelen2019" }),
+    db("B", "", { Email: "jane.doe@example.com", Password: "Kerguelen2021" }),
+    db("C", "", { Email: "jane.doe@example.com", Password: "Kerguelen2024" }),
+  ]);
+  assert.equal(r.passwordHabits.length, 1);
+  assert.equal(r.passwordHabits[0].values.length, 3);
+  // this is the point: changing the newest one changes nothing if the stem is the same
+  assert.match(r.passwordHabits[0].stem, /kerguelen/i);
+});
+
+test("unrelated passwords are not a habit", () => {
+  const r = buildReport(JANE, [
+    db("A", "", { Email: "jane.doe@example.com", Password: "xK9#mqz2Lp" }),
+    db("B", "", { Email: "jane.doe@example.com", Password: "7vTb!rwQe4" }),
+  ]);
+  assert.deepEqual(r.passwordHabits, []);
+});
