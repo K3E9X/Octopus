@@ -110,7 +110,13 @@ export function complexityOf(query: string): number {
 
 /** The published formula: 0.0002 * (5 + sqrt(limit * complexity)), in dollars. */
 export function estimateCost(request: string | string[], limit = 100): number {
-  const queries = Array.isArray(request) ? request : String(request).split("\n");
+  // A newline separates queries whether it arrives inside the string form or inside an
+  // element of the array form; only the string form was being split, so a batch like
+  // ["a@b.com\nc@d.com"] was quoted as one query and billed us for two. Undercharging is
+  // the only error here that loses real money, and the array form is the documented way
+  // to send a batch.
+  const queries = (Array.isArray(request) ? request : [request])
+    .flatMap((q) => String(q ?? "").split("\n"));
   // a batch is billed per query; the caller sees the total it is about to spend
   return queries
     .map((q) => q.trim())
@@ -285,6 +291,15 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
       else items.push({ kind: "breach", label: "Database", value: db.name, source: "leakosint" });
       for (const row of db.rows) items.push(...itemsFromRow(db, row));
     }
+
+    // A clean miss arrives as a database literally named "No results found", which
+    // parseList skips — leaving `items` empty and sending the salvage harvester over the
+    // payload, which faithfully turned "No results found. Try changing your request."
+    // into a finding. That is the same mistake as reading a refusal as data, one layer
+    // down. A recognised empty answer is an answer; it is never salvaged.
+    const list = (data as any)?.List;
+    const onlyEmpty = list && typeof list === "object" && Object.keys(list).every((k) => k === NO_RESULTS);
+    if (onlyEmpty) return { databases: [], items: [], rowCount: 0, cost, empty: true };
 
     // The documented shape yielded nothing but the endpoint answered: harvest the raw
     // payload rather than report a clean result off a response we simply failed to read.

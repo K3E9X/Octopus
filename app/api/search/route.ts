@@ -101,8 +101,9 @@ export async function POST(req: NextRequest) {
     }, { status: 403 });
   }
 
+  const region = String(body?.country || "FR").toUpperCase();
   const subject = buildSubject(raw, {
-    defaultCountry: String(body?.country || "FR").toUpperCase(),
+    defaultCountry: region,
     // quoting is the default for a multi-word subject: cheaper, and narrower is the
     // safer error to make when the alternative is returning strangers' records
     exact: body?.permutations !== true,
@@ -159,7 +160,10 @@ export async function POST(req: NextRequest) {
       }, { status: 502 });
     }
 
-    const report = buildReport(subject, res.databases);
+    // The region travels with the report: deciding whether two rows give the same
+    // number means parsing both, and parsing a national-format number needs the same
+    // region the search was made under.
+    const report = buildReport(subject, res.databases, region);
     return NextResponse.json({
       report,
       headline: headline(report),

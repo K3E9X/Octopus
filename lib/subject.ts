@@ -50,6 +50,10 @@ export interface Subject {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // A handle: no spaces, no @domain, and long enough not to be noise.
 const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/i;
+// A handle that is ONLY letters is indistinguishable from a surname, and "Martin" is
+// not an identifier. Anything carrying a digit, a dot, an underscore or a hyphen is
+// shaped like something a person chose; a bare word is not.
+const HANDLE_SHAPED = /[0-9._-]/;
 // Two or more words that look like words, not identifiers.
 const NAME_RE = /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’.-]*){1,4}$/u;
 
@@ -127,7 +131,11 @@ function phoneVariants(input: string, defaultCountry: string): { canonical: stri
   const intel = phoneIntel(input, defaultCountry);
   const typedDigits = input.replace(/\D/g, "");
   const out = new Set<string>();
-  const canonical = intel.e164 || (typedDigits ? "+" + typedDigits : input.trim());
+  // When the number does not parse, the digits are sent AS TYPED. Prefixing "+" to them
+  // manufactures an E.164 number that belongs to somebody else — "2125551234" read as a
+  // French number became "+332125551234" — and the operator was then billed for a search
+  // of a line nobody owns, under a note claiming it had been searched as typed.
+  const canonical = intel.valid && intel.e164 ? intel.e164 : (typedDigits || input.trim());
 
   if (intel.e164) {
     out.add(intel.e164);                       // +33612345678
@@ -184,9 +192,15 @@ export function buildSubject(raw: string, opts: BuildOpts = {}): Subject {
 
   if (kind === "username") {
     const canonical = trimmed.toLowerCase();
+    // "jdupont_75" is a handle somebody picked. "Martin" is a surname, and treating it
+    // as a unique identifier is how every stranger who shares it gets merged into one
+    // fabricated person. The shape is the only honest signal available here.
+    const unique = HANDLE_SHAPED.test(trimmed);
     return {
-      raw: trimmed, kind, query: trimmed, canonical, variants: [canonical], unique: true,
-      note: "A handle usually belongs to one person, but it is not proof of one — unlike an address, nothing stops two people choosing the same name.",
+      raw: trimmed, kind, query: trimmed, canonical, variants: [canonical], unique,
+      note: unique
+        ? "A handle usually belongs to one person, but it is not proof of one — unlike an address, nothing stops two people choosing the same name."
+        : "A single word of letters could be a handle or could be a surname, and there is no way to tell from here. Results are grouped by who they appear to be rather than merged.",
     };
   }
 

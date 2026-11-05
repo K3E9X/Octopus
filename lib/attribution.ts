@@ -36,7 +36,18 @@ export interface RowMatch {
   words?: string[];
 }
 
-const norm = (s: string) => String(s ?? "").trim().toLowerCase();
+/**
+ * Fold a value to the form both sides are compared in.
+ *
+ * Accents were not folded here while lib/identity DID fold them, so the two halves of
+ * the pipeline disagreed: a search for "Jérôme Dupont" read a dump holding "Jerome
+ * Dupont" as a DIFFERENT PERSON and reported the subject's own record under "someone
+ * else matched part of this query". A dump is transliterated as often as not, and an
+ * accent is a spelling, never a different human being.
+ */
+const COMBINING = /[\u0300-\u036f]/g;
+const norm = (s: string) =>
+  String(s ?? "").trim().toLowerCase().normalize("NFD").replace(COMBINING, "");
 const digitsOf = (s: string) => String(s ?? "").replace(/\D/g, "");
 
 /**
@@ -93,25 +104,40 @@ function tails(d: string): string[] {
 const MIN_SIGNIFICANT = 9;
 
 export function samePhone(cell: string, variantDigits: string[]): string | null {
-  const c = digitsOf(cell);
-  if (c.length < 7 || c.length > 17) return null;
-  // the cell must be number-shaped: digits plus the punctuation numbers are written with
-  if (c.length < String(cell).replace(/[\s().+-]/g, "").length) return null;
+  // Dumps store a number behind a label ("Tel: 0612345678") and with separators nobody
+  // anticipated ("06/12/34/56/78"). Requiring the WHOLE cell to be number-shaped threw
+  // both away. Pull the digit runs out instead and test each one — a run of 7 to 17
+  // digits is a candidate number wherever it sits in the cell.
+  const runs = String(cell ?? "").match(/\d[\d\s().+\/.-]*\d/g) || [];
+  const candidates = [digitsOf(cell), ...runs.map(digitsOf)]
+    .filter((d) => d.length >= 7 && d.length <= 17);
+  if (!candidates.length) return null;
 
-  const cellForms = tails(c);
-  for (const v of variantDigits) {
-    if (!v || v.length < 7) continue;
-    for (const a of cellForms) {
-      for (const b of tails(v)) {
-        if (a === b) return v;
-        const short = a.length < b.length ? a : b;
-        const long = a.length < b.length ? b : a;
-        if (short.length >= MIN_SIGNIFICANT && long.endsWith(short)) return v;
+  for (const c of candidates) {
+    for (const v of variantDigits) {
+      if (!v || v.length < 7) continue;
+      for (const a of tails(c)) {
+        for (const b of tails(v)) {
+          if (a === b) return v;
+          const short = a.length < b.length ? a : b;
+          const long = a.length < b.length ? b : a;
+          // A shared tail is only evidence when it is long enough AND the two are the
+          // same KIND of string: at most a country code apart. Otherwise a nine-digit
+          // fragment matches the end of every longer number that happens to finish the
+          // same way, which is attribution by coincidence.
+          if (short.length >= MIN_SIGNIFICANT && long.length - short.length <= 4 && long.endsWith(short)) return v;
+        }
       }
     }
   }
   return null;
 }
+
+/**
+ * Columns that carry a person's name. Nothing else can corroborate one: a street, a
+ * town, an employer and a free-text note all contain names belonging to other people.
+ */
+const NAME_COLUMN = /full.?name|^name$|first.?name|last.?name|sur.?name|given|patronym|middle|\bfio\b|nom|prenom|display/i;
 
 /** Judge one row. */
 export function attributeRow(subject: Subject, row: Record<string, string>): RowMatch {
@@ -155,17 +181,26 @@ export function attributeRow(subject: Subject, row: Record<string, string>): Row
       return { attribution: "direct", column: col, matched: String(raw).trim(), words };
     }
   }
+  // WHERE the words were found decides what they mean. A row for Sophie Durand living
+  // at "12 rue Alexandre Dumas" in a town called "Martin" contains both words of
+  // "Alexandre Martin" and is not that person; counting any column made such a row a
+  // direct hit. Only columns that carry a name can corroborate a name.
   const found = new Set<string>();
+  const inNameColumn = new Set<string>();
   let column: string | undefined;
   for (const [col, raw] of entries) {
+    const nameish = NAME_COLUMN.test(col);
     for (const w of words) {
-      if (containsValue(String(raw), w)) { found.add(w); column ??= col; }
+      if (!containsValue(String(raw), w)) continue;
+      found.add(w);
+      if (nameish) { inNameColumn.add(w); column ??= col; }
+      else column ??= col;
     }
   }
   if (!found.size) return { attribution: "none" };
-  // every word present but never together in one cell — still the person, scattered
-  // across columns (a "first name" column and a "surname" column is the normal case)
-  const all = found.size === words.length;
+  // Every word of the name, each one in a column that holds names — the ordinary case
+  // of a dump with separate first-name and surname fields.
+  const all = inNameColumn.size === words.length;
   return { attribution: all ? "direct" : "partial", column, words: [...found] };
 }
 

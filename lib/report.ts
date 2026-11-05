@@ -344,7 +344,7 @@ function anchorOf(items: ExposureItem[]): string | null {
  *   partial  → `others`, grouped by whoever they appear to be
  *   none     → counted in `excluded`, and nothing more
  */
-export function buildReport(subject: Subject, databases: LeakDatabase[]): SearchReport {
+export function buildReport(subject: Subject, databases: LeakDatabase[], region = "FR"): SearchReport {
   const infoByName = new Map(databases.map((d) => [d.name, d.info] as const));
 
   const findings: Finding[] = [];
@@ -357,15 +357,20 @@ export function buildReport(subject: Subject, databases: LeakDatabase[]): Search
       const verdict = attributeRow(subject, row);
       const items = itemsFromRow(db, row);
 
-      if (verdict.attribution === "direct") {
+      if (verdict.attribution === "none") { unrelated += 1; continue; }
+
+      // A DIRECT hit on a selector that designates one person is the subject. A direct
+      // hit on one that does not — a name, a bare word — is one CANDIDATE among the
+      // people who share it. Consolidating those into a single identity is how this
+      // tool would produce its most convincing lie: three Jean Duponts rendered as one
+      // man holding three mailboxes and three phone numbers. The documented contract
+      // (docs/leakosint-api.md) says such rows must stay candidates to be told apart.
+      if (verdict.attribution === "direct" && subject.unique) {
         ownRows.push({ database: db.name, items });
         findings.push(...findingsFrom(items, db.name));
         continue;
       }
-      if (verdict.attribution === "none") { unrelated += 1; continue; }
-
-      // partial: somebody else who matched part of the query
-      partial += 1;
+      if (verdict.attribution === "partial") partial += 1;
       const anchor = anchorOf(items) || "(unidentified)";
       const key = anchor.toLowerCase();
       const group = foreign.get(key) ?? { anchor, matched: new Set<string>(), sources: new Set<string>(), findings: [] };
@@ -377,8 +382,12 @@ export function buildReport(subject: Subject, databases: LeakDatabase[]): Search
   }
 
   // --- the subject, consolidated into one person ---
-  const identity = consolidate(ownRows);
-  const summary = describe(identity);
+  // Only ever from rows proven to be about ONE person. For any other selector this is
+  // empty on purpose, and the summary says why rather than leaving a blank panel.
+  const identity = consolidate(ownRows, { region });
+  const summary = subject.unique
+    ? describe(identity)
+    : `"${subject.raw}" does not identify one person, so these rows are not merged. ${foreign.size} candidate${foreign.size === 1 ? "" : "s"} below, to be told apart.`;
 
   // --- by category (deduped on value within a category) ---
   const byCat = new Map<Category, Map<string, Finding>>();
@@ -464,6 +473,13 @@ export function buildReport(subject: Subject, databases: LeakDatabase[]): Search
  * to know before reading a name search's results as if they were one person's.
  */
 export function headline(r: SearchReport): string {
+  // A selector that cannot identify one person leads with that fact. Everything else in
+  // the report reads differently once you know it, so it cannot be a closing footnote.
+  if (!r.subject.unique) {
+    const n = r.others.length;
+    if (!n) return `Nothing found for "${r.subject.raw}" at this search depth.`;
+    return `"${r.subject.raw}" matches ${n} ${n === 1 ? "person" : "different people"} in breach data. They are listed separately and deliberately not merged — a name does not identify one person.`;
+  }
   const extra = r.others.length
     ? ` ${r.others.length} other ${r.others.length === 1 ? "person" : "people"} matched part of this query and ${r.others.length === 1 ? "is" : "are"} listed separately.`
     : "";

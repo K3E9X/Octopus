@@ -119,3 +119,59 @@ test("a row matching none of the name is not about anyone we asked for", () => {
   const m = attributeRow(subjName, { FullName: "Jane Smith" });
   assert.equal(m.attribution, "none");
 });
+
+// ======================================================================================
+// Regressions. Every test below reproduces a defect that shipped — each one a case where
+// the tool stated something it could not support, which is the only kind of bug that
+// matters here.
+// ======================================================================================
+
+test("a bare word is not a unique identifier — a surname is not a handle", () => {
+  // "Martin" was read as a handle and marked unique, so every stranger sharing it was
+  // merged into one fabricated person holding all their addresses and passwords.
+  assert.equal(buildSubject("Martin").unique, false);
+  assert.equal(buildSubject("elon").unique, false);
+  // something a person actually chose still is
+  assert.equal(buildSubject("jdupont_75").unique, true);
+  assert.equal(buildSubject("n0rthwind").unique, true);
+});
+
+test("an accented name matches its transliterated spelling, both ways", () => {
+  // attribution did not fold accents while identity did, so the two halves of the
+  // pipeline disagreed and the subject's own row was reported as someone else's
+  const accented = buildSubject("Jérôme Dupont");
+  assert.equal(attributeRow(accented, { FullName: "Jerome Dupont" }).attribution, "direct");
+  const plain = buildSubject("Jerome Dupont");
+  assert.equal(attributeRow(plain, { FullName: "Jérôme Dupont" }).attribution, "direct");
+});
+
+test("a name is only corroborated by columns that hold names", () => {
+  const s = buildSubject("Alexandre Martin");
+  // a street and a town containing both words is a different person entirely
+  const m = attributeRow(s, { FullName: "Sophie Durand", Address: "12 rue Alexandre Dumas", City: "Martin" });
+  assert.notEqual(m.attribution, "direct", "a street name cannot confirm a person");
+  // but first-name and surname columns are exactly how a dump stores a name
+  const split = attributeRow(s, { FirstName: "Alexandre", LastName: "Martin" });
+  assert.equal(split.attribution, "direct");
+});
+
+test("a number no library can parse is searched as typed, never invented", () => {
+  // "2125551234" read with a French default became "+332125551234" — a line nobody
+  // owns — and the operator was billed for searching it
+  assert.equal(buildSubject("2125551234", { defaultCountry: "FR" }).query, "2125551234");
+  assert.equal(buildSubject("1234567", { defaultCountry: "FR" }).query, "1234567");
+  // a number that DOES parse is still normalised
+  assert.equal(buildSubject("06 12 34 56 78", { defaultCountry: "FR" }).query, "+33612345678");
+});
+
+test("a phone behind a label or an unusual separator still matches", () => {
+  const s = buildSubject("+33612345678");
+  for (const cell of ["Tel: 0612345678", "06/12/34/56/78", "+33 (0)6 12 34 56 78", "0612345678"]) {
+    assert.equal(attributeRow(s, { Phone: cell }).attribution, "direct", cell);
+  }
+});
+
+test("a short tail shared with a much longer number is not a match", () => {
+  // nine digits matching the end of an eleven-digit number is attribution by coincidence
+  assert.equal(samePhone("125551234", ["99991125551234"]), null);
+});

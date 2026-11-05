@@ -163,25 +163,40 @@ test("the identity consolidates only the subject's own rows, citing each databas
 
 const MUSK = buildSubject("Elon Reeve Musk");
 
-test("a name search keeps people who merely share a surname separate", () => {
+test("a name search NEVER consolidates into one person — every hit is a candidate", () => {
+  // The defect this pins: a name matched three rows and the report rendered them as one
+  // man holding three mailboxes. A name does not identify anybody, so an exact hit on it
+  // is one candidate among the people who share it, not "the subject".
   const r = buildReport(MUSK, [
     db("Dump A", "", { FullName: "Elon Reeve Musk", Email: "elon@example.com" }),
     db("Dump B", "", { FullName: "Kimbal Musk", Email: "kimbal@example.com" }),
   ]);
-  assert.equal(r.identity.facets.email!.length, 1, "only the subject's own address");
-  assert.equal(r.identity.facets.email![0].value, "elon@example.com");
-  assert.equal(r.others.length, 1, "the other Musk is listed, not merged");
-  assert.equal(r.others[0].anchor, "kimbal@example.com");
-  assert.deepEqual(r.others[0].matched, ["musk"]);
+  assert.deepEqual(r.identity.facets, {}, "nothing is merged into a subject");
+  assert.equal(r.others.length, 2, "both Musks are listed, side by side");
+  assert.deepEqual(r.others.map((o) => o.anchor).sort(), ["elon@example.com", "kimbal@example.com"]);
+  assert.match(r.summary, /does not identify one person/);
 });
 
-test("the headline says how many other people matched, because that changes how it reads", () => {
+test("an email search DOES consolidate — it designates somebody", () => {
+  const r = buildReport(JANE, [
+    db("Dump A", "", { Email: "jane.doe@example.com", FullName: "Jane Doe" }),
+    db("Dump B", "", { Email: "jane.doe@example.com", FullName: "Jane Doe" }),
+  ]);
+  assert.equal(r.identity.facets.name!.length, 1);
+  assert.equal(r.identity.facets.name![0].sources.length, 2);
+});
+
+test("the headline LEADS with the ambiguity, because it changes how everything reads", () => {
   const r = buildReport(MUSK, [
     db("A", "", { FullName: "Elon Reeve Musk", Password: "x" }),
     db("B", "", { FullName: "Kimbal Musk", Email: "k@x.com" }),
     db("C", "", { FullName: "Maye Musk", Email: "m@x.com" }),
   ]);
-  assert.match(headline(r), /2 other people matched part of this query/);
+  const h = headline(r);
+  assert.match(h, /matches 3 different people/);
+  assert.match(h, /deliberately not merged/);
+  // and it is the FIRST thing said, not a closing footnote
+  assert.ok(h.startsWith('"Elon Reeve Musk"'));
 });
 
 test("a name is marked as not designating one person, so the UI cannot imply it does", () => {
@@ -212,4 +227,42 @@ test("a birthday survives the timestamp rule — it is identity, not metadata", 
     const r = buildReport(JANE, [db("X", "", { Email: "jane.doe@example.com", [col]: "1990-01-01" })]);
     assert.ok(cat(r, "identity"), `${col} must still read as identity`);
   }
+});
+
+test("an empty answer from the index is empty, not a finding", () => {
+  // "No results found" arrives as a database NAME. parseList skips it, which left the
+  // item list empty, which sent the salvage harvester over the payload — and it
+  // faithfully turned "No results found. Try changing your request." into a finding.
+  const r = buildReport(JANE, []);
+  assert.equal(r.dataPoints, 0);
+  assert.equal(r.verdict, "clear");
+});
+
+test("two different North American numbers are two numbers, not one corroborated one", () => {
+  const r = buildReport(JANE, [
+    db("A", "", { Email: "jane.doe@example.com", Phone: "+1 212 555 1234" }),
+    db("B", "", { Email: "jane.doe@example.com", Phone: "+1 312 555 1234" }),
+  ], "US");
+  assert.equal(r.identity.facets.phone!.length, 2, "different area codes are different people's lines");
+  assert.equal(r.identity.facets.phone!.every((p) => p.sources.length === 1), true, "neither is corroborated");
+});
+
+test("one mailbox written two ways is one corroborated address", () => {
+  const r = buildReport(buildSubject("johndoe@gmail.com"), [
+    db("A", "", { Email: "John.Doe@Gmail.com", FullName: "John Doe" }),
+    db("B", "", { Email: "johndoe@gmail.com", FullName: "John Doe" }),
+  ]);
+  assert.equal(r.identity.facets.email!.length, 1);
+  assert.equal(r.identity.facets.email![0].sources.length, 2);
+});
+
+test("a non-Latin name survives consolidation", () => {
+  // Reducing a name key to [a-z0-9] deleted every Cyrillic, Arabic and CJK name
+  // outright — on a source whose strength is Russian-language dumps.
+  const r = buildReport(buildSubject("ivan@mail.ru"), [
+    db("DumpRU", "", { Email: "ivan@mail.ru", FullName: "Иван Иванов" }),
+    db("DumpRU2", "", { Email: "ivan@mail.ru", FullName: "Иван Иванов" }),
+  ]);
+  assert.equal(r.identity.facets.name![0].value, "Иван Иванов");
+  assert.equal(r.identity.facets.name![0].sources.length, 2);
 });
