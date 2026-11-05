@@ -24,6 +24,7 @@ import type { LeakDatabase } from "./leakosint";
 import { itemsFromRow } from "./leakosint";
 import { attributeRow, type Attribution } from "./attribution";
 import { consolidate, describe, type Identity } from "./identity";
+import { serviceGrid, gridSummary, type ServiceTile } from "./services";
 import { patternGroups } from "./pwpattern";
 
 export type Category =
@@ -133,6 +134,17 @@ export interface SearchReport {
   records: RecordGroup[];
   /** the identifiers this report surfaced that are worth searching in their own right */
   pivots: PivotTarget[];
+  /**
+   * Who holds this person's data, one tile per service.
+   *
+   * The grid every product in this category shows — built from the breaches already
+   * paid for rather than by probing sites, which costs nothing extra and makes a
+   * claim that is checkable. Aggregated credential lists are kept apart from real
+   * services, because telling somebody they have an account at "Collection #1" is
+   * telling them they have an account at a company that does not exist.
+   */
+  services: ServiceTile[];
+  servicesSummary: string;
   /**
    * Passwords that are the same habit wearing a different year.
    *
@@ -535,6 +547,9 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     .map(([stem, values]) => ({ stem, values }))
     .sort((a, b) => b.values.length - a.values.length);
 
+  // one tile per service, collapsing several dumps of the same company
+  const tiles = serviceGrid(sources);
+
   const grouped = [...foreign.values()]
     .map((g) => ({ anchor: g.anchor, matched: [...g.matched], sources: [...g.sources].sort(), findings: g.findings, full: g.full }))
     .sort((a, b) => b.findings.length - a.findings.length || a.anchor.localeCompare(b.anchor));
@@ -558,6 +573,8 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     others,
     passwordHabits,
     pivots: [],
+    services: tiles,
+    servicesSummary: gridSummary(tiles),
   };
   // computed from the finished report, so it sees the consolidated identity AND the
   // candidate groups rather than a half-built version of either

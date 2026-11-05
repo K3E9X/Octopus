@@ -132,20 +132,56 @@ export interface AuditRow {
   prevHash?: string; hash: string;
 }
 
-export async function listAudit(limit = 100, selector?: string): Promise<AuditRow[]> {
+export interface AuditFilter {
+  /** restrict to one operator. The ONLY way a non-administrator reads this table. */
+  operator?: string;
+  /** restrict to one case reference */
+  caseId?: string;
+  selector?: string;
+}
+
+/**
+ * Read the trail.
+ *
+ * `operator` is not a convenience filter, it is the access control for the history an
+ * ordinary analyst is allowed to see: their own queries and nobody else's. It is
+ * applied here, from a value the route takes off the session rather than off the
+ * request, so no caller can widen it by asking.
+ */
+export async function listAudit(limit = 100, filter: AuditFilter | string = {}): Promise<AuditRow[]> {
   if (!dbEnabled) return [];
+  const f: AuditFilter = typeof filter === "string" ? { selector: filter } : filter;
   try {
     await ensureAuditSchema();
     const q = sql();
     if (!q) return [];
-    const rows = selector
-      ? await q`SELECT * FROM octopus_audit WHERE selector = ${selector} ORDER BY id DESC LIMIT ${limit}`
-      : await q`SELECT * FROM octopus_audit ORDER BY id DESC LIMIT ${limit}`;
+    const rows = await q`SELECT * FROM octopus_audit
+      WHERE (${f.operator ?? null}::text IS NULL OR operator = ${f.operator ?? null})
+        AND (${f.caseId ?? null}::text  IS NULL OR case_id  = ${f.caseId ?? null})
+        AND (${f.selector ?? null}::text IS NULL OR selector = ${f.selector ?? null})
+      ORDER BY id DESC LIMIT ${limit}`;
     return (rows as any[]).map((r) => ({
       id: Number(r.id), at: Number(r.at), operator: r.operator, kind: r.kind, selector: r.selector,
       legalBasis: r.legal_basis, caseId: r.case_id || undefined, posture: r.posture || undefined,
       note: r.note || undefined, prevHash: r.prev_hash || undefined, hash: r.hash,
     }));
+  } catch {
+    return [];
+  }
+}
+
+/** The case references an operator has used, most recent first. */
+export async function listCases(operator: string, limit = 40): Promise<{ caseId: string; searches: number; last: number }[]> {
+  if (!dbEnabled) return [];
+  try {
+    await ensureAuditSchema();
+    const q = sql();
+    if (!q) return [];
+    const rows = await q`SELECT case_id, count(*)::int AS n, max(at) AS last
+      FROM octopus_audit
+      WHERE operator = ${operator} AND case_id IS NOT NULL AND case_id <> ''
+      GROUP BY case_id ORDER BY max(at) DESC LIMIT ${limit}`;
+    return (rows as any[]).map((r) => ({ caseId: r.case_id, searches: Number(r.n), last: Number(r.last) }));
   } catch {
     return [];
   }

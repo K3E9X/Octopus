@@ -1223,3 +1223,47 @@ body::after {
 .lk2-hero-deep > *:not(.deepfield) { position: relative; }
 .adm-grant-off { color: var(--ink-4); font-family: var(--font-mono); font-size: 11px; padding: 0 6px; cursor: default; }
 .adm-cap { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); }
+
+/* ---- services: who holds the data ---- */
+.lk2-svcs h5 {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-3); margin: 24px 0 10px;
+}
+.lk2-svcs h5:first-of-type { margin-top: 18px; }
+.lk2-svc-sum { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink); }
+.lk2-svc-note { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: var(--ink-3); max-width: 68ch; }
+.lk2-svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
+.lk2-svc {
+  border: 1px solid var(--bd); border-left: 3px solid var(--bd); border-radius: var(--r-md);
+  background: var(--bg-1); padding: 13px 15px;
+}
+.lk2-svc-n { font-weight: 600; font-size: 15px; color: var(--ink); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.lk2-svc-m { display: flex; gap: 10px; margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lk2-svc-d { margin-top: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); }
+.lk2-exports { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- your own searches ---- */
+.lk2-hist { max-width: 680px; margin: 52px auto 0; text-align: left; }
+.lk2-hist-h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.lk2-hist-h b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.lk2-hist-case { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+.lk2-hist-note { font-size: 13px; line-height: 1.6; color: var(--ink-3); margin: 0; }
+.lk2-hist-cases { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.lk2-hist-cases button {
+  background: transparent; border: 1px solid var(--bd); border-radius: var(--r-xs); cursor: pointer;
+  color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; transition: border-color .14s, color .14s;
+}
+.lk2-hist-cases button:hover { color: var(--ink); }
+.lk2-hist-cases button.on { border-color: var(--accent); color: var(--accent); }
+.lk2-hist-cases em { font-style: normal; color: var(--ink-4); }
+.lk2-hist-rows { display: flex; flex-direction: column; }
+.lk2-hist-row {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; border-top: 1px solid var(--bd-subtle); padding: 10px 2px; transition: background .14s;
+}
+.lk2-hist-row:first-child { border-top: 0; }
+.lk2-hist-row:hover { background: var(--bg-1); }
+.lk2-hist-row code { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.lk2-hist-basis { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-4); }
+.lk2-hist-tag { font-family: var(--font-mono); font-size: 10px; color: var(--accent); border: 1px solid var(--bd); border-radius: var(--r-xs); padding: 1px 6px; }
+.lk2-hist-when { font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); white-space: nowrap; }

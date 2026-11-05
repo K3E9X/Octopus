@@ -41,6 +41,10 @@ interface OtherSubject { anchor: string; matched: string[]; sources: string[]; f
 interface PasswordHabit { stem: string; values: string[] }
 interface RecordGroup { database: string; info: string; rows: Record<string, string>[]; attribution: string[] }
 interface PivotTarget { value: string; kind: "email" | "phone" | "username"; sources: string[] }
+interface ServiceTile {
+  name: string; dumps: string[]; kind: "service" | "aggregate";
+  firstYear?: number; lastYear?: number; fields: number; severity: Sev;
+}
 
 interface Report {
   subject: { raw: string; kind: Kind; canonical: string; unique: boolean; note?: string };
@@ -59,6 +63,8 @@ interface Report {
   candidates: OtherSubject[];
   records: RecordGroup[];
   pivots: PivotTarget[];
+  services: ServiceTile[];
+  servicesSummary: string;
 }
 
 interface Quote {
@@ -70,7 +76,7 @@ interface Quote {
 }
 
 type Step = "enter" | "basis" | "loading" | "report";
-type View = "identity" | "orbit" | "category" | "source" | "timeline" | "records";
+type View = "identity" | "services" | "orbit" | "category" | "source" | "timeline" | "records";
 
 const SEV_LABEL: Record<Sev, string> = { critical: "critical", high: "high", medium: "notable", low: "minor" };
 const SENSITIVE = new Set(["password", "financial", "document"]);
@@ -116,7 +122,11 @@ export default function SearchApp() {
   const [step, setStep] = useState<Step>("enter");
   const [subject, setSubject] = useState("");
   const [basis, setBasis] = useState("");
+  // A reference typed once holds for the session: an investigation is several searches
+  // and retyping it each time is how half of them end up unfiled.
   const [caseRef, setCaseRef] = useState("");
+  useEffect(() => { try { setCaseRef(localStorage.getItem("octopus:case") || ""); } catch {} }, []);
+  useEffect(() => { try { localStorage.setItem("octopus:case", caseRef); } catch {} }, [caseRef]);
   // matches the route: a multi-word subject searches every word order unless the
   // operator chooses the cheaper exact phrase
   const [permutations, setPermutations] = useState(true);
@@ -200,7 +210,7 @@ export default function SearchApp() {
         )}
         {step === "loading" && <Scanning subject={subject} />}
         {step === "report" && report && (
-        <ReportView {...{ report, headline, view, setView, reset, trail }}
+        <ReportView {...{ report, headline, view, setView, reset, trail, caseRef }}
           onHop={(label, rep, head) => {
             setReport(rep); setHeadline(head); setView("identity");
             setTrail((t) => [...t, { label, report: rep, headline: head }]);
@@ -214,6 +224,8 @@ export default function SearchApp() {
           onBalance={(b) => setAccount((a) => (a ? { ...a, balance: b } : a))}
         />
       )}
+
+        {step === "enter" && account?.authed && <QueryHistory onPick={(v) => setSubject(v)} caseRef={caseRef} />}
 
         {step !== "report" && step !== "loading" && <Plans authed={!!account?.authed} />}
       </main>
@@ -283,11 +295,13 @@ function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutati
         ))}
       </div>
 
-      {(basis === "investigation" || basis === "legal-request") && (
-        <div className="lk2-box lk2-box-sm">
-          <input value={caseRef} onChange={(e) => setCaseRef(e.target.value)} placeholder="case or tasking reference (optional)" />
-        </div>
-      )}
+      {/* A case reference belongs to any search, not only the two bases that used to
+          reveal the field — an investigation groups its work whatever the basis was,
+          and a reference typed once should carry across the whole session. */}
+      <div className="lk2-box lk2-box-sm">
+        <input value={caseRef} onChange={(e) => setCaseRef(e.target.value)}
+          placeholder="case reference (optional)" aria-label="case reference" />
+      </div>
 
       {/* Both ways of searching a multi-word subject, priced. Quoting is not only
           cheaper — it is narrower, and the interface has to say which it is buying. */}
@@ -344,8 +358,8 @@ function Scanning({ subject }: { subject: string }) {
 
 // ---- step: report ---------------------------------------------------------------------
 
-function ReportView({ report, headline, view, setView, reset, trail, onHop, onBack, onBalance }: {
-  report: Report; headline: string; view: View; setView: (v: View) => void; reset: () => void;
+function ReportView({ report, headline, view, setView, reset, trail, onHop, onBack, onBalance, caseRef }: {
+  report: Report; headline: string; view: View; setView: (v: View) => void; reset: () => void; caseRef?: string;
   trail: { label: string; report: Report; headline: string }[];
   onHop: (label: string, r: Report, h: string) => void;
   onBack: (i: number) => void;
@@ -373,6 +387,7 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
       <div className="lk2-tabs">
         {([
           ["identity", "Subject"],
+          ["services", `Services · ${report.services?.length ?? 0}`],
           ["orbit", "Orbit"],
           ["category", `By type · ${report.categories.length}`],
           ["source", `By breach · ${report.breachCount}`],
@@ -388,6 +403,10 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
       <div className={"lk2-view" + (view === "identity" ? "" : " lk2-off")}>
         <h4 className="lk2-print-h">Subject</h4>
         <IdentityPanel report={report} />
+      </div>
+      <div className={"lk2-view" + (view === "services" ? "" : " lk2-off")}>
+        <h4 className="lk2-print-h">Services</h4>
+        <Services tiles={report.services || []} summary={report.servicesSummary} />
       </div>
 
       {view === "orbit" && <LeakOrbit report={{ subject: report.subject.raw, sources: report.sources, breachCount: report.breachCount, dataPoints: report.dataPoints }} />}
@@ -423,11 +442,12 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
         <p className="lk2-clear">Nothing surfaced at this search depth. A deeper search covers more of the index — raise the limit on a paid plan to widen it.</p>
       )}
 
-      {report.pivots?.length > 0 && <Pivot targets={report.pivots} onHop={onHop} onBalance={onBalance} />}
+      {report.pivots?.length > 0 && <Pivot targets={report.pivots} onHop={onHop} onBalance={onBalance} caseRef={caseRef} />}
 
       <div className="lk2-actions">
-        <button className="lk2-print" onClick={() => window.print()}>Download report (PDF)</button>
-        <button className="lk2-again" onClick={reset}>Check another identifier</button>
+        <button className="lk2-print" onClick={() => window.print()}>Print / PDF</button>
+        <Export report={report} />
+        <button className="lk2-again" onClick={reset}>Search something else</button>
       </div>
     </section>
   );
@@ -857,10 +877,12 @@ function CategoryValues({ findings }: { findings: Finding[] }) {
 // queries in one request and bills per query either way, so the whole hop is one round
 // trip — and the total is shown before any of it is sent, like every other spend here.
 
-function Pivot({ targets, onHop, onBalance }: {
+function Pivot({ targets, onHop, onBalance, caseRef }: {
   targets: PivotTarget[];
   onHop: (label: string, r: Report, h: string) => void;
   onBalance: (b: number) => void;
+  /** the pivot is part of the same investigation, so it files under the same case */
+  caseRef?: string;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [quote, setQuote] = useState<{ total: { formatted: string } } | null>(null);
@@ -886,7 +908,7 @@ function Pivot({ targets, onHop, onBalance }: {
     setBusy(true); setErr("");
     const res = await fetch("/api/search", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pivots: picked, legalBasis: "investigation" }),
+      body: JSON.stringify({ pivots: picked, legalBasis: "investigation", caseRef: caseRef || undefined }),
     }).then(async (r) => ({ ok: r.ok, d: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, d: {} as any }));
     setBusy(false);
     if (!res.ok) {
@@ -946,5 +968,184 @@ function Pivot({ targets, onHop, onBalance }: {
         </div>
       )}
     </div>
+  );
+}
+
+// ---- who holds this person's data ---------------------------------------------------
+//
+// The grid every product in this category shows — built from the breaches already paid
+// for rather than by probing sites, which costs nothing extra and makes a claim that
+// can be checked: not "registered at Deezer", which is a guess about today, but "in
+// Deezer's 2019 breach", which is a fact about a file somebody already has.
+//
+// Aggregated credential lists are kept apart from real services. Rendering "Collection
+// #1" as a service tile tells somebody they have an account at a company that does not
+// exist, and it is the distinction the probing products structurally cannot make.
+
+function Services({ tiles, summary }: { tiles: ServiceTile[]; summary: string }) {
+  if (!tiles.length) return <p className="lk2-clear">No source named this subject.</p>;
+  const services = tiles.filter((t) => t.kind === "service");
+  const aggregates = tiles.filter((t) => t.kind === "aggregate");
+
+  const Tile = (t: ServiceTile) => (
+    <div className={"lk2-svc s-" + t.severity} key={t.kind + t.name}>
+      <div className="lk2-svc-n">{t.name}</div>
+      <div className="lk2-svc-m">
+        {t.firstYear && <span>{t.firstYear}{t.lastYear && t.lastYear !== t.firstYear ? `–${t.lastYear}` : ""}</span>}
+        <span>{t.fields} field{t.fields === 1 ? "" : "s"}</span>
+      </div>
+      {t.dumps.length > 1 && <div className="lk2-svc-d">{t.dumps.length} files</div>}
+    </div>
+  );
+
+  return (
+    <div className="lk2-svcs">
+      <p className="lk2-svc-sum">{summary}</p>
+
+      {services.length > 0 && (
+        <>
+          <h5>Services</h5>
+          <div className="lk2-svc-grid">{services.map(Tile)}</div>
+        </>
+      )}
+
+      {aggregates.length > 0 && (
+        <>
+          <h5>Aggregated lists</h5>
+          <p className="lk2-svc-note">
+            Credential files assembled from other breaches, often from sources nobody has
+            identified. They are named because that is all anyone can honestly say about
+            them — being in one is not an account anywhere.
+          </p>
+          <div className="lk2-svc-grid">{aggregates.map(Tile)}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- getting it out -----------------------------------------------------------------
+//
+// A report that can only be read in the tab that produced it is not a deliverable. The
+// files are built in the browser from the same object the screen renders — nothing is
+// sent anywhere to produce them, which for this product is the point.
+
+function Export({ report }: { report: Report }) {
+  const [busy, setBusy] = useState(false);
+
+  const save = async (kind: "csv" | "csv-raw" | "json") => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // The export lives server-side in lib/export so one implementation serves the
+      // browser and anything that comes later — a scheduled report, an API client.
+      const { toCSV, toJSON, exportName } = await import("@/lib/export");
+      const r = report as any;
+      const text = kind === "json" ? toJSON(r) : toCSV(r, { records: kind === "csv-raw" });
+      const ext = kind === "json" ? "json" : "csv";
+      const blob = new Blob([text], { type: kind === "json" ? "application/json" : "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exportName(r, ext);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // revoked on the next tick: Safari needs the URL to still resolve when it fires
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span className="lk2-exports">
+      <button className="lk2-again" onClick={() => save("csv")} disabled={busy}>CSV</button>
+      <button className="lk2-again" onClick={() => save("csv-raw")} disabled={busy}
+        title="every row as the source returned it, with the dump's own column names">CSV + raw rows</button>
+      <button className="lk2-again" onClick={() => save("json")} disabled={busy}>JSON</button>
+    </span>
+  );
+}
+
+// ---- what you have already searched -------------------------------------------------
+//
+// The sign-in page has promised this since before it existed: "your balance and your
+// query history are where you left them". There was no way to read either.
+//
+// It is NOT the audit trail with a friendlier face. That is oversight — every operator,
+// the whole deployment, administrator-only. This answers the operator's own question:
+// what did I search, and under which case. The server filters on the session's identity,
+// never on anything the page sends.
+//
+// Clicking an entry FILLS THE FIELD rather than running it. A past search is a thing
+// you want to look at again, and re-running it silently would spend credits on a click
+// that looked like navigation.
+
+interface HistoryEntry { at: number; selector: string; legalBasis: string; caseId?: string; kind: string }
+interface CaseRow { caseId: string; searches: number; last: number }
+
+function QueryHistory({ onPick, caseRef }: { onPick: (v: string) => void; caseRef?: string }) {
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [cases, setCases] = useState<CaseRow[]>([]);
+  const [filter, setFilter] = useState<string>("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    const q = filter ? `?case=${encodeURIComponent(filter)}` : "";
+    fetch(`/api/history${q}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setEntries(d.entries || []);
+        setCases(d.cases || []);
+        setNote(d.configured ? "" : d.note || "");
+      })
+      .catch(() => {});
+  }, [filter]);
+
+  if (note) return <section className="lk2-hist"><p className="lk2-hist-note">{note}</p></section>;
+  if (!entries.length && !cases.length) return null;
+
+  const when = (t: number) => {
+    const mins = Math.round((Date.now() - t) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const h = Math.round(mins / 60);
+    if (h < 24) return `${h}h ago`;
+    return new Date(t).toLocaleDateString();
+  };
+
+  return (
+    <section className="lk2-hist">
+      <div className="lk2-hist-h">
+        <b>Your searches</b>
+        {caseRef && <span className="lk2-hist-case">filing under {caseRef}</span>}
+      </div>
+
+      {cases.length > 0 && (
+        <div className="lk2-hist-cases">
+          <button className={filter ? "" : "on"} onClick={() => setFilter("")}>all</button>
+          {cases.map((c) => (
+            <button key={c.caseId} className={filter === c.caseId ? "on" : ""} onClick={() => setFilter(c.caseId)}>
+              {c.caseId} <em>{c.searches}</em>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="lk2-hist-rows">
+        {entries.map((e, i) => (
+          <button className="lk2-hist-row" key={i} onClick={() => onPick(e.selector)}
+            title="put this back in the search field — it is not re-run, and nothing is charged">
+            <code>{e.selector}</code>
+            <span className="lk2-hist-basis">{e.legalBasis}</span>
+            {e.caseId && <span className="lk2-hist-tag">{e.caseId}</span>}
+            <span className="lk2-hist-when">{when(e.at)}</span>
+          </button>
+        ))}
+        {!entries.length && <p className="lk2-hist-note">Nothing filed under {filter} yet.</p>}
+      </div>
+    </section>
   );
 }
