@@ -1237,6 +1237,15 @@ body::after {
   border: 1px solid var(--bd); border-left: 3px solid var(--bd); border-radius: var(--r-md);
   background: var(--bg-1); padding: 13px 15px;
 }
+/* The severity accent, repeated here on purpose. `.s-critical` sets border-left-COLOR
+   and lives earlier in the file; the `border-left` shorthand above resets it, so at
+   equal specificity the later rule won and every tile came out grey. The worst thing a
+   source gave up is the one piece of ranking on this grid — losing it silently is
+   exactly the kind of cascade bug that survives a screenshot. */
+.lk2-svc.s-critical { border-left-color: var(--sev-crit); }
+.lk2-svc.s-high     { border-left-color: var(--sev-high); }
+.lk2-svc.s-medium   { border-left-color: var(--sev-med); }
+.lk2-svc.s-low      { border-left-color: var(--sev-low); }
 .lk2-svc-n { font-weight: 600; font-size: 15px; color: var(--ink); letter-spacing: -.01em; overflow-wrap: anywhere; }
 .lk2-svc-m { display: flex; gap: 10px; margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lk2-svc-d { margin-top: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); }
