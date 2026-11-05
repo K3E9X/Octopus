@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost, refusalIn } from "../lib/leakosint.ts";
+import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost, refusalIn, itemsFromRow } from "../lib/leakosint.ts";
 import { leakOsint } from "../lib/leakosint.ts";
 import type { LeakOsintResult } from "../lib/leakosint.ts";
 
@@ -362,4 +362,72 @@ test("a row is never mistaken for a database, however deep it sits", async () =>
   const r = await parseFixture({ List: { "Dump A": { InfoLeak: "x", Data: [{ Email: "a@b.c", Notes: "InfoLeak" }] } } });
   assert.equal(r.databases.length, 1);
   assert.equal(r.databases[0].rows.length, 1);
+});
+
+// ---- what a column is, when the column name does not say ----------------------------
+//
+// Every case here was produced by the landing page's demo report, which runs the real
+// buildReport() over invented dumps. It claimed the subject had five phone numbers;
+// one of them was a payment card, one was an IPv4 address and one was a social
+// network's numeric user id. All three came from the same fallback.
+
+test("a payment card is not a phone number", () => {
+  const items = itemsFromRow({ name: "d" }, { CardNumber: "4111 1111 1111 1111" });
+  assert.notEqual(items[0].kind, "phone");
+});
+
+test("a sixteen-digit run is past E.164 whatever its spacing", () => {
+  const items = itemsFromRow({ name: "d" }, { Number: "5555 5555 5555 4444" });
+  assert.notEqual(items[0].kind, "phone");
+});
+
+test("a platform user id is an identifier, not a number anybody dialled", () => {
+  assert.equal(itemsFromRow({ name: "d" }, { UID: "100008841220" })[0].kind, "identifier");
+  assert.equal(itemsFromRow({ name: "d" }, { user_id: "77120034" })[0].kind, "identifier");
+});
+
+test("a bare twelve-digit run is not claimed as a phone", () => {
+  // no column rule matches "Ref", so this is the value fallback deciding alone
+  assert.notEqual(itemsFromRow({ name: "d" }, { Ref: "100008841220" })[0].kind, "phone");
+});
+
+test("an IP is an IP even in a camel-cased column", () => {
+  for (const col of ["OrderIP", "RegIP", "last_ip", "ip_address"]) {
+    assert.equal(itemsFromRow({ name: "d" }, { [col]: "92.184.104.57" })[0].kind, "ip", col);
+  }
+});
+
+test("a dotted quad in an unnamed column is an IP, not a phone", () => {
+  assert.equal(itemsFromRow({ name: "d" }, { Value: "92.184.104.57" })[0].kind, "ip");
+});
+
+test("but 999.1.1.1 is not an IP — the octets have to be octets", () => {
+  assert.notEqual(itemsFromRow({ name: "d" }, { Value: "999.1.1.1" })[0].kind, "ip");
+});
+
+test("real phone numbers still classify, formatted or bare", () => {
+  for (const v of ["+33 6 39 98 41 02", "0639984102", "+1 (415) 555-0132", "020 7946 0018"]) {
+    assert.equal(itemsFromRow({ name: "d" }, { Value: v })[0].kind, "phone", v);
+  }
+  // and a column that says so always wins over any of this
+  assert.equal(itemsFromRow({ name: "d" }, { Phone: "100008841220" })[0].kind, "phone");
+});
+
+test("a zip column is still an address, not an IP", () => {
+  assert.equal(itemsFromRow({ name: "d" }, { Zip: "69007" })[0].kind, "address");
+});
+
+test("'ip_address' is an IP, not somewhere the subject lives", () => {
+  // it contains the word "address", and the address rule used to run first
+  assert.equal(itemsFromRow({ name: "d" }, { ip_address: "92.184.104.57" })[0].kind, "ip");
+  assert.equal(itemsFromRow({ name: "d" }, { ipAddress: "10.0.0.1" })[0].kind, "ip");
+});
+
+test("the IP suffix rule is case-sensitive, because 'zip' is not an IP", () => {
+  for (const col of ["Zip", "zip", "zipcode", "Zips"]) {
+    assert.notEqual(itemsFromRow({ name: "d" }, { [col]: "69007" })[0].kind, "ip", col);
+  }
+  for (const col of ["OrderIP", "RegIP"]) {
+    assert.equal(itemsFromRow({ name: "d" }, { [col]: "92.184.104.57" })[0].kind, "ip", col);
+  }
 });

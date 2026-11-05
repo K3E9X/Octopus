@@ -501,6 +501,10 @@ body::after {
   /* Tightened across the board. A 20px radius reads soft and generic; the work this
      tool does is precise, and the frame should say so before a word is read. */
   --r-xs: 3px; --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 14px;
+  /* The landing's column. It was 960px written out in four rules, on a page whose
+     centrepiece is now a report that needs the room to be read rather than squinted at.
+     One token, so widening it again is one edit and not a hunt. */
+  --page: min(1240px, 92vw);
   --ease: cubic-bezier(.22,1,.36,1);
 
   min-height: 100vh; padding-bottom: 96px; color: var(--ink);
@@ -516,7 +520,10 @@ body::after {
 .lk2 button { font-family: inherit; }
 
 /* ---- top bar ---- */
-.lk2-top { display: flex; align-items: center; justify-content: space-between; max-width: 1080px; margin: 0 auto; padding: 20px 24px; }
+/* The header tracks the page column. It sat at 1080 while the content sat at 960, which
+   nobody notices; it sits at 1240 now, and a nav indented from its own content is the
+   kind of misalignment everybody notices without being able to say why. */
+.lk2-top { display: flex; align-items: center; justify-content: space-between; max-width: var(--page); margin: 0 auto; padding: 20px 0; }
 .lk2-brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: var(--ink); }
 .lk2-brand span { display: flex; flex-direction: column; line-height: 1; }
 .lk2-brand b { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .14em; }
@@ -785,7 +792,7 @@ body::after {
 .lk2-hero-cta:active { transform: translateY(1px); }
 .lk2-hero-cta:hover { background: var(--accent-hover); }
 
-.lk2-lp-sec { max-width: 960px; margin: 0 auto; padding: 72px 0 0; }
+.lk2-lp-sec { max-width: var(--page); margin: 0 auto; padding: 72px 0 0; }
 /* Left-aligned, under a hairline. Three centred headings stacked down a page read as a
    brochure; an anchored left edge reads as a document, which is what this is. */
 .lk2-lp-sec > h2, .lk2-lp-trust > h2 {
@@ -854,11 +861,111 @@ body::after {
 
 @media (max-width: 760px) { .lk2-feat-grid { grid-template-columns: 1fr; } }
 
-.lk2-lp-trust { max-width: 960px; margin: 0 auto; padding: 72px 0 0; text-align: left; }
+
+/* ======================================================================
+   THE DEMO — a real report on the front page.
+
+   Styled apart from the search surface on purpose. The product's report is
+   laid out for someone reading one subject for ten minutes; this is laid
+   out for someone deciding in eight seconds whether to keep scrolling, so
+   it is denser, flatter, and shows three views rather than seven.
+   ====================================================================== */
+.lk2-demo-sec { scroll-margin-top: 24px; }
+.lk2m { border: 1px solid var(--bd); border-radius: var(--r-lg); background: var(--bg-1); overflow: hidden; }
+
+/* the query, the verdict, and the three numbers that matter */
+.lk2m-bar {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 14px 20px; border-bottom: 1px solid var(--bd); background: var(--bg-2);
+}
+.lk2m-q { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+.lk2m-spacer { flex: 1 1 40px; }
+.lk2m-bar b { font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--ink); margin-left: 10px; }
+.lk2m-bar > span:not(.lk2m-q):not(.lk2m-verdict):not(.lk2m-spacer) {
+  font-size: 11px; letter-spacing: .04em; color: var(--ink-3); text-transform: uppercase;
+}
+.lk2m-verdict {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; padding: 3px 8px; border-radius: var(--r-xs); border: 1px solid;
+}
+.lk2m-verdict.v-critical { color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
+.lk2m-verdict.v-exposed { color: var(--confirm); border-color: rgba(255,201,77,.4); }
+.lk2m-verdict.v-clear { color: var(--ink-3); border-color: var(--bd); }
+
+.lk2m-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--bd); }
+.lk2m-tabs button {
+  flex: 0 1 auto; display: flex; flex-direction: column; gap: 2px; text-align: left;
+  background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+  padding: 12px 22px; color: var(--ink-3); font: inherit; font-size: 14px; font-weight: 500;
+  transition: color .14s, border-color .14s;
+}
+.lk2m-tabs button em { font-style: normal; font-size: 11px; color: var(--ink-4); letter-spacing: .02em; }
+.lk2m-tabs button:hover { color: var(--ink-2); }
+.lk2m-tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+
+.lk2m-body { padding: 22px 24px 26px; min-height: 330px; }
+.lk2m-sum { margin: 0 0 6px; font-size: 15px; line-height: 1.6; color: var(--ink); }
+.lk2m-corr { margin: 0 0 20px; font-size: 13px; color: var(--ink-3); }
+.lk2m-corr b { color: var(--ink-2); font-weight: 600; }
+
+.lk2m-facets { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 28px; }
+.lk2m-facet h4 {
+  margin: 0 0 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--ink-4);
+}
+.lk2m-val { padding: 5px 0 5px 10px; border-left: 1px solid var(--bd-subtle); }
+/* corroborated by more than one database — a count, never a percentage */
+.lk2m-val.corr { border-left-color: var(--accent); }
+.lk2m-val code { display: block; font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.lk2m-val.corr code { color: var(--ink); }
+.lk2m-val span { display: block; margin-top: 2px; font-size: 11px; color: var(--ink-4); }
+
+.lk2m-head {
+  margin: 20px 0 9px; font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3);
+}
+.lk2m-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 9px; }
+.lk2m-svc {
+  padding: 11px 13px; border: 1px solid var(--bd-subtle); border-radius: var(--r-sm);
+  background: var(--bg-2); border-left-width: 2px;
+}
+.lk2m-svc b { display: block; font-size: 14px; font-weight: 600; color: var(--ink); }
+.lk2m-svc span { font-size: 11px; color: var(--ink-4); }
+/* the accent after the shorthand, or the shorthand resets it back to grey */
+.lk2m-svc.s-critical { border-left-color: var(--accent); }
+.lk2m-svc.s-high { border-left-color: var(--confirm); }
+.lk2m-svc.s-medium { border-left-color: var(--ink-3); }
+
+.lk2m-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.lk2m-cat { padding: 13px 15px; border: 1px solid var(--bd-subtle); border-radius: var(--r-sm); background: var(--bg-2); border-left-width: 2px; }
+.lk2m-cat.s-critical { border-left-color: var(--accent); }
+.lk2m-cat.s-high { border-left-color: var(--confirm); }
+.lk2m-cat.s-medium { border-left-color: var(--ink-3); }
+.lk2m-cat-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.lk2m-cat-h b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.lk2m-sev { font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); }
+.lk2m-n { margin-left: auto; font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); }
+.lk2m-cat p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.lk2m-do { margin-top: 7px !important; color: var(--ink-3) !important; }
+.lk2m-do span {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); margin-right: 7px;
+}
+
+.lk2m-foot { margin: 14px 0 0; padding: 12px 20px 0; font-size: 12px; line-height: 1.6; color: var(--ink-4); border-top: 1px solid var(--bd-subtle); }
+.lk2m-foot code { font-family: var(--font-mono); font-size: 11px; }
+
+@media (max-width: 680px) {
+  .lk2m-tabs { overflow-x: auto; }
+  .lk2m-tabs button { padding: 11px 14px; white-space: nowrap; }
+  .lk2m-body { padding: 18px 15px 20px; }
+  .lk2m-bar { padding: 12px 15px; }}
+
+.lk2-lp-trust { max-width: var(--page); margin: 0 auto; padding: 72px 0 0; text-align: left; }
 .lk2-lp-trust > p { color: var(--ink-2); font-size: 16px; line-height: 1.7; margin: 0 0 32px; max-width: 62ch; }
 .lk2-lp-trust > p em { font-style: italic; color: var(--ink); }
 
-.lk2-foot { max-width: 960px; margin: 112px auto 0; padding: 30px 0; border-top: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.lk2-foot { max-width: var(--page); margin: 112px auto 0; padding: 30px 0; border-top: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .lk2-foot-note { color: var(--ink-4); font-size: 13px; }
 
 @media (max-width: 760px) {

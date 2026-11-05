@@ -62,12 +62,27 @@ export function phoneIntel(input: string, defaultCountry = "FR"): PhoneIntel {
  * So the number is parsed properly, and E.164 — which is unambiguous by construction — is
  * the key whenever it can be had. The digit fallback is only for input no library can
  * make sense of, and there it keeps every digit rather than guessing which ones matter.
+ *
+ * PARSING IS THE TEST, NOT VALIDITY. This used to demand isValid() before trusting the
+ * E.164, and those are two different questions. isValid() asks whether the range is
+ * assignable to a subscriber today; identity asks whether two strings denote the same
+ * number. A range reserved for fiction, a block allocated after the library's metadata
+ * was cut, an unusual MVNO — all parse to exactly the right E.164 and all answer false.
+ * Each one fell through to the digit fallback, where a national number and the same
+ * number written internationally share neither prefix nor suffix, so one subscriber was
+ * reported as two numbers from two databases. The landing page's demo is what caught
+ * it: the page claims a number is matched past its country code, directly above a
+ * report listing one number twice.
+ *
+ * Trusting the parse is also the SAFER direction. The E.164 is a function of the digits
+ * and the region, so two different subscribers cannot produce the same one; the digit
+ * fallback, which strips leading zeros, genuinely can.
  */
 export function phoneKey(raw: string, region = "FR"): string {
   const t = String(raw ?? "").trim();
   if (!t) return "";
   const intel = phoneIntel(t, region);
-  if (intel.valid && intel.e164) return intel.e164;
+  if (intel.e164) return intel.e164;
   const d = t.replace(/\D/g, "");
   return d.replace(/^0+/, "") || d;
 }

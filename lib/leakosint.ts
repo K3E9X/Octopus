@@ -174,21 +174,54 @@ const COLUMN_RULES: { re: RegExp; kind: ExposureKind }[] = [
   // Platform IDs come BEFORE phone on purpose: "Telegram ID" contains "tel", so an
   // unanchored phone rule claimed every Telegram column as a phone number. Short
   // tokens here are word-bounded for the same reason.
-  { re: /nick|login|user.?name|account|profile|telegram|facebook|instagram|twitter|\bvk\b|\bok\b/i, kind: "identifier" },
+  { re: /nick|login|user.?name|account|profile|telegram|facebook|instagram|twitter|\bvk\b|\bok\b|\buids?\b|user.?id|member.?id/i, kind: "identifier" },
   { re: /phone|telephone|\btel\b|mobile|msisdn|numero/i, kind: "phone" },
   { re: /full.?name|^name$|first.?name|last.?name|surname|patronymic|\bfio\b/i, kind: "name" },
+  // IP BEFORE ADDRESS, because "ip_address" contains "address" and was being filed as
+  // somewhere the subject lives. And the last alternative is deliberately
+  // case-SENSITIVE: "OrderIP" and "RegIP" end in it, "zip" and "zips" end in the same
+  // three letters and are postcodes. Nothing else tells those apart — there is no word
+  // boundary inside "zip", and a case-insensitive suffix match claims both.
+  { re: /\b[Ii][Pp]s?\b|[Ii][Pp][-_. ]?[Aa]ddr|_[Ii][Pp]s?$|IPs?$/, kind: "ip" },
   { re: /address|street|city|region|country|postal|\bzip\b|geo/i, kind: "address" },
   { re: /passport|document|\binn\b|snils|\bvin\b|licen[cs]e|id.?card|doc.?num/i, kind: "document" },
-  { re: /(^|_)ips?$|ip.?addr/i, kind: "ip" },
   { re: /date|birth|bday|created|registered|updated/i, kind: "date" },
   { re: /url|link|site|domain/i, kind: "login" },
 ];
+
+const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * Is this value a phone number, when the column name would not say?
+ *
+ * A LONG RUN OF DIGITS IS NOT A PHONE NUMBER, and the rule this replaces said it was:
+ * anything starting with a digit and running eight or more characters of digits and
+ * punctuation. On one demo report that claimed a Facebook UID, a payment card and an
+ * IPv4 address as three of the subject's five phone numbers — the same failure as
+ * reading a card number out of a social network's user id, which is value shape
+ * overruling the column that already told us what the field was.
+ *
+ * Two bounds do the work. E.164 caps a real number at fifteen digits, which excludes
+ * every card (thirteen to nineteen) and most platform ids. And a BARE run of digits
+ * with no formatting at all is only plausibly a phone while it is short enough that
+ * nothing else is shaped like it; past eleven, an unformatted run is an identifier far
+ * more often than it is a number anybody dialled.
+ */
+function looksLikePhone(value: string): boolean {
+  if (!/^\+?[\d\s().-]{7,}$/.test(value)) return false;
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) return false;
+  return value.trim().startsWith("+") || /[\s()-]/.test(value) || digits.length <= 11;
+}
 
 function classifyColumn(column: string, value: string): ExposureKind {
   if (/^https?:\/\//i.test(value)) return "login";
   for (const r of COLUMN_RULES) if (r.re.test(column)) return r.kind;
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "email";
-  if (/^\+?\d[\d\s().-]{7,}$/.test(value)) return "phone";
+  // before the phone test: a dotted quad is digits and punctuation, and reads as a
+  // phone number to any rule loose enough to be useful on unlabelled columns
+  if (IPV4.test(value)) return "ip";
+  if (looksLikePhone(value)) return "phone";
   return "other";
 }
 

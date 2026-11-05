@@ -10,7 +10,8 @@
 import Link from "next/link";
 import { OctoMark } from "./OctoMark";
 import Sift from "./Sift";
-import { VIEWS, viewCountWord } from "@/lib/views";
+import type { SearchReport } from "@/lib/report";
+import Demo from "./Demo";
 import dynamic from "next/dynamic";
 
 // Decoration behind real markup: it never gates content, so it is loaded after it.
@@ -25,17 +26,17 @@ const STEPS = [
   {
     n: "01",
     t: "Enter a selector",
-    d: "An email address, a phone number, a handle or a name. The price is quoted before you spend it — a name costs more than an address, and you see why.",
+    d: "Email, phone, handle or name. The price is quoted before you spend it.",
   },
   {
     n: "02",
     t: "Declare why",
-    d: "One line, from a closed list, written to a log that cannot be edited without the break showing. That record is what makes a search defensible afterwards.",
+    d: "One line, from a closed list, written to a log that cannot be edited without the break showing.",
   },
   {
     n: "03",
     t: "Read the subject",
-    d: "Every row that is genuinely about them, consolidated into one person — with the database behind each fact, and anyone who merely shared part of the query kept separate.",
+    d: "Every row genuinely about them, as one person. Anyone who merely shared part of the query is kept separate.",
   },
 ];
 
@@ -54,31 +55,32 @@ const DOES = [
   {
     t: "Pivot",
     k: "Turn an ambiguous name into a person",
-    d: "A name identifies nobody; the addresses and numbers inside its results do. One click searches them — several at once, in a single request, priced before it runs — and the ambiguity resolves.",
+    d: "A name identifies nobody; the addresses and numbers inside its results do. One click searches them, several at once, priced before it runs.",
   },
   {
     t: "Cases and history",
     k: "Every hop filed under one reference",
-    d: "File a search under a case and each pivot files with it. Your own queries are yours to re-read; nobody else’s are, whatever their role.",
+    d: "File a search under a case and each pivot files with it. Your queries are yours to re-read; nobody else’s are, whatever their role.",
   },
   {
     t: "Export",
     k: "CSV, raw CSV and JSON that carries the query",
-    d: "One line per fact for a spreadsheet, a raw variant with every column the dump returned, and JSON that keeps the question — because a report without it cannot be checked six months later.",
+    d: "One line per fact, a raw variant with every column the dump returned, and JSON that keeps the question it answers.",
   },
   {
     t: "Password habits",
     k: "The pattern across leaks, not the passwords in one",
-    d: "Three leaked passwords that are one stem with a rotating year is worth being told: changing the newest leaves the account guessable from the oldest.",
+    d: "Three passwords that are one stem with a rotating year: changing the newest leaves the account guessable from the oldest.",
   },
 ];
 
-export default function Landing({ signedIn }: { signedIn: boolean }) {
+export default function Landing({ signedIn, demo }: { signedIn: boolean; demo: SearchReport }) {
   return (
     <div className="lk2 lk2-home">
       <header className="lk2-top">
         <Link className="lk2-brand" href="/"><OctoMark size={30} /><span><b>OCTOPUS</b><small>LEAK</small></span></Link>
         <nav>
+          <a href="#demo">See a report</a>
           <a href="#what">Features</a>
           <a href="#how">How it works</a>
           <Link href="/search#plans">Plans</Link>
@@ -93,13 +95,19 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
           <DeepField className="lk2-hero-field" anchor={{ x: -0.1, y: 0.44 }} reachScale={1.3} />
           <div className="lk2-eyebrow">breach data lookup</div>
           <h1>What has leaked<br />about <span>this person</span>?</h1>
-          <p>Search an email, a phone, a handle or a name across breach data, and get back more than a list of hits: the records assembled into one subject, with the dump every single fact came from.</p>
+          <p>Search an email, a phone, a handle or a name. Get back the rows assembled into one person — with the database behind every fact.</p>
           <Link className="lk2-hero-cta" href="/search">Run a search →</Link>
 
           <div className="lk2-reveal">
             <span>what a report uncovers</span>
             <div>{UNCOVERS.map((t, i) => <em key={t} style={{ ["--i" as any]: i }}>{t}</em>)}</div>
           </div>
+        </section>
+
+        <section className="lk2-lp-sec lk2-demo-sec" id="demo">
+          <h2>This is the report.</h2>
+          <p className="lk2-sec-lead">Not a screenshot of one. Five invented dumps, run through the same code a paid search runs.</p>
+          <Demo report={demo} />
         </section>
 
         <section className="lk2-lp-sec lk2-feats" id="what">
@@ -130,18 +138,6 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
           </div>
         </section>
 
-        <section className="lk2-lp-sec">
-          {/* The count comes from the list itself. Written out, it was wrong in four
-              separate places the moment a view was added. */}
-          <h2>{viewCountWord().replace(/^./, (c) => c.toUpperCase())} ways to read the same facts.</h2>
-          <p className="lk2-sec-lead">One report, {viewCountWord()} readings — tabs, not exports. Switching costs nothing and spends nothing.</p>
-          <div className="lk2-views">
-            {VIEWS.map((v) => (
-              <div className="lk2-vcard" key={v.id}><h3>{v.label}</h3><p>{v.blurb}</p></div>
-            ))}
-          </div>
-        </section>
-
         <section className="lk2-lp-trust">
           <h2>A result set is not a report.</h2>
           {/* The argument, drawn — because this one only lands once you see it happen. */}
@@ -149,11 +145,9 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
           <p>
             The index searches every word order, so a query comes back with rows that matched
             <em> something</em> — not rows about the person you asked for. Everything here is
-            checked against the selector before it is allowed to become a fact: an address
-            matched in every spelling a dump holds it in, a number matched past the country
-            code, and anyone who merely shares a surname listed on their own rather than
-            folded in. A tool that quietly merges them produces a detailed, confident,
-            wrong answer, which is worse than producing nothing.
+            checked against the selector first: an address in every spelling a dump holds it
+            in, a number matched past its country code, and anyone who merely shares a surname
+            listed on their own rather than folded in.
           </p>
           <Link className="lk2-hero-cta" href="/search">Run a search →</Link>
         </section>

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { OctoMark } from "./OctoMark";
+import { FACET_ORDER, FACET_LABEL } from "@/lib/identity";
 import { VIEWS, type ViewId } from "@/lib/views";
 
 // the constellation view is SVG-heavy and only needed once a report exists
@@ -93,12 +94,6 @@ const KIND_LABEL: Record<Kind, string> = {
   free: "free-text term",
 };
 
-const FACET_LABEL: Record<string, string> = {
-  name: "Name", email: "Email", phone: "Phone", address: "Address", username: "Handle",
-  document: "ID document", employer: "Employer", birthdate: "Date of birth",
-  password: "Password", ip: "IP address",
-};
-const FACET_ORDER = ["name", "birthdate", "email", "phone", "address", "username", "document", "employer", "ip", "password"];
 
 const LEGAL_BASES: { id: string; label: string; detail: string }[] = [
   { id: "own-data", label: "My own data", detail: "The subject is me, or an identifier I control." },

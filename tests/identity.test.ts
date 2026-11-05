@@ -121,3 +121,16 @@ test("the summary leads with the name and states what is corroborated", () => {
 test("nothing identifying is said plainly, not dressed up as a result", () => {
   assert.match(describe(consolidate([])), /Nothing consolidated/);
 });
+
+test("a platform's internal id is an account id, never a handle", () => {
+  // both arrive as kind "identifier"; only the column name still tells them apart
+  const rows = [
+    { source: "Facebook 2021", items: [
+      { kind: "identifier" as const, label: "UID", value: "100008841220", source: "Facebook 2021" },
+      { kind: "identifier" as const, label: "Username", value: "lmarchetti", source: "Facebook 2021" },
+    ] },
+  ];
+  const id = consolidate(rows as any);
+  assert.deepEqual(id.facets.accountid?.map((v) => v.value), ["100008841220"]);
+  assert.deepEqual(id.facets.username?.map((v) => v.value), ["lmarchetti"]);
+});
