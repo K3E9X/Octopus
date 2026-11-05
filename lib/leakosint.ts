@@ -147,6 +147,11 @@ function spaced<T>(fn: () => Promise<T>): Promise<T> {
 const COLUMN_RULES: { re: RegExp; kind: ExposureKind }[] = [
   { re: /pass(word|wd)?|pwd|hash|secret/i, kind: "credential" },
   { re: /e-?mail/i, kind: "email" },
+  // Activity timestamps, recognised BEFORE the identifier rule because "LastLogin"
+  // contains "login" and would otherwise be read as the login itself. These are
+  // metadata about an account, not data that leaked about a person, and the report
+  // drops them — so misreading one puts a date in front of the reader as a finding.
+  { re: /last.?(active|seen|login|visit|update)|reg(istration)?.?date|sign.?up|joined|created.?at|updated.?at|modified/i, kind: "date" },
   // Platform IDs come BEFORE phone on purpose: "Telegram ID" contains "tel", so an
   // unanchored phone rule claimed every Telegram column as a phone number. Short
   // tokens here are word-bounded for the same reason.
@@ -171,7 +176,14 @@ function classifyColumn(column: string, value: string): ExposureKind {
 /** Values the dumps use to mean "this column is empty". */
 const NULLISH = new Set(["", "-", "—", "n/a", "na", "null", "none", "undefined", "0", "unknown"]);
 
-function rowItems(db: LeakDatabase, row: Record<string, string>): ExposureItem[] {
+/**
+ * One row → typed items, keeping the dump's own column name as the label.
+ *
+ * Exported because the report builder works from ROWS, not from the flattened item
+ * list: attribution is a per-row judgement, and a row is the only place where the
+ * association between a login and a secret actually exists.
+ */
+export function itemsFromRow(db: { name: string }, row: Record<string, string>): ExposureItem[] {
   const out: ExposureItem[] = [];
   const source = `leakosint · ${db.name}`;
   for (const [col, raw] of Object.entries(row)) {
@@ -267,7 +279,7 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
     for (const db of databases) {
       if (db.info) items.push({ kind: "breach", label: db.name, value: db.info, source: `leakosint · ${db.name}` });
       else items.push({ kind: "breach", label: "Database", value: db.name, source: "leakosint" });
-      for (const row of db.rows) items.push(...rowItems(db, row));
+      for (const row of db.rows) items.push(...itemsFromRow(db, row));
     }
 
     // The documented shape yielded nothing but the endpoint answered: harvest the raw

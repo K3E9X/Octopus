@@ -1,21 +1,29 @@
-// Self-exposure report — what a person's own breach data means to them.
+// The report — what the rows actually say about the subject.
 //
-// This is the product: someone proves they own an email / phone / login, and this turns
-// the raw LeakOSINT rows into a report they can act on. Three views of the same facts:
+// Three views of the same facts, plus the thing a pile of rows is not: a person.
 //
-//   BY CATEGORY — what the datum IS (password, bank detail, identity, address…), ranked
-//     by how much it should worry them, deduped, each with a concrete next step.
-//   BY SOURCE   — which breach each fact came from, with that breach's description and
-//     date, so "where did this leak" has an answer.
-//   TIMELINE    — the breaches in date order, the compromise history at a glance.
+//   IDENTITY    — the rows consolidated into one subject, every value citing the
+//                 databases that carried it (lib/identity).
+//   BY CATEGORY — what each datum IS, ranked by how much it should worry whoever it
+//                 belongs to, deduped, with the concrete step to take on it.
+//   BY SOURCE   — which breach exposed what, with that breach's own description.
+//   TIMELINE    — the compromises in date order.
 //
-// It speaks to the OWNER of the data ("your password", "change it"), not to an
-// investigator. The gate — that you only reach this for an identifier you have verified
-// you control — lives in the route; this module assumes that has already passed.
+// The gate everything passes through first is ATTRIBUTION. The API searches every
+// permutation of a query's words, so a result set contains rows that matched something
+// without being about the person asked for. Those rows are counted and shown as what
+// they are — other people — and never folded into the subject's identity. A tool that
+// quietly merges them produces a confident, detailed, wrong answer, which is worse than
+// producing nothing.
 //
 // Pure and synchronous: no network, no database, so it is testable and runs anywhere.
 
 import type { ExposureItem } from "./exposure";
+import type { Subject } from "./subject";
+import type { LeakDatabase } from "./leakosint";
+import { itemsFromRow } from "./leakosint";
+import { attributeRow, type Attribution } from "./attribution";
+import { consolidate, describe, type Identity } from "./identity";
 
 export type Category =
   | "password" | "financial" | "document" | "identity"
@@ -68,12 +76,16 @@ export interface TimelineEntry {
   sortDate: number;
 }
 
-export interface SelfReport {
-  /** the verified identifier this report is about */
-  subject: string;
+export interface SearchReport {
+  /** the selector this report is about, and what kind of thing it is */
+  subject: { raw: string; kind: Subject["kind"]; canonical: string; unique: boolean; note?: string };
   /** how exposed, in one word, for the headline */
   verdict: "clear" | "exposed" | "critical";
-  /** total distinct leaked data points */
+  /** the rows consolidated into one person — every value citing its databases */
+  identity: Identity;
+  /** that identity in one readable line */
+  summary: string;
+  /** total distinct leaked data points attributed to the subject */
   dataPoints: number;
   /** how many breaches the subject appears in */
   breachCount: number;
@@ -85,6 +97,35 @@ export interface SelfReport {
   timeline: TimelineEntry[];
   /** the critical pull-outs, surfaced above everything else */
   highlights: { financial: Finding[]; passwords: Finding[] };
+  /**
+   * What the API returned that is NOT about the subject.
+   *
+   * Reported rather than silently discarded, for two reasons. The operator paid for
+   * these rows, and a count of what was set aside is the only way to tell "nothing was
+   * found" apart from "everything found belonged to someone else". And on a name
+   * search, `others` IS the answer: a list of the distinct people who share that name,
+   * to be told apart rather than merged.
+   */
+  excluded: { partial: number; unrelated: number; total: number };
+  /** on a non-unique subject: the other people the rows describe, kept separate */
+  others: OtherSubject[];
+}
+
+/**
+ * Someone who is not the subject.
+ *
+ * A name search returns rows about everyone who shares the name. Each distinct person
+ * the rows seem to describe is surfaced on their own, with what identifies them, so the
+ * operator can say which one they meant. They are never consolidated into the subject.
+ */
+export interface OtherSubject {
+  /** the identifying value that holds this group together (an address, a phone) */
+  anchor: string;
+  /** which words of the query this person matched */
+  matched: string[];
+  /** the databases these rows came from */
+  sources: string[];
+  findings: Finding[];
 }
 
 // ---- financial detection -------------------------------------------------------------
@@ -195,14 +236,21 @@ function categorize(it: ExposureItem): Category | null {
   if (looksFinancial(it.label, v)) return "financial";
   if (it.kind === "document" || /\b(passport|national.?id|\bssn\b|\binn\b|snils|licen[cs]e|id.?card|driver|tax.?id|nino)\b/.test(L)) return "document";
   if (it.kind === "name" || /\b(full.?name|^name$|first.?name|last.?name|surname|patronym|\bfio\b|gender|\bsex\b)\b/.test(L) || BIRTHISH.test(L)) return "identity";
+
+  // A date that is not a birthday is account history — when it was opened, when it was
+  // last used — and the person it belongs to learned nothing by being shown it.
+  //
+  // This check has to come HERE, before the label rules below, and that is the whole
+  // point of its position. "LastLogin" contains "login", so the rule that recognises
+  // handles claimed it first and a timestamp was being presented as an online account.
+  // Kind beats label whenever the kind is already certain.
+  if (it.kind === "date") return null;
   if (it.kind === "address" || /\b(address|street|city|region|country|postal|post.?code|\bzip\b|state|province|\bgeo\b|location)\b/.test(L)) return "location";
   if (it.kind === "email" || /e-?mail/.test(L)) return "email";
   if (it.kind === "phone" || /\b(phone|mobile|tel|msisdn|numero)\b/.test(L)) return "phone";
   if (/\b(company|employer|job.?title|occupation|industry|department|position|role|level|work|professional|business)\b/.test(L)) return "professional";
   if (it.kind === "identifier" || it.kind === "login" || /\b(nick|user.?name|login|profile|handle|telegram|facebook|instagram|twitter|\bvk\b|\bok\b|link|url|domain|site|\bip\b)\b/.test(L)) return "online";
 
-  // Dates that are not birthdays are metadata (registration, last-seen) — not findings.
-  if (it.kind === "date") return null;
   if (it.kind === "count" || it.kind === "field") return null;
   return "other";
 }
@@ -256,35 +304,81 @@ export function parseBreachDate(info: string): { date?: string; sortDate: number
 
 // ---- build ---------------------------------------------------------------------------
 
-/**
- * Build the report from the exposure items of a verified subject.
- *
- * `items` are the fields LeakOSINT returned for this identifier; `breaches` is the per-
- * database {name, info} provenance. Nothing here decides WHETHER the person may see this;
- * the route already proved they own `subject`.
- */
-export function buildReport(
-  subject: string,
-  items: ExposureItem[],
-  breaches: { name: string; info: string }[],
-): SelfReport {
-  const infoByName = new Map(breaches.map((b) => [b.name, b.info] as const));
-
-  // Build findings once; feed both the category view and the source view from them.
-  const findings: Finding[] = [];
+/** Turn the items of one attributed row into findings. */
+function findingsFrom(items: ExposureItem[], database: string): Finding[] {
+  const out: Finding[] = [];
   for (const it of items) {
     if (it.kind === "breach" || it.kind === "record") continue;
     const category = categorize(it);
     if (!category) continue;
-    findings.push({
+    out.push({
       category,
       severity: severityOf(category),
       label: humanLabel(it.label),
       value: it.value,
-      source: srcName(it.source),
+      source: srcName(it.source) || database,
       masked: it.masked,
     });
   }
+  return out;
+}
+
+/** The value that identifies one of the other people a name search turned up. */
+function anchorOf(items: ExposureItem[]): string | null {
+  for (const kind of ["email", "phone", "identifier"] as const) {
+    const hit = items.find((i) => i.kind === kind && String(i.value || "").trim());
+    if (hit) return hit.value.trim();
+  }
+  const name = items.find((i) => i.kind === "name" && String(i.value || "").trim());
+  return name ? name.value.trim() : null;
+}
+
+/**
+ * Build the report.
+ *
+ * Works from the DATABASES rather than from a flattened item list, because attribution
+ * is a per-row judgement and because the association between a login and a secret only
+ * exists inside one row. Every row is judged before it contributes anything:
+ *
+ *   direct   → the subject's identity, categories, sources and timeline
+ *   partial  → `others`, grouped by whoever they appear to be
+ *   none     → counted in `excluded`, and nothing more
+ */
+export function buildReport(subject: Subject, databases: LeakDatabase[]): SearchReport {
+  const infoByName = new Map(databases.map((d) => [d.name, d.info] as const));
+
+  const findings: Finding[] = [];
+  const ownRows: { database: string; items: ExposureItem[] }[] = [];
+  const foreign = new Map<string, { anchor: string; matched: Set<string>; sources: Set<string>; findings: Finding[] }>();
+  let partial = 0, unrelated = 0;
+
+  for (const db of databases) {
+    for (const row of db.rows) {
+      const verdict = attributeRow(subject, row);
+      const items = itemsFromRow(db, row);
+
+      if (verdict.attribution === "direct") {
+        ownRows.push({ database: db.name, items });
+        findings.push(...findingsFrom(items, db.name));
+        continue;
+      }
+      if (verdict.attribution === "none") { unrelated += 1; continue; }
+
+      // partial: somebody else who matched part of the query
+      partial += 1;
+      const anchor = anchorOf(items) || "(unidentified)";
+      const key = anchor.toLowerCase();
+      const group = foreign.get(key) ?? { anchor, matched: new Set<string>(), sources: new Set<string>(), findings: [] };
+      foreign.set(key, group);
+      for (const w of verdict.words || []) group.matched.add(w);
+      group.sources.add(db.name);
+      group.findings.push(...findingsFrom(items, db.name));
+    }
+  }
+
+  // --- the subject, consolidated into one person ---
+  const identity = consolidate(ownRows);
+  const summary = describe(identity);
 
   // --- by category (deduped on value within a category) ---
   const byCat = new Map<Category, Map<string, Finding>>();
@@ -315,12 +409,13 @@ export function buildReport(
     const severity = fs.reduce<Severity>((w, f) => (RANK[f.severity] > RANK[w] ? f.severity : w), "low");
     return { name, info, date, sortDate, findings: fs, severity };
   });
-  // breaches named in `breaches` but with no surfaced field still count as a source line
-  for (const b of breaches) {
-    if (!bySrc.has(b.name)) {
-      const { date, sortDate } = parseBreachDate(b.info);
-      sources.push({ name: b.name, info: b.info, date, sortDate, findings: [], severity: "low" });
-    }
+  // A database that matched the subject but surfaced no usable field is still a
+  // breach the subject is in, and saying so is the honest reading of an empty row.
+  for (const db of databases) {
+    if (bySrc.has(db.name)) continue;
+    if (!ownRows.some((r) => r.database === db.name)) continue;
+    const { date, sortDate } = parseBreachDate(db.info);
+    sources.push({ name: db.name, info: db.info, date, sortDate, findings: [], severity: "low" });
   }
   sources.sort((a, b) => (b.sortDate - a.sortDate) || a.name.localeCompare(b.name));
 
@@ -332,23 +427,53 @@ export function buildReport(
 
   // --- verdict + highlights ---
   const dataPoints = categories.reduce((n, c) => n + c.distinct, 0);
-  const breachCount = new Set([...bySrc.keys(), ...breaches.map((b) => b.name)]).size;
+  const breachCount = sources.length;
   const worst = categories.reduce<Severity>((w, c) => (RANK[c.severity] > RANK[w] ? c.severity : w), "low");
-  const verdict: SelfReport["verdict"] = !categories.length ? "clear" : RANK[worst] >= 3 ? "critical" : "exposed";
+  const verdict: SearchReport["verdict"] = !categories.length ? "clear" : RANK[worst] >= 3 ? "critical" : "exposed";
 
   const dedupeHi = (c: Category) => {
     const seen = new Set<string>();
     return findings.filter((f) => f.category === c && !seen.has(f.value.toLowerCase()) && seen.add(f.value.toLowerCase()));
   };
-  const highlights = { financial: dedupeHi("financial"), passwords: dedupeHi("password") };
 
-  return { subject, verdict, dataPoints, breachCount, categories, sources, timeline, highlights };
+  const others: OtherSubject[] = [...foreign.values()]
+    .map((g) => ({ anchor: g.anchor, matched: [...g.matched], sources: [...g.sources].sort(), findings: g.findings }))
+    .sort((a, b) => b.findings.length - a.findings.length || a.anchor.localeCompare(b.anchor));
+
+  return {
+    subject: { raw: subject.raw, kind: subject.kind, canonical: subject.canonical, unique: subject.unique, note: subject.note },
+    verdict,
+    identity,
+    summary,
+    dataPoints,
+    breachCount,
+    categories,
+    sources,
+    timeline,
+    highlights: { financial: dedupeHi("financial"), passwords: dedupeHi("password") },
+    excluded: { partial, unrelated, total: partial + unrelated },
+    others,
+  };
 }
 
-/** One-line headline for the report card. */
-export function headline(r: SelfReport): string {
-  if (r.verdict === "clear") return "No exposure found at this search depth.";
+/**
+ * One line for the report card.
+ *
+ * On a subject that does not designate one person, the count of other people found is
+ * part of the headline rather than a footnote — it is the single most important thing
+ * to know before reading a name search's results as if they were one person's.
+ */
+export function headline(r: SearchReport): string {
+  const extra = r.others.length
+    ? ` ${r.others.length} other ${r.others.length === 1 ? "person" : "people"} matched part of this query and ${r.others.length === 1 ? "is" : "are"} listed separately.`
+    : "";
+  if (r.verdict === "clear") {
+    const nothing = r.excluded.total
+      ? `No row found that is about ${r.subject.raw} — ${r.excluded.total} returned row${r.excluded.total === 1 ? "" : "s"} belonged to someone else.`
+      : "No exposure found at this search depth.";
+    return nothing + extra;
+  }
   const crit = r.categories.find((c) => c.severity === "critical");
   const base = `${r.dataPoints} leaked data point${r.dataPoints === 1 ? "" : "s"} across ${r.breachCount} breach${r.breachCount === 1 ? "" : "es"}`;
-  return crit ? `${base}, including ${crit.label.toLowerCase()}.` : `${base}.`;
+  return (crit ? `${base}, including ${crit.label.toLowerCase()}.` : `${base}.`) + extra;
 }
