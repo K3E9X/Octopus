@@ -1,27 +1,40 @@
 "use client";
 
-// The Orbit view — a constellation of your own exposure.
+// The Orbit — what holds this identity together, and what breaks if one fact is wrong.
 //
-// The operator console had an "orbit" that plotted an investigation's signals. This is
-// that idea turned on the person themselves: YOU at the centre, each breach you appear in
-// on its own orbit (sized by how much it holds, coloured by how bad it is), the fields it
-// leaked as satellites, and a drawn arc wherever one value — an email, a handle — recurs
-// across two breaches, because that recurrence is how separate leaks become one profile.
+// It used to be a constellation: the subject in the middle, a ring of breaches around
+// them, every field drawn as a satellite. Two things were wrong with it.
 //
-// Pure SVG fed by the SelfReport. No periphery, no network. Interactive: hover a breach to
-// pull it forward and read its fields; the rest dims. Motion is a one-time draw-in plus a
-// slow drift, and it all stops under prefers-reduced-motion (handled in CSS).
+// It did not survive its own data. Every breach sat at an equal angle on one ellipse
+// whose radius was capped, so past about a dozen the circles overlapped each other and
+// their own labels, and the satellites — up to twelve per breach — turned the whole
+// thing into a smear. Nobody had asked what the twentieth breach would look like.
+//
+// And it answered nothing. It was the same facts as the other views, arranged in a
+// circle. A view has to earn its tab.
+//
+// WHAT IT IS FOR NOW. Every other view reads the facts; this is the only one that can
+// read how they are JOINED. Two breaches belong to the same person because some value
+// appears in both — so "these five databases are one person" is a graph, and graphs
+// have load-bearing edges. Pull a thread and the view recomputes without it: if the
+// identity falls into pieces, that fact was carrying the conclusion, and the operator
+// should know which facts those are BEFORE they act on the report.
+//
+// The maths is in lib/orbit.ts, under test, including the thing the old version got
+// wrong: that no two nodes overlap, asserted up to forty databases.
+//
+// The satellites are gone from the graph and live in the panel. The graph shows
+// structure; focusing a node shows its contents. That is what keeps it readable when
+// somebody appears in thirty dumps.
 
 import { useMemo, useState } from "react";
+import { buildGraph, layoutBipartite, pullThread, describeGraph, type OrbitSource } from "@/lib/orbit";
 
 type Sev = "critical" | "high" | "medium" | "low";
 interface Finding { category: string; severity: Sev; label: string; value: string; source: string; masked?: boolean }
 interface SrcReport { name: string; info: string; date?: string; sortDate: number; findings: Finding[]; severity: Sev }
-// Only what the constellation draws. The subject arrives as a LABEL, not as the
-// report's subject object, so this view stays independent of the report's shape.
 interface Report { subject: string; sources: SrcReport[]; breachCount: number; dataPoints: number }
 
-// aligned to the CSS severity ramp (hsl → hex), off the brand orange on purpose
 const SEV_COLOR: Record<Sev, string> = { critical: "#ED455C", high: "#F06338", medium: "#F4B02A", low: "#56B5BD" };
 const CAT_COLOR: Record<string, string> = {
   password: "#ED455C", financial: "#ED455C", document: "#F06338", identity: "#F06338",
@@ -29,166 +42,208 @@ const CAT_COLOR: Record<string, string> = {
   professional: "#C8A98A", other: "#7E9397",
 };
 const catColor = (c: string) => CAT_COLOR[c] || "#93A8AA";
+const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-// A taller grid than the original 560. The view now gets the full window width, and a
-// 16:9-ish canvas pushed every ring into the same horizontal band; the extra height is
-// where the outer orbits actually fit.
-const W = 1000, H = 660, CX = 500, CY = 336;
+const W = 1000, H = 640;
 
 export default function LeakOrbit({ report }: { report: Report }) {
   const [focus, setFocus] = useState<string | null>(null);
+  /** the thread the operator is asking the counterfactual about */
+  const [pulled, setPulled] = useState<string | null>(null);
 
-  const layout = useMemo(() => {
-    const srcs = report.sources.filter((s) => s.findings.length > 0);
-    const n = Math.max(1, srcs.length);
-    const ringR = Math.min(200, 140 + n * 8);
-    const RX = 1.45, RY = 0.9;   // a wide ellipse fits the wide card
+  const sources: OrbitSource[] = useMemo(
+    () => report.sources.map((s) => ({ name: s.name, severity: s.severity, date: s.date, findings: s.findings })),
+    [report.sources],
+  );
 
-    // where each value lives, so a value in >1 breach can be drawn as a correlation
-    const valueHomes = new Map<string, Set<string>>();
-    for (const s of srcs) for (const f of s.findings) {
-      const k = f.category + "|" + f.value.toLowerCase();
-      (valueHomes.get(k) || valueHomes.set(k, new Set()).get(k)!).add(s.name);
-    }
+  // The graph as it stands, and the graph as it would be without the pulled thread.
+  // Both are kept: the panel has to say what CHANGED, not only what is true now.
+  const full = useMemo(() => buildGraph(sources), [sources]);
+  const g = useMemo(() => (pulled ? buildGraph(sources, [pulled]) : full), [sources, pulled, full]);
+  const consequence = useMemo(() => (pulled ? pullThread(sources, pulled) : null), [sources, pulled]);
 
-    const nodes = srcs.map((s, i) => {
-      const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
-      const x = CX + ringR * RX * Math.cos(ang), y = CY + ringR * RY * Math.sin(ang);
-      const r = Math.max(18, Math.min(36, 14 + s.findings.length * 2.4));
-      const show = s.findings.slice(0, 12);
-      const sats = show.map((f, j) => {
-        // satellites ride the upper arc only (-207° → +27°), keeping the label below the node clear
-        const sa = -Math.PI * 1.15 + (show.length > 1 ? j / (show.length - 1) : 0.5) * Math.PI * 1.3;
-        const sr = r + 16 + (j % 2) * 9;
-        return { f, x: x + sr * Math.cos(sa), y: y + sr * Math.sin(sa) };
-      });
-      return { s, x, y, r, ang, sats };
-    });
+  // Laid out from the FULL graph on purpose: the counterfactual must not move anything.
+  // If the nodes jumped as well, the reader could not tell which change was the answer.
+  const { dbs: placed, hubs } = useMemo(() => layoutBipartite(full, { width: W, height: H }), [full]);
+  const at = useMemo(() => new Map(placed.map((p) => [p.name, p])), [placed]);
+  const hubAt = useMemo(() => new Map(hubs.map((h) => [h.id, h])), [hubs]);
+  /** labels stop fitting somewhere around fifteen; past that they are shown on demand */
+  const labelAll = placed.length <= 14;
 
-    // correlation arcs between breaches that share a value
-    const posByName = new Map(nodes.map((nd) => [nd.s.name, nd]));
-    const arcs: { a: string; b: string; value: string; category: string }[] = [];
-    const pairSeen = new Set<string>();
-    for (const [k, names] of valueHomes) {
-      if (names.size < 2) continue;
-      const arr = [...names];
-      const [category, value] = [k.split("|")[0], k.slice(k.indexOf("|") + 1)];
-      for (let a = 0; a < arr.length; a++) for (let b = a + 1; b < arr.length; b++) {
-        const pk = [arr[a], arr[b]].sort().join("¬");
-        if (pairSeen.has(pk + "|" + category)) continue;
-        pairSeen.add(pk + "|" + category);
-        arcs.push({ a: arr[a], b: arr[b], value, category });
-      }
-    }
-    return { nodes, arcs, posByName, count: srcs.length, rx: ringR * RX, ry: ringR * RY };
-  }, [report]);
+  const nodeOf = useMemo(() => new Map(g.nodes.map((n) => [n.name, n])), [g]);
+  const focused = focus ? report.sources.find((s) => s.name === focus) : null;
+  const liveThreads = full.threads;
+  const spine = liveThreads[0];
+  const bearing = full.threads.filter((t) => t.loadBearing);
 
-  if (!layout.count) return <p className="lk2-clear">Nothing to plot — no breach held a field tied to you.</p>;
+  /** which nodes a hovered thread touches, so hovering a thread lights its path */
+  const [hotThread, setHotThread] = useState<string | null>(null);
+  const hotNodes = useMemo(() => {
+    const t = liveThreads.find((x) => x.id === hotThread);
+    return t ? new Set(t.databases) : null;
+  }, [hotThread, liveThreads]);
 
-  const focused = focus ? layout.nodes.find((n) => n.s.name === focus) : null;
+  if (!g.nodes.length) {
+    return <div className="lk2-orbit-empty">No database named this subject, so there is nothing to connect.</div>;
+  }
 
   return (
     <div className="lk2-orbit">
-      <svg viewBox={`0 0 ${W} ${H}`} className="lk2-orbit-svg" role="img" aria-label="Constellation of your exposure">
+      <svg className="lk2-orbit-svg" viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label={`Connection graph: ${describeGraph(g)}`}>
         <defs>
-          <radialGradient id="lkCore" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.9" />
-            <stop offset="60%" stopColor="var(--accent)" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-          </radialGradient>
           <filter id="lkGlow" x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="2.4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
 
-        {/* faint orbit guide */}
-        <ellipse cx={CX} cy={CY} rx={layout.rx} ry={layout.ry}
-          className="lk2-orbit-ring" />
-
-        {/* correlation arcs (behind nodes) */}
-        <g className="lk2-orbit-arcs">
-          {layout.arcs.map((arc, i) => {
-            const a = layout.posByName.get(arc.a), b = layout.posByName.get(arc.b);
-            if (!a || !b) return null;
-            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            const dim = focus && arc.a !== focus && arc.b !== focus;
-            return (
-              <path key={i} d={`M ${a.x} ${a.y} Q ${CX + (mx - CX) * 0.4} ${CY + (my - CY) * 0.4} ${b.x} ${b.y}`}
-                className={"lk2-arc" + (dim ? " dim" : "")} stroke={catColor(arc.category)} style={{ ["--i" as any]: i }}>
-                <title>{arc.value} — in {arc.a} and {arc.b}</title>
-              </path>
-            );
+        {/* One line per database that carried a value, meeting at the value itself.
+            Drawn pairwise this was a complete graph — twenty-two databases sharing one
+            email is two hundred and thirty-one lines saying one thing. */}
+        <g>
+          {full.threads.map((t) => {
+            const h = hubAt.get(t.id);
+            if (!h) return null;
+            const gone = pulled === t.id;
+            return t.databases.map((dbName) => {
+              const d = at.get(dbName);
+              if (!d) return null;
+              const lit = hotThread ? hotThread === t.id : !focus || focus === dbName;
+              return (
+                <line key={t.id + dbName} x1={h.x} y1={h.y} x2={d.x} y2={d.y}
+                  className={"lk2-edge" + (lit && !gone ? "" : " dim") + (gone ? " cut" : "")}
+                  stroke={catColor(t.category)} strokeWidth={t.loadBearing ? 1.7 : 1.1}>
+                  <title>{dbName} carried {t.value}</title>
+                </line>
+              );
+            });
           })}
         </g>
 
-        {/* links centre → breach */}
+        {/* the values themselves — the thing that makes these databases one person */}
         <g>
-          {layout.nodes.map((nd, i) => (
-            <line key={i} x1={CX} y1={CY} x2={nd.x} y2={nd.y}
-              className={"lk2-link" + (focus && focus !== nd.s.name ? " dim" : "")} style={{ ["--i" as any]: i }} />
-          ))}
-        </g>
-
-        {/* satellites */}
-        <g>
-          {layout.nodes.map((nd) =>
-            nd.sats.map((st, j) => {
-              const dim = focus && focus !== nd.s.name;
-              return <circle key={nd.s.name + j} cx={st.x} cy={st.y} r={focus === nd.s.name ? 4.5 : 3}
-                className={"lk2-sat" + (dim ? " dim" : "")} fill={catColor(st.f.category)} style={{ ["--i" as any]: j }}>
-                <title>{st.f.label}: {st.f.masked ? "(masked)" : st.f.category}</title>
-              </circle>;
-            })
-          )}
-        </g>
-
-        {/* breach nodes */}
-        <g>
-          {layout.nodes.map((nd, i) => {
-            const active = focus === nd.s.name;
-            const dim = focus && !active;
+          {full.threads.map((t) => {
+            const h = hubAt.get(t.id);
+            if (!h) return null;
+            const gone = pulled === t.id;
+            const hot = hotThread === t.id;
             return (
-              <g key={nd.s.name} className={"lk2-node" + (active ? " on" : "") + (dim ? " dim" : "")}
-                style={{ ["--i" as any]: i }} onMouseEnter={() => setFocus(nd.s.name)} onMouseLeave={() => setFocus(null)}>
-                <circle cx={nd.x} cy={nd.y} r={nd.r} className="lk2-node-c" stroke={SEV_COLOR[nd.s.severity]}
-                  filter={nd.s.severity === "critical" ? "url(#lkGlow)" : undefined} />
-                <text x={nd.x} y={nd.y + 1} className="lk2-node-n" textAnchor="middle">{nd.s.findings.length}</text>
-                <text x={nd.x} y={nd.y + nd.r + 15} className="lk2-node-l" textAnchor="middle">
-                  {nd.s.name.length > 16 ? nd.s.name.slice(0, 15) + "…" : nd.s.name}
-                </text>
+              <g key={t.id} className={"lk2-hub" + (gone ? " cut" : "") + (hot ? " on" : "") + (hotThread && !hot ? " dim" : "")}
+                onMouseEnter={() => setHotThread(t.id)} onMouseLeave={() => setHotThread(null)}
+                onClick={() => setPulled(pulled === t.id ? null : t.id)}>
+                {/* Load-bearing is a property of the VALUE, so it is drawn on the value.
+                    Dashing its lines instead meant the spine — which joins everything —
+                    dashed most of the graph, and an exception that covers the picture
+                    has stopped being one. */}
+                {t.loadBearing && <circle cx={h.x} cy={h.y} r={h.r + 5} className="lk2-hub-ring" stroke={catColor(t.category)} />}
+                <circle cx={h.x} cy={h.y} r={h.r} fill={catColor(t.category)} className="lk2-hub-c" />
+                {/* On hover only. A label under a hub that twenty databases surround is
+                    printed on top of them; the panel names every thread anyway. */}
+                {hot && <text x={h.x} y={h.y + h.r + 14} className="lk2-hub-l" textAnchor="middle">{short(t.value, 26)}</text>}
+                <title>{t.value} — in {t.databases.length} databases{t.loadBearing ? ". Load-bearing: remove it and the identity splits." : ""}</title>
               </g>
             );
           })}
         </g>
 
-        {/* the core — you */}
-        <circle cx={CX} cy={CY} r="88" fill="url(#lkCore)" className="lk2-core-halo" />
-        <circle cx={CX} cy={CY} r="30" className="lk2-core" filter="url(#lkGlow)" />
-        <text x={CX} y={CY + 1} className="lk2-core-x" textAnchor="middle">YOU</text>
-        <text x={CX} y={CY + 50} className="lk2-core-sub" textAnchor="middle">
-          {report.subject.length > 30 ? report.subject.slice(0, 29) + "…" : report.subject}
-        </text>
+        {/* the databases */}
+        <g>
+          {placed.map((p) => {
+            const nd = nodeOf.get(p.name)!;
+            const alone = g.isolated.includes(p.name);
+            const active = focus === p.name;
+            const dim = (focus && !active) || (!!hotNodes && !hotNodes.has(p.name));
+            return (
+              <g key={p.name} className={"lk2-node" + (active ? " on" : "") + (dim ? " dim" : "") + (alone ? " alone" : "")}
+                onMouseEnter={() => setFocus(p.name)} onMouseLeave={() => setFocus(null)}>
+                <circle cx={p.x} cy={p.y} r={p.r} className="lk2-node-c" stroke={SEV_COLOR[nd.severity]}
+                  filter={nd.severity === "critical" ? "url(#lkGlow)" : undefined} />
+                <text x={p.x} y={p.y + 1} className="lk2-node-n" textAnchor="middle">{nd.weight}</text>
+                {(labelAll || active || alone) &&
+                  <text x={p.x} y={p.y + p.r + 15} className="lk2-node-l" textAnchor="middle">{short(p.name, 18)}</text>}
+                <title>{p.name} — {nd.weight} distinct values{alone ? ", joined to nothing" : ""}</title>
+              </g>
+            );
+          })}
+        </g>
       </svg>
 
       <div className="lk2-orbit-side">
-        {focused ? (
-          <div className="lk2-orbit-card">
-            <div className="lk2-orbit-card-h"><span className={"lk2-dot s-" + focused.s.severity} />{focused.s.name}</div>
-            {focused.s.date && <div className="lk2-orbit-date">{focused.s.date}</div>}
-            <ul>{focused.s.findings.slice(0, 14).map((f, j) => (
-              <li key={j}><i style={{ background: catColor(f.category) }} />{f.label}</li>
-            ))}</ul>
-          </div>
-        ) : (
-          <div className="lk2-orbit-hint">
-            <p>Hover a breach to read what it holds.</p>
-            <div className="lk2-orbit-legend">
-              {[["Passwords / financial", "#ED455C"], ["Identity / documents", "#F06338"], ["Address", "#F4B02A"], ["Contact", "#56B5BD"], ["Accounts / work", "#9A8FD1"]]
-                .map(([l, c]) => <span key={l}><i style={{ background: c as string }} />{l}</span>)}
+        <div className="lk2-orbit-card">
+          <div className="lk2-orbit-verdict">{describeGraph(g)}</div>
+          {/* Without this the picture is a puzzle. Two kinds of circle and a line
+              between them is only obvious to whoever drew it. */}
+          <p className="lk2-orbit-key">
+            <b>Circles</b> are databases, sized by how much they hold.
+            <b>Dots</b> are values. A line means that database carried that value.
+          </p>
+
+          {/* The counterfactual, stated in full. This is the view's whole argument, so it
+              says what the operator asked, what happened, and how to undo it. */}
+          {pulled && consequence && (
+            <div className={"lk2-pulled" + (consequence.after > consequence.before ? " broke" : "")}>
+              <p>
+                Without <b>{short(liveThreads.find((t) => t.id === pulled)?.value || "", 34)}</b>:{" "}
+                {consequence.after > consequence.before
+                  ? <>the identity falls into <b>{consequence.after} fragments</b>
+                      {consequence.isolates.length > 0 && <> — {consequence.isolates.join(", ")} connect to nothing else</>}.</>
+                  : <>nothing changes. Other values still join the same databases, so the conclusion does not rest on this one.</>}
+              </p>
+              <button onClick={() => setPulled(null)}>Put it back</button>
             </div>
-            {layout.arcs.length > 0 && <p className="lk2-orbit-note">{layout.arcs.length} value(s) recur across breaches — the arcs — which is how separate leaks tie back to one person.</p>}
-          </div>
-        )}
+          )}
+
+          {spine && !pulled && (
+            <p className="lk2-orbit-spine">
+              <span>spine</span>
+              <code>{short(spine.value, 30)}</code>
+              ties {spine.databases.length} of {g.nodes.length} databases. It is also the best thing to pivot on.
+            </p>
+          )}
+
+          {liveThreads.length > 0 ? (
+            <>
+              <h5>Pull a thread</h5>
+              <p className="lk2-orbit-why">Each is a value two or more databases agree on. Take one away and see whether the person survives it.</p>
+              <ul className="lk2-threads">
+                {liveThreads.slice(0, 14).map((t) => (
+                  <li key={t.id}>
+                    <button
+                      className={(pulled === t.id ? "on " : "") + (t.loadBearing ? "load" : "")}
+                      onMouseEnter={() => setHotThread(t.id)} onMouseLeave={() => setHotThread(null)}
+                      title={t.value}
+                      onClick={() => setPulled(pulled === t.id ? null : t.id)}>
+                      <i style={{ background: catColor(t.category) }} />
+                      <code>{t.value}</code>
+                      <span>{t.databases.length}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {bearing.length > 0 && (
+                <p className="lk2-orbit-note">
+                  {bearing.length} of these {liveThreads.length} are load-bearing — marked, and ringed in the graph.
+                  If one turns out to be a coincidence rather than the same person, the report is no longer about one person.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="lk2-orbit-note">
+              No value appears in more than one database, so nothing here corroborates anything else.
+              Every row is a single unverified claim.
+            </p>
+          )}
+
+          {focused && (
+            <div className="lk2-orbit-focus">
+              <div className="lk2-orbit-card-h"><span className={"lk2-dot s-" + focused.severity} />{focused.name}</div>
+              {focused.date && <div className="lk2-orbit-date">{focused.date}</div>}
+              <ul>{focused.findings.slice(0, 12).map((f, j) => (
+                <li key={j}><i style={{ background: catColor(f.category) }} />{f.label}</li>
+              ))}</ul>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

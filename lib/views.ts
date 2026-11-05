@@ -36,7 +36,7 @@ export const VIEWS: ViewDef[] = [
     id: "orbit",
     label: "Orbit",
     blurb:
-      "The exposure as a constellation: every breach a body, with a drawn link wherever one value ties two of them together.",
+      "What holds the identity together. Databases and the values they share, drawn as a graph — so you can take a value away and see whether the person survives without it.",
   },
   {
     id: "category",

@@ -23,11 +23,17 @@ import { useState } from "react";
 import type { SearchReport } from "@/lib/report";
 import { FACET_ORDER, FACET_LABEL } from "@/lib/identity";
 import { VIEWS } from "@/lib/views";
+import dynamic from "next/dynamic";
+
+// The graph is the heaviest thing on this page and the last tab anybody opens, so it
+// arrives when it is asked for.
+const LeakOrbit = dynamic(() => import("./LeakOrbit"), { ssr: false });
 
 const TABS = [
   { id: "subject", label: "Subject", note: "who the rows describe" },
   { id: "services", label: "Services", note: "who holds the data" },
   { id: "type", label: "By type", note: "worst first" },
+  { id: "orbit", label: "Orbit", note: "what holds it together" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -130,13 +136,22 @@ export default function Demo({ report }: { report: SearchReport }) {
             ))}
           </div>
         )}
+
+        {tab === "orbit" && (
+          <LeakOrbit report={{
+            subject: report.subject.raw,
+            sources: report.sources,
+            breachCount: report.breachCount,
+            dataPoints: report.dataPoints,
+          }} />
+        )}
       </div>
 
       <p className="lk2m-foot">
         Invented person. <code>example.com</code> is reserved by RFC&nbsp;2606 and the number is
         in the range ARCEP keeps for fiction — neither can reach anybody. Every figure above is
         computed from five hand-written dumps by the same code a paid search runs.
-        {" "}{VIEWS.length} views ship in the product; three of them are here.
+        {" "}{VIEWS.length} views ship in the product; four of them are here.
       </p>
     </div>
   );
