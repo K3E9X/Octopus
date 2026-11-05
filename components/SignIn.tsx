@@ -23,7 +23,11 @@ import dynamic from "next/dynamic";
 import { OctoMark } from "./OctoMark";
 import { passwordProblem, strength, STRENGTH_LABEL } from "@/lib/pwrule";
 
-const Octo3D = dynamic(() => import("./Octo3D"), { ssr: false });
+// The same field as the landing: the mass a search reaches into, and the few things
+// it pulls out. It replaced a WebGL wireframe sphere that said "generic technology
+// product" rather than anything about breach data — and took a 600 KB 3D library with
+// it, on the one page a visitor sees before they have agreed to anything.
+const DeepField = dynamic(() => import("./DeepField"), { ssr: false });
 
 const STR_TOKEN = ["--reject", "--reject", "--type-email", "--type-location", "--accent"];
 
@@ -72,7 +76,7 @@ export default function SignIn() {
     <div className="ax">
       {/* left — the creature and the pitch */}
       <div className="ax-left">
-        <div className="ax-scene"><Octo3D scene="hero" /></div>
+        <div className="ax-scene"><DeepField density={1.15} /></div>
         {/* clears the ground under the copy without hiding the creature */}
         <div className="ax-vignette" aria-hidden="true" />
 
@@ -82,10 +86,11 @@ export default function SignIn() {
         </Link>
 
         <div className="ax-pitch">
-          <h1>Eight arms.<br />One <span>verdict</span>.</h1>
+          <h1>Most of what<br />comes back is <span>not them</span>.</h1>
           <p>
-            One source, searched carefully. Every query is billed to you and recorded under your name —
-            access is only how the arms know it&rsquo;s you.
+            One source, searched properly, then read carefully: every row checked against
+            the selector before it is allowed to become a fact, and every fact traceable
+            to the dump it came from.
           </p>
         </div>
       </div>
@@ -113,7 +118,7 @@ export default function SignIn() {
                 ))}
               </div>
 
-              <h2>{isSignup ? "Create access" : "Re-enter the deep"}</h2>
+              <h2>{isSignup ? "Create access" : "Welcome back"}</h2>
               <p className="ax-sub">
                 {isSignup
                   ? "One operator, one deployment. Your searches are billed to this account and logged under it."

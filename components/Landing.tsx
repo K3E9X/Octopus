@@ -10,6 +10,10 @@
 import Link from "next/link";
 import { OctoMark } from "./OctoMark";
 import Sift from "./Sift";
+import dynamic from "next/dynamic";
+
+// Decoration behind real markup: it never gates content, so it is loaded after it.
+const DeepField = dynamic(() => import("./DeepField"), { ssr: false });
 
 const UNCOVERS = [
   "Passwords", "Bank details · RIB / IBAN", "Full name & DOB", "Home address",
@@ -54,7 +58,10 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
       </header>
 
       <main className="lk2-main">
-        <section className="lk2-hero">
+        <section className="lk2-hero lk2-hero-deep">
+          {/* The mass you cannot see into, and the few things a search pulls out of it.
+              The background says what the page says. */}
+          <DeepField className="lk2-hero-field" />
           <div className="lk2-eyebrow">breach data lookup</div>
           <h1>What has leaked<br />about <span>this person</span>?</h1>
           <p>Search an email, a phone, a handle or a name across breach data, and get back more than a list of hits: the records assembled into one subject, with the dump every single fact came from.</p>
@@ -106,7 +113,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
 
         <footer className="lk2-foot">
           <Link className="lk2-brand" href="/"><OctoMark size={26} /><span><b>OCTOPUS</b><small>LEAK</small></span></Link>
-          <span className="lk2-foot-note">Every search is logged against the account and the basis that ran it.</span>
+          <span className="lk2-foot-note">One source. Every fact traceable to the dump it came from.</span>
         </footer>
       </main>
     </div>
