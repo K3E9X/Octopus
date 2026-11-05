@@ -138,7 +138,7 @@ export default function SearchApp() {
 
   const run = useCallback(async () => {
     if (!basis) return;
-    setErr(""); setStep("loading");
+    setBusy(true); setErr(""); setStep("loading");
     const started = Date.now();
     const res = await fetch("/api/search", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -152,10 +152,11 @@ export default function SearchApp() {
       const rep: Report = res.data.report;
       setReport(rep); setHeadline(res.data.headline || "");
       setView(rep.verdict === "clear" ? (rep.others.length ? "category" : "identity") : "identity");
-      setStep("report");
+      setStep("report"); setBusy(false);
       if (typeof res.data.balance === "number") setAccount((a) => (a ? { ...a, balance: res.data.balance } : a));
       return;
     }
+    setBusy(false);
     setStep("basis");
     setErr(res.data.error || "The search could not run.");
   }, [subject, basis, caseRef, permutations]);
@@ -171,7 +172,7 @@ export default function SearchApp() {
         <nav>
           <a href="#plans">Plans</a>
           {account?.authed
-            ? <>{account.metered && typeof account.balance === "number" && <span className="lk2-bal">{account.balance.toLocaleString("en-US")} cr</span>}<Link href="/admin">Account</Link></>
+            ? <>{account.metered && typeof account.balance === "number" && <span className="lk2-bal">{account.balance.toLocaleString("en-US")} cr</span>}<Link href="/admin">Admin</Link></>
             : <Link className="lk2-cta" href="/signin">Sign in</Link>}
         </nav>
       </header>

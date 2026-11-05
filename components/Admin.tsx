@@ -55,7 +55,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
   if (disabledReason) {
     return (
       <div className="adm">
-        <header className="adm-top"><Link className="auth-brand" href="/"><Logo size={26} /><span><b>OCTOPUS</b><small>OSINT</small></span></Link></header>
+        <header className="adm-top"><Link className="auth-brand" href="/"><Logo size={26} /><span><b>OCTOPUS</b><small>LEAK</small></span></Link></header>
         <p className="adm-empty">{disabledReason}</p>
       </div>
     );
@@ -64,7 +64,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
   return (
     <div className="adm">
       <header className="adm-top">
-        <Link className="auth-brand" href="/"><Logo size={26} /><span><b>OCTOPUS</b><small>OSINT</small></span></Link>
+        <Link className="auth-brand" href="/"><Logo size={26} /><span><b>OCTOPUS</b><small>LEAK</small></span></Link>
         <span className="adm-me">{me?.email}</span>
         <span className="flex" />
         <Link className="ping-btn" href="/search">Open the search</Link>

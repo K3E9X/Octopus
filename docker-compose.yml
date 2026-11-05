@@ -1,7 +1,8 @@
 # Octopus Leak — the whole product in one command.
 #
 #   docker compose up --build                 # the app, unmetered, no accounts
-#   docker compose --profile db up --build    # + Postgres: accounts, credits, audit trail
+#   POSTGRES_URL=postgres://octopus:octopus@db:5432/octopus \
+#     docker compose --profile db up --build  # + Postgres: accounts, credits, audit trail
 #
 # Then open http://localhost:3000
 #
@@ -21,8 +22,13 @@ services:
       # the one credential the product needs
       LEAKOSINT_TOKEN: "${LEAKOSINT_TOKEN:-}"
       LEAKOSINT_LIMIT: "${LEAKOSINT_LIMIT:-}"
-      # accounts, credits and the audit trail (only live with the db profile, or your own URL)
-      POSTGRES_URL: "${POSTGRES_URL:-postgres://octopus:octopus@db:5432/octopus}"
+      # Accounts, credits and the audit trail. NO DEFAULT on purpose: a default applies
+      # even without --profile db, so `docker compose up` — the line this file opens
+      # with, documented as "unmetered, no accounts" — started with authentication,
+      # metering and logging all switched on, pointing at a `db` host that was never
+      # started. Every search then demanded a sign-in that could not be completed.
+      # With the db profile, set POSTGRES_URL in your .env or on the command line.
+      POSTGRES_URL: "${POSTGRES_URL:-}"
       OCTOPUS_SESSION_SECRET: "${OCTOPUS_SESSION_SECRET:-}"
       # the resale margin over the raw API cost
       OCTOPUS_MARKUP: "${OCTOPUS_MARKUP:-}"
