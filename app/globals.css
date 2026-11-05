@@ -354,6 +354,15 @@ body::after {
      creature lives in. */
   background: linear-gradient(to top, var(--bg-0) 2%, rgba(8,14,17,.82) 20%, transparent 42%);
 }
+/* What an account buys, under the claim. Hairline-separated rather than bulleted: a
+   bullet list on an auth screen reads as marketing, a ruled list reads as a spec. */
+.ax-does { position: relative; z-index: 2; list-style: none; margin: 28px 0 0; padding: 0; max-width: 480px; }
+.ax-does li { display: flex; gap: 14px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--bd-subtle); }
+.ax-does li:first-child { border-top: 1px solid var(--bd); }
+.ax-does b { flex: 0 0 76px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.ax-does span { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+@media (max-width: 920px) { .ax-does { display: none; } }
+
 .ax-brand { position: relative; z-index: 2; display: flex; align-items: center; gap: 11px; text-decoration: none; }
 .ax-brand span { display: flex; align-items: baseline; gap: 9px; }
 .ax-brand b { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: .2em; color: var(--ink); }
@@ -797,6 +806,53 @@ body::after {
 .lk2-vcard:nth-child(-n+2) { border-top: 0; padding-top: 0; }
 .lk2-vcard h3 { font-weight: 600; font-size: 15px; margin: 0 0 8px; color: var(--ink); letter-spacing: -.01em; }
 .lk2-vcard p { color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; max-width: 46ch; }
+
+/* ---- a lead line under a section heading -------------------------------------
+   One sentence between the heading and the grid. A grid of equal-weight paragraphs
+   under a bare heading gets scanned and not read; a lead gives the eye somewhere to
+   land first and tells it what the grid is for. */
+.lk2-lp-sec > h2 + .lk2-sec-lead { margin-top: -22px; }
+.lk2-sec-lead { text-wrap: balance; font-size: 16px; line-height: 1.65; color: var(--ink-2); margin: 0 0 32px; max-width: 58ch; }
+
+/* ---- the capabilities --------------------------------------------------------
+   The ONE boxed thing on a page that is otherwise ruled hairlines, because this is the
+   section a visitor has to see and the rest of the page is already quiet. Emphasis is
+   relative: make everything a card and nothing is emphasised.
+
+   The accent is not spent here at rest — it arrives on hover, on the rule and the
+   numeral together, so the page still has exactly one orange thing standing still (the
+   button the reader is meant to press). */
+.lk2-feat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.lk2-feat {
+  position: relative; padding: 24px 26px 26px; border: 1px solid var(--bd-subtle);
+  border-radius: var(--r-md); background: var(--bg-1);
+  transition: border-color .18s, background .18s, transform .18s;
+}
+/* the rule that lights up — a pseudo-element so it cannot inherit a border shorthand
+   from anything later in the cascade, which is how a previous accent went grey */
+.lk2-feat::before {
+  content: ""; position: absolute; left: -1px; top: 14px; bottom: 14px; width: 2px;
+  border-radius: 2px; background: var(--accent); opacity: 0;
+  transform: scaleY(.4); transform-origin: center;
+  transition: opacity .2s, transform .2s;
+}
+.lk2-feat:hover { border-color: var(--bd); background: var(--bg-2); transform: translateY(-2px); }
+.lk2-feat:hover::before { opacity: 1; transform: scaleY(1); }
+.lk2-feat-n {
+  display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .16em; color: var(--ink-4); margin-bottom: 14px; transition: color .18s;
+}
+.lk2-feat:hover .lk2-feat-n { color: var(--accent); }
+.lk2-feat h3 { font-weight: 600; font-size: 17px; margin: 0 0 6px; letter-spacing: -.014em; color: var(--ink); }
+/* the claim in six words: the line that gets read when the paragraph does not */
+.lk2-feat-k { margin: 0 0 12px !important; font-size: 14px; line-height: 1.5; color: var(--ink) !important; font-weight: 500; }
+.lk2-feat p { color: var(--ink-2); font-size: 14px; line-height: 1.62; margin: 0; }
+
+@media (hover: none) {
+  /* nothing hovers on a touch screen, so the accent is simply on */
+  .lk2-feat::before { opacity: .55; transform: scaleY(1); }}
+
+@media (max-width: 760px) { .lk2-feat-grid { grid-template-columns: 1fr; } }
 
 .lk2-lp-trust { max-width: 960px; margin: 0 auto; padding: 72px 0 0; text-align: left; }
 .lk2-lp-trust > p { color: var(--ink-2); font-size: 16px; line-height: 1.7; margin: 0 0 32px; max-width: 62ch; }

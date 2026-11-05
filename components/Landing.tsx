@@ -40,27 +40,36 @@ const STEPS = [
 ];
 
 /**
- * What the tool does that a lookup does not.
+ * What the tool does that a lookup list does not.
  *
- * The capabilities a reader would otherwise have to buy a search to discover — and the
- * ones that are genuinely ours rather than the category's.
+ * These four shipped without a word on the page that sells them: a visitor had to buy a
+ * search to find out they existed. They are the second thing on the page now, above how
+ * it works and above the views, because a capability nobody can see is one nobody is
+ * paying for.
+ *
+ * Each carries a KICKER — the claim in six words — because a reader scanning a grid of
+ * equal-weight paragraphs reads none of them.
  */
 const DOES = [
   {
     t: "Pivot",
-    d: "A name identifies nobody; the addresses and numbers inside its results do. One click searches them — several at once, in a single request, priced before it runs — and the ambiguity becomes a person.",
+    k: "Turn an ambiguous name into a person",
+    d: "A name identifies nobody; the addresses and numbers inside its results do. One click searches them — several at once, in a single request, priced before it runs — and the ambiguity resolves.",
   },
   {
     t: "Cases and history",
-    d: "File a search under a reference and every hop files with it. Your own queries are yours to re-read; nobody else's are.",
+    k: "Every hop filed under one reference",
+    d: "File a search under a case and each pivot files with it. Your own queries are yours to re-read; nobody else’s are, whatever their role.",
   },
   {
     t: "Export",
-    d: "CSV one line per fact, a raw variant with every column the dump returned, and JSON that carries the query — because a report without the question it answers cannot be checked later.",
+    k: "CSV, raw CSV and JSON that carries the query",
+    d: "One line per fact for a spreadsheet, a raw variant with every column the dump returned, and JSON that keeps the question — because a report without it cannot be checked six months later.",
   },
   {
     t: "Password habits",
-    d: "Three leaked passwords that are one stem with a rotating year is a thing worth being told: changing the newest one leaves the account guessable from the old leak.",
+    k: "The pattern across leaks, not the passwords in one",
+    d: "Three leaked passwords that are one stem with a rotating year is worth being told: changing the newest leaves the account guessable from the oldest.",
   },
 ];
 
@@ -70,6 +79,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
       <header className="lk2-top">
         <Link className="lk2-brand" href="/"><OctoMark size={30} /><span><b>OCTOPUS</b><small>LEAK</small></span></Link>
         <nav>
+          <a href="#what">Features</a>
           <a href="#how">How it works</a>
           <Link href="/search#plans">Plans</Link>
           {signedIn ? <Link href="/search">Search</Link> : <Link className="lk2-cta" href="/signin">Sign in</Link>}
@@ -80,7 +90,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         <section className="lk2-hero lk2-hero-deep">
           {/* The mass you cannot see into, and the few things a search pulls out of it.
               The background says what the page says. */}
-          <DeepField className="lk2-hero-field" anchor={{ x: -0.04, y: 0.46 }} reachScale={1.05} />
+          <DeepField className="lk2-hero-field" anchor={{ x: -0.1, y: 0.44 }} reachScale={1.3} />
           <div className="lk2-eyebrow">breach data lookup</div>
           <h1>What has leaked<br />about <span>this person</span>?</h1>
           <p>Search an email, a phone, a handle or a name across breach data, and get back more than a list of hits: the records assembled into one subject, with the dump every single fact came from.</p>
@@ -89,6 +99,21 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
           <div className="lk2-reveal">
             <span>what a report uncovers</span>
             <div>{UNCOVERS.map((t, i) => <em key={t} style={{ ["--i" as any]: i }}>{t}</em>)}</div>
+          </div>
+        </section>
+
+        <section className="lk2-lp-sec lk2-feats" id="what">
+          <h2>Four things a list of hits cannot do.</h2>
+          <p className="lk2-sec-lead">Finding the rows is the part everyone can do. What happens next is the product.</p>
+          <div className="lk2-feat-grid">
+            {DOES.map((d, i) => (
+              <article className="lk2-feat" key={d.t}>
+                <span className="lk2-feat-n">{String(i + 1).padStart(2, "0")}</span>
+                <h3>{d.t}</h3>
+                <p className="lk2-feat-k">{d.k}</p>
+                <p>{d.d}</p>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -109,18 +134,10 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
           {/* The count comes from the list itself. Written out, it was wrong in four
               separate places the moment a view was added. */}
           <h2>{viewCountWord().replace(/^./, (c) => c.toUpperCase())} ways to read the same facts.</h2>
+          <p className="lk2-sec-lead">One report, {viewCountWord()} readings — tabs, not exports. Switching costs nothing and spends nothing.</p>
           <div className="lk2-views">
             {VIEWS.map((v) => (
               <div className="lk2-vcard" key={v.id}><h3>{v.label}</h3><p>{v.blurb}</p></div>
-            ))}
-          </div>
-        </section>
-
-        <section className="lk2-lp-sec">
-          <h2>And what you do with them.</h2>
-          <div className="lk2-views">
-            {DOES.map((d) => (
-              <div className="lk2-vcard" key={d.t}><h3>{d.t}</h3><p>{d.d}</p></div>
             ))}
           </div>
         </section>

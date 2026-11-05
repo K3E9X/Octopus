@@ -1,29 +1,60 @@
 "use client";
 
-// The creature, the dark it works in, and the fact that it notices you.
+// An animal searching dark water, and the fact that it feels you move through it.
 //
-// What the tool does, in one sentence: it reaches into a mass of breached records
-// nobody can see into and pulls out the few that are genuinely about one person. The
-// reaching is not the clever part — anybody can run a query. The choosing is.
+// WHAT WAS WRONG WITH THE LAST ONE. It had a scanning laser, rings that bloomed where
+// you clicked, and a mechanic where an arm would lock onto a record, "hold" it for
+// seven hundred milliseconds and score it. Those are game feedback: they reward the
+// visitor for touching the screen. Nothing here is a reward, and a product about
+// breach data that plays with you is telling the visitor the wrong thing about itself.
+// It also had a ringed eye with a pupil, which is the one mark that turns an animal
+// into a mascot.
 //
-// COMPOSITION. The body sits OFF the frame and only the arms come in. That is both the
-// better picture and the better behaviour: you rarely see the whole animal, you see
-// arms arriving out of the dark — and arms that enter from an edge wrap around type
-// instead of sitting beside it competing for the same space. The first version was a
-// small blob parked in a margin, which is where you put something you have not yet
-// decided what to do with.
+// All four are gone. What is left is an animal working, which is the only thing the
+// picture ever needed to say.
 //
-// IT NOTICES YOU. The three arms already pointing nearest the pointer lean toward it
-// and ease back when it leaves — slowly, so it reads as attention rather than as a
-// cursor trail, and only three so it reads as one animal rather than eight springs. A
-// click is a GRASP: the best-placed arm commits to that point, flashes at the tip, and
-// a ring opens where it took hold. On scroll the creature SINKS — arms dimming, body
-// dropping out of frame — because you are descending past it, and because the sections
-// below have their own things to say.
+// THE ARMS ARE ACTUAL GEOMETRY NOW, not a sine wave pretending. Each is a chain of
+// twenty segments, and what is stored is the ANGLE of each one rather than its
+// position — so the shape of an arm is twenty numbers, and bending it is arithmetic.
 //
-// The geometry is the mark's own rather than a second idea about the same animal: a
-// wide arc of arms, one S-bend each, stroke only with round caps, tapering to the tip,
-// suckers on the inner edge, warm bone against the single accent, the ringed eye.
+// It took three wrong geometries to get there, and the two failures are worth keeping
+// written down, because both were plausible and both rendered the same thing.
+//
+// A sine wave along a straight line is a ribbon, not an arm. Solving the chain with
+// FABRIK against an eased tip is correct on paper and renders eight straight spokes:
+// one iteration with a hard turn limit, starting from a straight chain, contains
+// nothing that can ever introduce curvature — a straight chain is a fixed point of that
+// loop. And relaxing each segment toward the one before it, which is how a real whip
+// propagates, is a twenty-stage low-pass filter: relax hard and the arm tracks the
+// shoulder rigidly, relax gently and the wave is attenuated to nothing long before it
+// reaches the tip. Straight either way.
+//
+// So the curvature is not a consequence of anything. It IS the state. Each segment is
+// placed at a deliberate angle to the one before it — a coil that grows toward the tip,
+// the way a tentacle actually curls, plus a wave traveling outward along it — and the
+// chain cannot be straight because nothing ever asks it to be.
+//
+// HOW MUCH IT CURLS is the only control, and it carries all of the meaning. Left alone
+// an arm holds a deep coil and undulates: an animal working. Attending to the pointer,
+// the coil flattens — and flattening a chain of fixed length is the same thing as
+// EXTENDING it, so the arm reaches out because it uncurled, not because something moved
+// its tip there. When you leave, it coils back in. Nothing in the code says "reach".
+//
+// IT FEELS YOU RATHER THAN FOLLOWS YOU. Three things, and the third is the one that
+// matters. An arm attends only to a pointer roughly in its own sector, so the far side
+// of the animal carries on working whatever you do. Attention eases
+// in over a second, so it reads as being noticed rather than as a cursor trail. And if
+// you stop moving, attention DECAYS — it goes back to searching, because an animal that
+// stares at a motionless thing forever is a cursor effect with extra steps.
+//
+// The water parts around you. Records within a radius of the pointer are displaced
+// along their own axis, strongest at the centre, falling off square — so moving the
+// mouse pushes the data aside and it closes behind you. That is the whole of the
+// "it moves when I move" and it costs one distance check per record.
+//
+// A record resolves when an arm's last joints pass over it: it goes from hairline grey
+// to the accent and fades back down. No catching, no holding, no score. Searching is
+// continuous and happens everywhere at once, which is the claim the page is making.
 //
 // Three rules, because an effect that costs the page is not one worth having: it stops
 // dead off-screen or on a hidden tab rather than throttling; it paints one still frame
@@ -32,35 +63,38 @@
 
 import { useEffect, useRef } from "react";
 
-const BONE = "#E9D9C8";      // the mark's arm colour
-const ACCENT = "#FF7A33";
-const HAIRLINE = "#9DB2B4";
+const BONE = "232,220,206";      // the mark's arm colour, as channels — alpha varies per segment
+const ACCENT = "255,138,61";
+const HAIRLINE = "157,178,180";
 
-interface Mark {
-  x: number; y: number; w: number; v: number;
-  dim: number; lit: number;
-  catchable: boolean; claimed: boolean;
-}
+const SEGMENTS = 20;             // enough to curl smoothly, few enough to cost nothing
+const MAX_TURN = 0.17;           // radians between neighbouring segments: bend, never kink
+
+interface Rec { x: number; y: number; w: number; v: number; dim: number; lit: number }
 
 interface Arm {
-  base: number;
-  len: number;
-  phase: number;
-  freq: number;
-  amp: number;
-  /** a record it is fetching */
-  target: Mark | null;
-  /** 0 idle → 1 committed */
-  reach: number;
-  hold: number;
-  /** how far this arm is leaning toward the pointer, 0..1 */
-  lean: number;
-  /** a click it is taking hold of, in canvas coordinates */
-  grasp: { x: number; y: number } | null;
-  graspT: number;
+  /** the ABSOLUTE angle of each segment. The shape of the arm is this array. */
+  ang: number[];
+  /** the joints, recomputed from the angles every frame — derived, never stored shape */
+  pts: { x: number; y: number }[];
+  seg: number;
+  /** the direction this arm leaves the body in when nothing has its attention */
+  slot: number;
+  /** the current shoulder angle, eased — an arm does not pivot instantly */
+  root: number;
+  /** two incommensurate drift seeds, so the idle wander never visibly repeats */
+  d1: number; d2: number;
+  /** how fast this arm answers. Different per arm, or eight arms move in lockstep. */
+  speed: number;
+  /** which way it coils at rest, and how hard. Signed, so the eight do not all curl alike. */
+  coil: number;
+  /** the rate of the wave travelling out along it */
+  rate: number;
+  /** 0 working → 1 attending to the pointer */
+  attn: number;
+  /** tip glow just after it passed over a record */
+  found: number;
 }
-
-interface Ripple { x: number; y: number; t: number }
 
 export default function DeepField({
   density = 1,
@@ -85,24 +119,26 @@ export default function DeepField({
 
     const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    const angleDiff = (a: number, b: number) => {
-      let d = (a - b) % (Math.PI * 2);
+    const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
+    const wrap = (d: number) => {
+      d %= Math.PI * 2;
       if (d > Math.PI) d -= Math.PI * 2;
       if (d < -Math.PI) d += Math.PI * 2;
       return d;
     };
 
-    let marks: Mark[] = [];
+    let recs: Rec[] = [];
     let arms: Arm[] = [];
-    let ripples: Ripple[] = [];
-    let w = 0, h = 0, bx = 0, by = 0, unit = 1;
+    let w = 0, h = 0, bx = 0, by = 0, unit = 1, reach = 1;   // reach: arm length, set at build
     let raf = 0, running = false, last = 0, clock = 0;
-    let sweep = -1, nextSweep = 1.1;
 
-    const pointer = { x: 0, y: 0, on: false };
-    // how far the page has scrolled past this canvas, 0..1 — the creature sinks with it
-    let sink = 0, sinkTarget = 0;
+    // The pointer, in canvas coordinates, plus how long it has been motionless —
+    // attention is a function of movement, not of presence.
+    const ptr = { x: 0, y: 0, on: false, idle: 9, speed: 0 };
+    // how far the page has scrolled past this canvas, 0..1
+    let depth = 0, depthTarget = 0;
+    // a click makes the animal draw in and let go. One number, no rings.
+    let flinch = 0;
 
     function build() {
       const rect = canvas!.getBoundingClientRect();
@@ -118,86 +154,113 @@ export default function DeepField({
       bx = w * anchor.x;
       by = h * anchor.y;
       unit = Math.min(w, h);
+      reach = unit * reachScale;
 
-      const count = Math.round(Math.min(230, (w * h) / 5200) * density);
-      marks = Array.from({ length: count }, () => ({
-        x: rand(0, w), y: rand(0, h), w: rand(14, 48), v: rand(3, 11),
-        dim: rand(0.05, 0.16), lit: 0,
-        // roughly one in seven: a search that returns everything has told you nothing
-        catchable: Math.random() < 0.14,
-        claimed: false,
+      const count = Math.round(Math.min(330, (w * h) / 3600) * density);
+      recs = Array.from({ length: count }, () => ({
+        x: rand(-80, w), y: rand(0, h), w: rand(16, 58), v: rand(2.5, 9),
+        dim: rand(0.09, 0.26), lit: 0,
       }));
 
-      // The arc faces INTO the frame, away from whichever edge the body sits past, so
-      // no arm is drawn where nobody can see it.
+      // The fan faces INTO the frame, away from whichever edge the body sits past, so
+      // no arm is solved for a place nobody can see.
       const centre =
         anchor.y < 0 ? Math.PI / 2 :
         anchor.y > 1 ? -Math.PI / 2 :
         anchor.x < 0.5 ? 0 : Math.PI;
-      const SPREAD = 2.9;                        // ~166°, the way the mark fans them
-      arms = Array.from({ length: 8 }, (_, i) => ({
-        base: centre + (-SPREAD / 2 + (i / 7) * SPREAD),
-        len: unit * reachScale * rand(0.74, 1.14),
-        phase: rand(0, Math.PI * 2),
-        // ONE clear S-bend per arm: a higher frequency reads as noise at this size
-        freq: rand(0.5, 0.82),
-        amp: rand(0.3, 0.52),
-        target: null, reach: 0, hold: 0, lean: 0, grasp: null, graspT: 0,
-      }));
-    }
-
-    /** Where this arm is trying to point, and how hard. A click outranks a catch, a catch outranks attention. */
-    function intent(a: Arm, oy: number): { aim: number; weight: number; dist: number } {
-      const from = (tx: number, ty: number, weight: number) => ({
-        aim: Math.atan2(ty - (by + oy), tx - bx),
-        weight,
-        dist: Math.hypot(tx - bx, ty - (by + oy)),
+      const SPREAD = 2.25;                       // ~129°. At 172° the outermost two left
+      // the frame before they had curled, so the animal read as five arms, not eight.
+      arms = Array.from({ length: 8 }, (_, i) => {
+        const slot = centre + (-SPREAD / 2 + (i / 7) * SPREAD);
+        const len = reach * rand(0.8, 1.16);
+        const seg = len / SEGMENTS;
+        return {
+          ang: Array.from({ length: SEGMENTS }, () => slot),
+          pts: Array.from({ length: SEGMENTS + 1 }, () => ({ x: bx, y: by })),
+          seg, slot, root: slot,
+          d1: rand(0, Math.PI * 2), d2: rand(0, Math.PI * 2),
+          speed: rand(0.72, 1.5),
+          // alternating handedness with a random magnitude: eight arms curling the same
+          // way is a flower, and the eye reads a flower as a logo rather than an animal
+          coil: (i % 2 ? 1 : -1) * rand(0.55, 1.15),
+          rate: rand(0.5, 0.95),
+          attn: 0, found: 0,
+        };
       });
-      if (a.grasp) return from(a.grasp.x, a.grasp.y, 1);
-      if (a.target) return from(a.target.x, a.target.y, a.reach);
-      if (a.lean > 0.01 && pointer.on) return from(pointer.x, pointer.y, a.lean * 0.78);
-      return { aim: a.base, weight: 0, dist: a.len };
     }
 
-    function drawArm(a: Arm, t: number, oy: number) {
-      const { aim, weight, dist } = intent(a, oy);
-      const len = weight > 0 ? lerp(a.len, Math.max(a.len * 0.7, dist + 14), weight) : a.len;
-      const N = 26;
-      const pts: { x: number; y: number }[] = [];
-      let tx = bx, ty = by + oy;
-      for (let i = 0; i <= N; i++) {
-        const u = i / N;
-        // the S dies down as the arm commits — a committed arm is a straight reach
-        const wobble = Math.sin(u * a.freq * Math.PI * 2 + t * 1.3 + a.phase) * a.amp * u * (1 - weight * 0.8);
-        const dir = lerp(a.base, aim, weight) + wobble;
-        const step = (len * (0.5 + 0.5 * weight)) / N;
-        tx += Math.cos(dir) * step;
-        ty += Math.sin(dir) * step;
-        pts.push({ x: tx, y: ty });
-      }
+    /**
+     * The direction this arm leaves the body in when nothing has its attention.
+     *
+     * Two sine terms at rates that do not divide into each other, so the wander has no
+     * period a viewer can learn. One term alone is a metronome.
+     */
+    function searching(a: Arm) {
+      return a.slot
+        + Math.sin(clock * 0.19 + a.d1) * 0.62
+        + Math.sin(clock * 0.117 + a.d2) * 0.34;
+    }
 
-      const hot = a.hold > 0 || a.graspT > 0;
-      const fade = 1 - sink * 0.8;
-      const thick = Math.max(1.6, unit * 0.006);
+    /**
+     * Lay the chain out from the shoulder, one deliberate bend at a time.
+     *
+     * `straight` is 0 at rest and 1 when the arm is attending: at 0 it holds a coil of
+     * roughly eighty degrees that deepens toward the tip, which is where a tentacle
+     * curls; at 1 the bends go to nothing and the arm is a reach.
+     */
+    function shape(a: Arm, straight: number, oy: number) {
+      a.ang[0] = a.root;
+      const coil = a.coil * (0.62 + 0.38 * Math.sin(clock * 0.23 + a.d2));
+      for (let i = 1; i < SEGMENTS; i++) {
+        const u = i / (SEGMENTS - 1);
+        // the coil deepens along the arm; the wave travels outward and dies at the base
+        const bend =
+          coil * (0.3 + u) * 0.155 +
+          Math.sin(clock * a.rate * 2.1 - i * 0.52 + a.d1) * 0.06 * u;
+        const b = bend * (1 - straight * 0.93);
+        a.ang[i] = a.ang[i - 1] + (b > MAX_TURN ? MAX_TURN : b < -MAX_TURN ? -MAX_TURN : b);
+      }
+      let x = bx, y = by + oy;
+      a.pts[0].x = x; a.pts[0].y = y;
+      for (let i = 0; i < SEGMENTS; i++) {
+        x += Math.cos(a.ang[i]) * a.seg;
+        y += Math.sin(a.ang[i]) * a.seg;
+        a.pts[i + 1].x = x; a.pts[i + 1].y = y;
+      }
+    }
+
+    function drawArm(a: Arm) {
+      const n = a.pts, L = n.length;
+      const fade = 1 - depth * 0.85;
+      if (fade <= 0.01) return;
+      const thick = Math.max(1.5, unit * 0.0062);
+
       ctx!.lineCap = "round";
       ctx!.lineJoin = "round";
-      for (let i = 1; i < pts.length; i++) {
-        const u = i / pts.length;
+      for (let i = 1; i < L; i++) {
+        const u = i / (L - 1);
         ctx!.beginPath();
-        ctx!.moveTo(pts[i - 1].x, pts[i - 1].y);
-        ctx!.lineTo(pts[i].x, pts[i].y);
-        ctx!.lineWidth = Math.max(0.6, thick * (1 - u * 0.78));
-        ctx!.globalAlpha = (0.3 + a.reach * 0.3 + a.lean * 0.22) * (1 - u * 0.4) * fade;
-        ctx!.strokeStyle = hot && u > 0.74 ? ACCENT : BONE;
+        ctx!.moveTo(n[i - 1].x, n[i - 1].y);
+        ctx!.lineTo(n[i].x, n[i].y);
+        // tapering to nothing at the tip, which is what reads as an arm
+        ctx!.lineWidth = Math.max(0.55, thick * (1 - u * 0.82));
+        const lit = a.found * Math.max(0, u - 0.6) * 2.5;
+        ctx!.globalAlpha = clamp((0.3 + a.attn * 0.32) * (1 - u * 0.35) * fade, 0, 1);
+        ctx!.strokeStyle = lit > 0.04
+          ? `rgb(${ACCENT})`
+          : `rgb(${BONE})`;
         ctx!.stroke();
       }
-      // suckers — what makes it read as an arm rather than a tendril
-      ctx!.globalAlpha = (0.18 + a.reach * 0.26) * fade;
-      ctx!.fillStyle = BONE;
-      for (let i = 5; i < pts.length - 1; i += 3) {
-        const u = i / pts.length;
+
+      // Suckers, on the inner edge only, at a quarter of the arm's alpha. They are the
+      // one detail that distinguishes an arm from a tendril, and the one that turns it
+      // into an illustration if it is drawn at full strength.
+      ctx!.fillStyle = `rgb(${BONE})`;
+      ctx!.globalAlpha = (0.11 + a.attn * 0.1) * fade;
+      for (let i = 4; i < L - 1; i += 2) {
+        const u = i / (L - 1);
         ctx!.beginPath();
-        ctx!.arc(pts[i].x, pts[i].y, Math.max(0.5, thick * 0.55 * (1 - u)), 0, Math.PI * 2);
+        ctx!.arc(n[i].x, n[i].y, Math.max(0.45, thick * 0.42 * (1 - u)), 0, Math.PI * 2);
         ctx!.fill();
       }
       ctx!.globalAlpha = 1;
@@ -205,106 +268,102 @@ export default function DeepField({
 
     function paint(dt: number) {
       clock += dt;
-      sink += (sinkTarget - sink) * Math.min(1, dt * 3);
-      const oy = sink * h * 0.32;              // the body drops as the page leaves
+      ptr.idle += dt;
+      depth += (depthTarget - depth) * Math.min(1, dt * 3);
+      flinch = Math.max(0, flinch - dt * 2.2);
+      const oy = depth * h * 0.3;               // the body drops as the page leaves it
       ctx!.clearRect(0, 0, w, h);
 
-      // --- the sweep ---
-      if (sweep >= 0) {
-        sweep += dt * 0.5;
-        if (sweep > 1.4) { sweep = -1; nextSweep = rand(2.4, 4.8); }
-      } else {
-        nextSweep -= dt;
-        if (nextSweep <= 0) sweep = -0.1;
-      }
-      const sweepX = sweep >= 0 ? sweep * w : -1;
-
-      // --- the field ---
-      for (const m of marks) {
+      // ---- the water, and the way it parts around the pointer --------------------
+      // Displacement is a render offset, never written back: data that stayed where a
+      // cursor shoved it would drift into a heap over a minute of idle hovering.
+      const R = unit * 0.26;
+      const fieldFade = 1 - depth * 0.75;
+      for (const m of recs) {
         m.x += m.v * dt;
-        if (m.x - m.w > w) { m.x = -m.w; m.y = rand(0, h); m.lit = 0; m.claimed = false; }
-        if (sweepX >= 0 && m.catchable && m.lit < 1 && Math.abs(m.x - sweepX) < 26) m.lit = 1;
-        if (m.lit > 0 && !m.claimed) m.lit = Math.max(0, m.lit - dt * 0.5);
-        ctx!.globalAlpha = Math.min(1, m.dim + m.lit * 0.72) * (1 - sink * 0.7);
-        ctx!.fillStyle = m.lit > 0.02 ? ACCENT : HAIRLINE;
-        ctx!.fillRect(m.x, m.y, m.w, 1);
+        if (m.x - m.w > w) { m.x = -m.w - rand(0, 90); m.y = rand(0, h); m.lit = 0; }
+        if (m.lit > 0) m.lit = Math.max(0, m.lit - dt * 0.85);
+
+        let dy = 0;
+        if (ptr.on) {
+          const ox = m.x + m.w / 2 - ptr.x, oyy = m.y - ptr.y;
+          const d = Math.hypot(ox, oyy);
+          if (d < R) {
+            const f = 1 - d / R;
+            dy = Math.sign(oyy || 1) * f * f * unit * 0.055;
+          }
+        }
+        ctx!.globalAlpha = clamp(Math.min(1, m.dim + m.lit * 0.75) * fieldFade, 0, 1);
+        ctx!.fillStyle = m.lit > 0.03 ? `rgb(${ACCENT})` : `rgb(${HAIRLINE})`;
+        ctx!.fillRect(m.x, m.y + dy, m.w, 1);
       }
       ctx!.globalAlpha = 1;
 
-      // Only the three arms already pointing nearest the cursor lean toward it. All
-      // eight would read as a cursor effect; three reads as an animal noticing.
-      const toPointer = Math.atan2(pointer.y - (by + oy), pointer.x - bx);
-      const leaning = new Set(
-        arms.map((a, i) => ({ i, d: Math.abs(angleDiff(a.base, toPointer)) }))
-          .sort((p, q) => p.d - q.d).slice(0, 3).map((x) => x.i),
-      );
+      // ---- who is attending ------------------------------------------------------
+      // An arm attends only if the pointer is in its sector and inside its reach, and
+      // only the three best-placed at once. The rest keep working, which is the whole
+      // difference between an animal noticing you and a cursor trail.
+      let rank: number[] = [];
+      if (ptr.on) {
+        const toPtr = Math.atan2(ptr.y - (by + oy), ptr.x - bx);
+        const dist = Math.hypot(ptr.x - bx, ptr.y - (by + oy));
+        // Nearness is measured against the FRAME, not against the arm's reach. Scoring
+        // it against reach meant that once the body was pushed properly off-screen,
+        // most of the canvas sat outside every arm's range and the animal never noticed
+        // the pointer at all — on a page whose whole effect is that it notices you. An
+        // animal watches things it cannot touch; reaching is a separate question, and
+        // the arm answers it by straightening as far as it goes.
+        const near = clamp(1 - dist / (Math.hypot(w, h) * 0.92), 0.18, 1);
+        rank = arms
+          .map((a, i) => {
+            const align = 1 - Math.abs(wrap(a.slot - toPtr)) / Math.PI;
+            return { i, score: align * align * near };
+          })
+          .filter((x) => x.score > 0.12)
+          .sort((p, q) => q.score - p.score)
+          .slice(0, 3)
+          .map((x) => x.i);
+      }
+      // Interest fades when you stop moving. Full for the first second of stillness,
+      // then down to a quarter — it has looked, and it has gone back to work.
+      const gate = ptr.on ? clamp(1 - (ptr.idle - 1.0) / 2.2, 0.22, 1) : 0;
 
-      arms.forEach((a, i) => {
-        const want = pointer.on && leaning.has(i) && !a.target && !a.grasp ? 1 : 0;
-        a.lean += (want - a.lean) * Math.min(1, dt * (want ? 2.2 : 1.4));
+      for (let i = 0; i < arms.length; i++) {
+        const a = arms[i];
+        const want = rank.includes(i) ? gate : 0;
+        // in quickly, out slowly: noticing is fast, losing interest is not
+        a.attn += (want - a.attn) * Math.min(1, dt * (want > a.attn ? 1.3 : 0.45));
+        a.found = Math.max(0, a.found - dt * 1.6);
 
-        if (a.grasp) {
-          a.graspT -= dt;
-          a.reach = Math.min(1, a.reach + dt * 4);
-          if (a.graspT <= 0) a.grasp = null;
-        } else if (!a.target) {
-          let best: Mark | null = null, bestD = Infinity;
-          for (const m of marks) {
-            if (!m.catchable || m.lit < 0.5 || m.claimed) continue;
-            const d = Math.hypot(m.x - bx, m.y - (by + oy));
-            if (d < a.len * 1.3 && d < bestD) { best = m; bestD = d; }
+        // where the shoulder wants to point, and how fast it gets there
+        let aim = searching(a);
+        if (a.attn > 0.004) {
+          const toPtr = Math.atan2(ptr.y - (by + oy), ptr.x - bx);
+          aim += wrap(toPtr - aim) * a.attn;
+        }
+        // a click pulls every shoulder back toward its own slot and lets go — the whole
+        // animal draws in for a moment. A breath, not a score.
+        if (flinch > 0) aim += wrap(a.slot - aim) * flinch * 0.4;
+        a.root += wrap(aim - a.root) * Math.min(1, dt * a.speed * (1 + a.attn * 2.2));
+
+        // THE ONE CONTROL. Deeply coiled while it works; flattening — and so reaching
+        // further out — while it is attending to you.
+        shape(a, a.attn * 0.9, oy);
+
+        // ---- what the arm found on its way through ------------------------------
+        // The last joints only: an arm resolves records with its tip, the way it would.
+        for (let j = SEGMENTS - 4; j <= SEGMENTS; j++) {
+          const p = a.pts[j];
+          for (const m of recs) {
+            if (m.lit > 0.25) continue;
+            if (p.y < m.y - 7 || p.y > m.y + 7) continue;
+            if (p.x < m.x - 10 || p.x > m.x + m.w + 10) continue;
+            m.lit = 1;
+            a.found = 1;
           }
-          if (best) { a.target = best; best.claimed = true; }
         }
 
-        if (a.target) {
-          a.reach = Math.min(1, a.reach + dt * 1.5);
-          if (a.reach >= 1 && a.hold === 0) a.hold = 0.7;
-          if (a.hold > 0) {
-            a.hold -= dt;
-            a.target.lit = 1;                   // held bright while an arm has it
-            if (a.hold <= 0) { a.target.claimed = false; a.target = null; }
-          }
-        } else if (!a.grasp && a.reach > 0) {
-          a.reach = Math.max(0, a.reach - dt * 0.9);
-        }
-        drawArm(a, clock, oy);
-      });
-
-      // --- rings where a click was taken hold of ---
-      ripples = ripples.filter((r) => (r.t += dt) < 0.9);
-      for (const r of ripples) {
-        const p = r.t / 0.9;
-        ctx!.globalAlpha = (1 - p) * 0.5 * (1 - sink);
-        ctx!.strokeStyle = ACCENT;
-        ctx!.lineWidth = 1.4;
-        ctx!.beginPath();
-        ctx!.arc(r.x, r.y, 6 + p * unit * 0.09, 0, Math.PI * 2);
-        ctx!.stroke();
-      }
-      ctx!.globalAlpha = 1;
-
-      // --- the eye, drawn only when the body is actually in frame ---
-      const ey = by + oy;
-      if (bx > -40 && bx < w + 40 && ey > -40 && ey < h + 40) {
-        const r = Math.max(7, unit * 0.016);
-        ctx!.globalAlpha = 0.7 * (1 - sink);
-        ctx!.strokeStyle = ACCENT;
-        ctx!.lineWidth = Math.max(1.1, r * 0.14);
-        ctx!.beginPath(); ctx!.arc(bx, ey, r, 0, Math.PI * 2); ctx!.stroke();
-        ctx!.globalAlpha = 0.95 * (1 - sink);
-        ctx!.fillStyle = ACCENT;
-        ctx!.beginPath(); ctx!.arc(bx, ey, r * 0.38, 0, Math.PI * 2); ctx!.fill();
-        ctx!.globalAlpha = 1;
-      }
-
-      // --- the sweep itself: one hairline, barely there ---
-      if (sweepX >= 0) {
-        const g = ctx!.createLinearGradient(sweepX - 70, 0, sweepX + 8, 0);
-        g.addColorStop(0, "rgba(255,122,51,0)");
-        g.addColorStop(1, `rgba(255,122,51,${(0.14 * (1 - sink)).toFixed(3)})`);
-        ctx!.fillStyle = g;
-        ctx!.fillRect(sweepX - 70, 0, 78, h);
+        drawArm(a);
       }
     }
 
@@ -324,9 +383,11 @@ export default function DeepField({
 
     build();
     if (still) {
-      // one still frame: arms out, catches lit, so the idea survives without motion
-      for (const m of marks) m.lit = m.catchable ? 0.9 : 0;
-      for (const a of arms) a.reach = 0.4;
+      // One still frame, solved a few times so the arms are curled rather than straight
+      // spokes: the idea has to survive without any motion at all.
+      for (const a of arms) { a.root = searching(a); shape(a, 0, 0); }
+      for (const m of recs) m.lit = Math.random() < 0.12 ? 0.9 : 0;
+      for (const m of recs) m.v = 0;
       paint(0);
       return;
     }
@@ -335,32 +396,26 @@ export default function DeepField({
     // ---- what it reacts to ----------------------------------------------------------
     const onMove = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
-      pointer.x = e.clientX - r.left;
-      pointer.y = e.clientY - r.top;
-      pointer.on = pointer.x > -90 && pointer.x < r.width + 90 && pointer.y > -90 && pointer.y < r.height + 90;
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      ptr.speed = Math.hypot(x - ptr.x, y - ptr.y);
+      // Below a pixel is a trackpad resting, not a hand moving. Without this floor the
+      // animal stares forever at a cursor nobody is touching.
+      if (ptr.speed > 1.1) ptr.idle = 0;
+      ptr.x = x; ptr.y = y;
+      ptr.on = x > -120 && x < r.width + 120 && y > -120 && y < r.height + 120;
     };
-    const onLeave = () => { pointer.on = false; };
+    const onLeave = () => { ptr.on = false; };
     const onDown = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
       const x = e.clientX - r.left, y = e.clientY - r.top;
       if (x < 0 || y < 0 || x > r.width || y > r.height) return;
-      // the arm already closest to that direction takes it, and one already busy
-      // fetching a record is passed over rather than yanked off the job
-      const aim = Math.atan2(y - by, x - bx);
-      let pick = arms[0], best = Infinity;
-      for (const a of arms) {
-        const d = Math.abs(angleDiff(a.base, aim)) + (a.target ? 1.2 : 0);
-        if (d < best) { best = d; pick = a; }
-      }
-      pick.grasp = { x, y };
-      pick.graspT = 0.85;
-      ripples.push({ x, y, t: 0 });
-      if (ripples.length > 6) ripples.shift();
+      flinch = 1;
+      ptr.idle = 0;
     };
     const onScroll = () => {
       const r = canvas.getBoundingClientRect();
       // 0 while the canvas owns the screen, 1 once it has gone past the top
-      sinkTarget = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height)));
+      depthTarget = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height)));
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });

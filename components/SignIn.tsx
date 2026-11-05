@@ -29,6 +29,14 @@ import { passwordProblem, strength, STRENGTH_LABEL } from "@/lib/pwrule";
 // it, on the one page a visitor sees before they have agreed to anything.
 const DeepField = dynamic(() => import("./DeepField"), { ssr: false });
 
+/** What an account actually buys, in four lines. Same four the landing leads with. */
+const PITCH: [string, string][] = [
+  ["Pivot", "search the numbers and addresses inside a result, several at once"],
+  ["Cases", "every hop filed under one reference, yours alone to re-read"],
+  ["Export", "CSV and JSON that carry the question they answer"],
+  ["Habits", "the password pattern across leaks, not the passwords in one"],
+];
+
 const STR_TOKEN = ["--reject", "--reject", "--type-email", "--type-location", "--accent"];
 
 export default function SignIn() {
@@ -92,6 +100,14 @@ export default function SignIn() {
             the selector before it is allowed to become a fact, and every fact traceable
             to the dump it came from.
           </p>
+          {/* Four lines, because somebody deciding whether to hand over an address is
+              deciding what they get for it, and the panel was answering with atmosphere.
+              Short enough that the vignette below still has room to clear the ground. */}
+          <ul className="ax-does">
+            {PITCH.map(([t, d]) => (
+              <li key={t}><b>{t}</b><span>{d}</span></li>
+            ))}
+          </ul>
         </div>
       </div>
 
