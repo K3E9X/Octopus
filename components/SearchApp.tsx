@@ -368,20 +368,22 @@ function ReportView({ report, headline, view, setView, reset }: {
   );
 }
 
-function CountUp({ n }: { n: number }) {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    if (n <= 0) { setV(0); return; }
-    let raf = 0; const t0 = performance.now(); const dur = 700;
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - t0) / dur);
-      setV(Math.round((1 - Math.pow(1 - p, 3)) * n));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [n]);
-  return <>{v.toLocaleString("en-US")}</>;
+/**
+ * The figure, stated.
+ *
+ * This used to count up from zero over 600ms. It was removed rather than repaired,
+ * twice over. The animation showed a WRONG NUMBER on every frame before it finished —
+ * a report with three categories rendered "0 CATEGORIES" — and anything that stopped
+ * it reaching the end left that wrong number on screen for good: a print, a headless
+ * screenshot, a paused tab, a device where requestAnimationFrame never got a frame.
+ * Seeding the real value first and animating away from it only narrowed the window.
+ *
+ * A product whose whole claim is that it does not assert what it cannot support has no
+ * business animating through figures it knows to be false, for decoration. The number
+ * is simply the number.
+ */
+function Stat({ n }: { n: number }) {
+  return <>{n.toLocaleString("en-US")}</>;
 }
 
 function Verdict({ report, headline }: { report: Report; headline: string }) {
@@ -393,9 +395,9 @@ function Verdict({ report, headline }: { report: Report; headline: string }) {
       <p>{headline}</p>
       {report.verdict !== "clear" && (
         <div className="lk2-vstats">
-          <div><b><CountUp n={report.dataPoints} /></b><span>data points</span></div>
-          <div><b><CountUp n={report.breachCount} /></b><span>breaches</span></div>
-          <div><b><CountUp n={report.categories.length} /></b><span>categories</span></div>
+          <div><b><Stat n={report.dataPoints} /></b><span>data points</span></div>
+          <div><b><Stat n={report.breachCount} /></b><span>breaches</span></div>
+          <div><b><Stat n={report.categories.length} /></b><span>categories</span></div>
         </div>
       )}
     </div>

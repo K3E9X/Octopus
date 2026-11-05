@@ -13,8 +13,11 @@
   --void-2: #122630;
   /* the two signature glows from /check — warm top-right, cool bottom-left — lifted
      to tokens so light mode can tone them down without a second body rule */
-  --glow-warm: rgba(255, 138, 61, .10);
-  --glow-cool: rgba(91, 214, 166, .07);
+  /* Both washes cut by more than half. Three overlapping gradients were what made the
+     ground read brown rather than black, and a muddy ground makes every colour on top
+     of it look cheap. The accent has to be the only warm thing on screen. */
+  --glow-warm: rgba(255, 138, 61, .04);
+  --glow-cool: rgba(91, 214, 166, .03);
   --line: rgba(230, 242, 240, .10);        /* clean cool-white hairlines, as on /check */
   --line-soft: rgba(230, 242, 240, .05);
 
@@ -223,7 +226,7 @@ body:has(.lk2) { overflow: auto; }
 .datatable tr.sel { background: var(--accent-dim); }
 .datatable .t-type { text-transform: uppercase; font-size: 9px; letter-spacing: .08em; color: var(--ink-3); }
 .datatable .t-plat { color: var(--ink-3); font-size: 10px; letter-spacing: .06em; }
-.datatable .t-handle { color: var(--ink); word-break: break-all; }
+.datatable .t-handle { color: var(--ink); overflow-wrap: anywhere; word-break: normal; }
 .datatable .t-num { font-variant-numeric: tabular-nums; text-align: center; }
 .datatable .t-status { font-size: 10px; letter-spacing: .06em; }
 .datatable .t-empty { text-align: center; color: var(--ink-4); padding: 30px; }
@@ -1584,9 +1587,9 @@ body:has(.lp) { overflow: auto; }
    ===================================================================================== */
 .lk2 {
   /* surface ladder */
-  --bg-0: #0B1215; --bg-1: #121B1E; --bg-2: #19262A; --bg-3: #212F33;
+  --bg-0: #080E11; --bg-1: #0E171A; --bg-2: #152125; --bg-3: #1D2B2F;
   /* borders / elevation */
-  --bd: rgba(255,255,255,.08); --bd-strong: rgba(255,255,255,.13); --bd-subtle: rgba(255,255,255,.055);
+  --bd: rgba(226,242,242,.10); --bd-strong: rgba(226,242,242,.20); --bd-subtle: rgba(226,242,242,.055);
   --inset: inset 0 1px 0 rgba(255,255,255,.05);
   --shadow-float: 0 1px 2px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.35);
   /* text ladder */
@@ -1600,14 +1603,16 @@ body:has(.lp) { overflow: auto; }
   --sev-med: hsl(40 90% 56%);   --sev-med-bg: hsl(40 90% 56% / .12);   --sev-med-bd: hsl(40 90% 56% / .3);
   --sev-low: hsl(185 44% 54%);  --sev-low-bg: hsl(185 44% 54% / .12);  --sev-low-bd: hsl(185 44% 54% / .3);
   /* radii */
-  --r-xs: 5px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;
+  /* Tightened across the board. A 20px radius reads soft and generic; the work this
+     tool does is precise, and the frame should say so before a word is read. */
+  --r-xs: 3px; --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 14px;
   --ease: cubic-bezier(.22,1,.36,1);
 
   min-height: 100vh; padding-bottom: 96px; color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 15px; line-height: 1.55; letter-spacing: 0;
   background:
-    radial-gradient(900px 420px at 50% -120px, rgba(255,122,51,.06), transparent 70%),
+    radial-gradient(1200px 380px at 50% -200px, rgba(255,122,51,.035), transparent 72%),
     var(--bg-0);
 }
 .lk2 code, .lk2 .mono { font-family: var(--font-mono), monospace; font-variant-numeric: tabular-nums; }
@@ -1625,37 +1630,45 @@ body:has(.lp) { overflow: auto; }
 .lk2-top nav a { color: var(--ink-2); text-decoration: none; transition: color .14s; }
 .lk2-top nav a:hover { color: var(--ink); }
 .lk2-bal { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); border: 1px solid var(--bd); border-radius: var(--r-xs); padding: 5px 10px; }
-.lk2-cta { background: var(--accent); color: #140a04; font-weight: 600; padding: 8px 15px; border-radius: var(--r-sm); box-shadow: var(--inset); transition: background .14s; }
+.lk2-cta { background: var(--accent); color: #140a04; font-weight: 600; padding: 8px 15px; border-radius: var(--r-sm); transition: background .14s; }
 .lk2-cta:hover { background: var(--accent-hover); }
 
 .lk2-main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
 /* ---- hero ---- */
-.lk2-hero { text-align: center; padding: 72px 0 40px; animation: lk2-rise .5s var(--ease) both; }
+.lk2-hero { text-align: center; padding: 96px 0 56px; animation: lk2-rise .5s var(--ease) both; }
 .lk2-eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 22px; }
-.lk2-hero h1 { font-weight: 600; letter-spacing: -.02em; font-size: clamp(40px, 6.4vw, 60px); line-height: 1.04; margin: 0 0 20px; }
+.lk2-hero h1 { font-weight: 600; letter-spacing: -.028em; font-size: clamp(38px, 5.4vw, 54px); line-height: 1.06; margin: 0 0 22px; }
 .lk2-hero h1 span { color: var(--accent); }
-.lk2-hero > p { max-width: 580px; margin: 0 auto 32px; color: var(--ink-2); font-size: 17px; line-height: 1.5; }
+.lk2-hero > p { max-width: 54ch; margin: 0 auto 36px; color: var(--ink-2); font-size: 16.5px; line-height: 1.6; }
 
-.lk2-box { display: flex; gap: 8px; max-width: 520px; margin: 0 auto; background: var(--bg-1); border: 1px solid var(--bd); border-radius: var(--r-md); padding: 7px; box-shadow: var(--inset); transition: border-color .16s; }
-.lk2-box:focus-within { border-color: var(--bd-strong); }
+.lk2-box { display: flex; gap: 8px; max-width: 560px; margin: 0 auto; background: var(--bg-1); border: 1px solid var(--bd-strong); border-radius: var(--r-md); padding: 6px; transition: border-color .16s, box-shadow .16s; }
+.lk2-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
 .lk2-box-sm { max-width: 320px; }
-.lk2-box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--ink); font-size: 15px; padding: 11px 13px; font-family: var(--font-mono); letter-spacing: .01em; }
-.lk2-box input::placeholder { color: var(--ink-4); }
-.lk2-box button { background: var(--accent); color: #140a04; border: 0; cursor: pointer; font-weight: 600; font-size: 14px; padding: 0 20px; border-radius: var(--r-sm); white-space: nowrap; transition: background .14s; }
-.lk2-box button:disabled { background: var(--bg-3); color: var(--ink-4); cursor: default; box-shadow: none; }
+.lk2-box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--ink); font-size: 15px; padding: 12px 14px; font-family: var(--font-mono); letter-spacing: .01em; }
+.lk2-box input::placeholder { color: var(--ink-3); }
+.lk2-box button { background: var(--accent); color: #140a04; border: 0; cursor: pointer; font-weight: 600; font-size: 14px; padding: 0 22px; border-radius: var(--r-sm); white-space: nowrap; transition: background .14s; }
+.lk2-box button:disabled { background: transparent; color: var(--ink-3); border: 1px solid var(--bd); cursor: default; box-shadow: none; }
 .lk2-box button:not(:disabled):hover { background: var(--accent-hover); }
 
 .lk2-hero > .lk2-err, .lk2-verify > .lk2-err, .lk2-err { color: var(--sev-crit); font-size: 14px; margin: 16px auto 0; }
 .lk2-link { background: none; border: 0; color: var(--ink-3); font-size: 13px; cursor: pointer; margin-top: 18px; transition: color .14s; }
 .lk2-link:hover { color: var(--ink-2); text-decoration: underline; }
 
-.lk2-reveal { margin: 40px auto 0; max-width: 680px; }
-.lk2-reveal > span { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 14px; }
-.lk2-reveal > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
-.lk2-reveal em { font-style: normal; font-size: 12.5px; color: var(--ink-2); font-family: var(--font-mono); border: 1px solid var(--bd); background: var(--bg-1); border-radius: var(--r-xs); padding: 6px 11px; animation: lk2-rise .4s var(--ease) both; animation-delay: calc(var(--i) * 40ms + .15s); }
-.lk2-reveal em:first-child, .lk2-reveal em:nth-child(2) { border-color: var(--sev-crit-bd); color: var(--sev-crit); }
-.lk2-hero > .lk2-fine, .lk2-fine { max-width: 540px; margin: 32px auto 0; color: var(--ink-4); font-size: 13px; line-height: 1.55; }
+.lk2-reveal { margin: 44px auto 0; max-width: 620px; }
+.lk2-reveal > span { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 16px; }
+.lk2-reveal > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.lk2-reveal em {
+  font-style: normal; font-size: 12px; color: var(--ink-2); font-family: var(--font-mono);
+  letter-spacing: .01em; border: 1px solid var(--bd-subtle); background: transparent;
+  border-radius: var(--r-xs); padding: 6px 11px;
+  /* Fades in place rather than rising from nothing, and the whole row is done in a
+     third of a second. The previous stagger left a labelled empty gap on screen long
+     enough to read as a rendering failure. */
+  animation: lk2-fade .3s var(--ease) both; animation-delay: calc(var(--i) * 18ms + 60ms);
+}
+.lk2-reveal em:first-child, .lk2-reveal em:nth-child(2) { border-color: var(--bd); color: var(--ink); }
+.lk2-hero > .lk2-fine, .lk2-fine { max-width: 56ch; margin: 36px auto 0; color: var(--ink-4); font-size: 13px; line-height: 1.6; }
 .lk2-fine b { color: var(--ink-2); font-weight: 500; }
 
 /* ---- verify ---- */
@@ -1685,7 +1698,7 @@ body:has(.lp) { overflow: auto; }
 .v-critical .lk2-vtag { background: var(--sev-crit-bg); color: var(--sev-crit); }
 .v-exposed .lk2-vtag { background: var(--sev-high-bg); color: var(--sev-high); }
 .v-clear .lk2-vtag { background: var(--sev-low-bg); color: var(--sev-low); }
-.lk2-verdict h2 { font-family: var(--font-mono); font-weight: 500; font-size: 18px; margin: 0 0 10px; word-break: break-all; color: var(--ink); letter-spacing: 0; }
+.lk2-verdict h2 { font-family: var(--font-mono); font-weight: 500; font-size: 19px; margin: 0 0 10px; overflow-wrap: anywhere; word-break: normal; color: var(--ink); letter-spacing: 0; }
 .lk2-verdict > p { color: var(--ink-2); margin: 0 auto; max-width: 520px; font-size: 15px; line-height: 1.5; }
 .lk2-vstats { display: flex; justify-content: center; gap: 1px; margin-top: 28px; background: var(--bd-subtle); border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--bd-subtle); }
 .lk2-vstats div { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 18px 12px; background: var(--bg-2); }
@@ -1701,7 +1714,7 @@ body:has(.lp) { overflow: auto; }
 .lk2-tabs { display: flex; gap: 3px; margin-bottom: 18px; background: var(--bg-1); border: 1px solid var(--bd); border-radius: var(--r-md); padding: 4px; }
 .lk2-tabs button { flex: 1; background: transparent; border: 0; cursor: pointer; color: var(--ink-3); font-size: 13px; font-weight: 500; padding: 9px 10px; border-radius: var(--r-sm); transition: background .14s, color .14s; }
 .lk2-tabs button:hover:not(:disabled):not(.on) { color: var(--ink); background: var(--bg-2); }
-.lk2-tabs button.on { background: var(--accent); color: #140a04; font-weight: 600; box-shadow: var(--inset); }
+.lk2-tabs button.on { background: var(--bg-2); color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
 .lk2-tabs button:disabled { opacity: .3; cursor: default; }
 
 /* ---- cards (category + source) ---- */
@@ -1726,7 +1739,7 @@ body:has(.lp) { overflow: auto; }
 
 /* value rows */
 .lk2-val { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--bg-2); border-radius: var(--r-sm); padding: 9px 12px; }
-.lk2-val code { font-size: 13px; color: var(--ink); word-break: break-all; }
+.lk2-val code { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; word-break: normal; }
 .lk2-val code.masked { color: var(--ink-3); }
 .lk2-val-tag { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sev-crit); border: 1px solid var(--sev-crit-bd); border-radius: var(--r-xs); padding: 2px 7px; }
 .lk2-src-chip { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); white-space: nowrap; }
@@ -1744,7 +1757,7 @@ body:has(.lp) { overflow: auto; }
 .lk2-row:first-child { border-top: 0; }
 .lk2-row-k { flex: none; width: 118px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-3); }
 .lk2-row .lk2-reveal-btn, .lk2-row > code { flex: 1; min-width: 0; }
-.lk2-row > code { font-size: 13px; color: var(--ink); word-break: break-all; }
+.lk2-row > code { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; word-break: normal; }
 
 /* timeline */
 .lk2-timeline { position: relative; padding-left: 28px; margin-top: 4px; }
@@ -1803,24 +1816,30 @@ body:has(.lp) { overflow: auto; }
 .lk2-orbit-note { margin: 14px 0 0 !important; font-size: 12px !important; color: var(--ink-4) !important; border-top: 1px solid var(--bd-subtle); padding-top: 12px; line-height: 1.5; }
 
 /* ---- plans ---- */
-.lk2-plans { padding: 88px 0 0; border-top: 1px solid var(--bd); margin-top: 80px; }
-.lk2-plans h2 { font-weight: 600; font-size: 30px; letter-spacing: -.02em; text-align: center; margin: 0 0 12px; }
-.lk2-plans-sub { text-align: center; color: var(--ink-2); max-width: 560px; margin: 0 auto 40px; line-height: 1.55; }
-.lk2-plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.lk2-plan { border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 26px 22px; background: var(--bg-1); box-shadow: var(--inset); display: flex; flex-direction: column; }
-.lk2-plan.featured { border-color: var(--accent); }
-.lk2-plan h3 { font-weight: 600; font-size: 19px; margin: 0 0 6px; letter-spacing: -.01em; }
-.lk2-price { font-family: var(--font-mono); font-size: 13px; color: var(--accent); margin-bottom: 16px; }
+/* Was 80px of margin on top of 88px of padding: 168px of nothing between the fine
+   print and the first hairline. Empty space is only épuré when something is using it. */
+.lk2-plans { padding: 44px 0 0; border-top: 1px solid var(--bd); margin-top: 56px; }
+/* Left, like every other section heading on the site. A centred one here was the last
+   survivor of the old brochure rhythm. */
+.lk2-plans h2 { font-weight: 600; font-size: clamp(23px, 2.8vw, 28px); letter-spacing: -.022em; text-align: left; margin: 0 0 10px; }
+.lk2-plans-sub { text-align: left; color: var(--ink-2); max-width: 62ch; margin: 0 0 36px; line-height: 1.65; }
+.lk2-plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.lk2-plan { border: 1px solid var(--bd); border-radius: var(--r-md); padding: 24px 22px; background: var(--bg-1); display: flex; flex-direction: column; }
+/* The recommended plan is marked by a top rule, not by ringing the whole card in the
+   brand colour. One accent, one meaning: the thing you are meant to press. */
+.lk2-plan.featured { border-color: var(--bd-strong); box-shadow: inset 0 2px 0 var(--accent); }
+.lk2-plan h3 { font-weight: 600; font-size: 18px; margin: 0 0 6px; letter-spacing: -.012em; }
+.lk2-price { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 18px; }
 .lk2-plan > p { color: var(--ink-2); font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
 .lk2-plan ul { list-style: none; padding: 0; margin: 0 0 22px; flex: 1; }
 .lk2-plan li { color: var(--ink-2); font-size: 14px; padding: 8px 0 8px 22px; position: relative; border-top: 1px solid var(--bd-subtle); }
 .lk2-plan li:first-child { border-top: 0; }
-.lk2-plan li::before { content: ""; position: absolute; left: 4px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.lk2-plan-cta { text-align: center; text-decoration: none; border-radius: var(--r-sm); padding: 11px; font-size: 14px; font-weight: 600; background: var(--bg-2); color: var(--ink); border: 1px solid var(--bd); transition: border-color .14s; }
+.lk2-plan li::before { content: ""; position: absolute; left: 5px; top: 16px; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-4); }
+.lk2-plan-cta { text-align: center; text-decoration: none; border-radius: var(--r-sm); padding: 11px; font-size: 14px; font-weight: 600; background: transparent; color: var(--ink); border: 1px solid var(--bd-strong); transition: border-color .14s, background .14s; }
 .lk2-plan.featured .lk2-plan-cta { background: var(--accent); color: #140a04; border-color: var(--accent); }
 .lk2-plan-cta:hover { border-color: var(--bd-strong); }
 .lk2-plan.featured .lk2-plan-cta:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.lk2-plans-fine { text-align: center; color: var(--ink-4); font-size: 13px; line-height: 1.55; max-width: 540px; margin: 28px auto 0; }
+.lk2-plans-fine { text-align: left; color: var(--ink-4); font-size: 13px; line-height: 1.65; max-width: 62ch; margin: 28px 0 0; }
 
 /* ---- views / motion / print / responsive ---- */
 .lk2-off { display: none; } .lk2-print-h { display: none; }
@@ -1859,26 +1878,37 @@ body:has(.lp) { overflow: auto; }
 
 /* ---- Octopus Leak landing (/) — same system as the product ---- */
 .lk2-home .lk2-hero { padding-bottom: 8px; }
-.lk2-hero-cta { display: inline-block; background: var(--accent); color: #140a04; font-weight: 600; font-size: 15px; padding: 13px 26px; border-radius: var(--r-sm); text-decoration: none; box-shadow: var(--inset); transition: background .14s; }
+.lk2-hero-cta { display: inline-block; background: var(--accent); color: #140a04; font-weight: 600; font-size: 15px; padding: 13px 24px; border-radius: var(--r-sm); text-decoration: none; transition: background .14s, transform .14s; }
+.lk2-hero-cta:active { transform: translateY(1px); }
 .lk2-hero-cta:hover { background: var(--accent-hover); }
 
-.lk2-lp-sec { max-width: 920px; margin: 0 auto; padding: 72px 0 0; }
-.lk2-lp-sec > h2, .lk2-lp-trust > h2 { font-weight: 600; font-size: clamp(24px, 3.2vw, 30px); letter-spacing: -.02em; text-align: center; margin: 0 0 36px; }
-.lk2-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.lk2-step { border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 24px; background: var(--bg-1); box-shadow: var(--inset); }
-.lk2-step-n { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 14px; letter-spacing: .1em; }
-.lk2-step h3 { font-weight: 600; font-size: 17px; margin: 0 0 8px; letter-spacing: -.01em; }
-.lk2-step p { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 0; }
+.lk2-lp-sec { max-width: 960px; margin: 0 auto; padding: 72px 0 0; }
+/* Left-aligned, under a hairline. Three centred headings stacked down a page read as a
+   brochure; an anchored left edge reads as a document, which is what this is. */
+.lk2-lp-sec > h2, .lk2-lp-trust > h2 {
+  font-weight: 600; font-size: clamp(23px, 2.8vw, 28px); letter-spacing: -.022em;
+  text-align: left; margin: 0 0 32px; padding-top: 22px; border-top: 1px solid var(--bd);
+}
+.lk2-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.lk2-step { padding: 2px 32px 2px 24px; border-left: 1px solid var(--bd); }
+.lk2-step:first-child { border-left: 0; padding-left: 0; }
+/* The numeral is navigation, not a highlight. The accent is spent once per screen, on
+   the thing the reader is meant to press. */
+.lk2-step-n { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--ink-4); margin-bottom: 16px; letter-spacing: .16em; }
+.lk2-step h3 { font-weight: 600; font-size: 16px; margin: 0 0 10px; letter-spacing: -.012em; }
+.lk2-step p { color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; max-width: 34ch; }
 
-.lk2-views { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.lk2-vcard { border: 1px solid var(--bd); border-radius: var(--r-md); padding: 20px 22px; background: var(--bg-1); box-shadow: var(--inset); }
-.lk2-vcard h3 { font-weight: 600; font-size: 16px; margin: 0 0 7px; color: var(--accent); letter-spacing: -.01em; }
-.lk2-vcard p { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 0; }
+.lk2-views { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 40px; }
+.lk2-vcard { padding: 22px 0; border-top: 1px solid var(--bd-subtle); }
+.lk2-vcard:nth-child(-n+2) { border-top: 0; padding-top: 0; }
+.lk2-vcard h3 { font-weight: 600; font-size: 15px; margin: 0 0 8px; color: var(--ink); letter-spacing: -.01em; }
+.lk2-vcard p { color: var(--ink-2); font-size: 14px; line-height: 1.6; margin: 0; max-width: 46ch; }
 
-.lk2-lp-trust { max-width: 680px; margin: 0 auto; padding: 80px 0 0; text-align: center; }
-.lk2-lp-trust > p { color: var(--ink-2); font-size: 16px; line-height: 1.6; margin: 0 auto 28px; }
+.lk2-lp-trust { max-width: 960px; margin: 0 auto; padding: 72px 0 0; text-align: left; }
+.lk2-lp-trust > p { color: var(--ink-2); font-size: 16px; line-height: 1.7; margin: 0 0 32px; max-width: 62ch; }
+.lk2-lp-trust > p em { font-style: italic; color: var(--ink); }
 
-.lk2-foot { max-width: 920px; margin: 96px auto 0; padding: 28px 0; border-top: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.lk2-foot { max-width: 960px; margin: 112px auto 0; padding: 30px 0; border-top: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .lk2-foot-note { color: var(--ink-4); font-size: 13px; }
 
 @media (max-width: 760px) {
@@ -1967,11 +1997,12 @@ body:has(.lp) { overflow: auto; }
 .lk2-facet h3 { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; }
 .lk2-fval { padding: 9px 0; border-top: 1px solid var(--bd-subtle); }
 .lk2-fval:first-of-type { border-top: 0; padding-top: 0; }
-.lk2-fval > code, .lk2-fval .lk2-reveal-btn code { font-size: 14px; color: var(--ink); word-break: break-all; }
+.lk2-fval > code, .lk2-fval .lk2-reveal-btn code { font-size: 14px; overflow-wrap: anywhere; word-break: normal; line-height: 1.5; }
 .lk2-fval code.masked { color: var(--ink-3); }
 /* Agreed on by two or more independent dumps — a different kind of fact from one
    dump saying it once, and the only visual weight in this panel. */
-.lk2-fval.corroborated > code { color: var(--confirm); }
+.lk2-fval > code, .lk2-fval .lk2-reveal-btn code { color: var(--ink-2); }
+.lk2-fval.corroborated > code, .lk2-fval.corroborated .lk2-reveal-btn code { color: var(--ink); font-weight: 500; }
 .lk2-fsrc { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 .lk2-fsrc span {
   font-family: var(--font-mono); font-size: 10px; color: var(--ink-4);
@@ -1991,7 +2022,7 @@ body:has(.lp) { overflow: auto; }
 .lk2-others-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .lk2-other { border: 1px solid var(--bd); border-radius: var(--r-md); padding: 14px 16px; background: var(--bg-2); }
 .lk2-other-h { display: flex; align-items: center; gap: 11px; margin-bottom: 6px; }
-.lk2-other-h code { flex: 1; font-family: var(--font-mono); font-size: 13.5px; color: var(--ink); word-break: break-all; }
+.lk2-other-h code { flex: 1; font-family: var(--font-mono); font-size: 13.5px; color: var(--ink); overflow-wrap: anywhere; word-break: normal; }
 .lk2-other-m { font-size: 12px; color: var(--ink-3); margin-bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .lk2-other-m em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--sev-med); border: 1px solid var(--bd); border-radius: var(--r-xs); padding: 1px 6px; }
 
@@ -2029,3 +2060,14 @@ body:has(.lp) { overflow: auto; }
 .adm-src-test.ok { color: var(--ink-2); border-color: var(--sev-low); }
 .adm-src-test.bad { color: var(--sev-crit); border-color: var(--sev-crit); }
 .adm-note code { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); }
+
+/* A fade in place — used where a rise would move text the reader is already looking at. */
+@keyframes lk2-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 860px) {
+  .lk2-steps { grid-template-columns: 1fr; gap: 0; }
+  .lk2-step { border-left: 0; border-top: 1px solid var(--bd); padding: 22px 0 0; margin-top: 22px; }
+  .lk2-step:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+  .lk2-views { grid-template-columns: 1fr; gap: 0; }
+  .lk2-vcard:nth-child(2) { border-top: 1px solid var(--bd-subtle); padding-top: 22px; }
+}
