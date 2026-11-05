@@ -1213,9 +1213,11 @@ body::after {
 .lk2-hero-field {
   z-index: -1;
   /* faded at every edge so it reads as depth rather than as a panel with a border */
-  -webkit-mask-image: radial-gradient(118% 82% at 50% 42%, #000 28%, transparent 76%);
-  mask-image: radial-gradient(118% 82% at 50% 42%, #000 28%, transparent 76%);
-  opacity: .85;
+  /* Fades the far edges so the field reads as depth rather than as a panel — but wide
+     enough that it no longer clips the arms at the edge they enter from. */
+  -webkit-mask-image: radial-gradient(150% 108% at 32% 46%, #000 48%, transparent 92%);
+  mask-image: radial-gradient(150% 108% at 32% 46%, #000 48%, transparent 92%);
+  opacity: .95;
 }
 /* the hero's own text must never have to compete with it */
 .lk2-hero-deep > *:not(.deepfield) { position: relative; }

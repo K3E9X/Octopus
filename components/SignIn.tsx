@@ -76,7 +76,7 @@ export default function SignIn() {
     <div className="ax">
       {/* left — the creature and the pitch */}
       <div className="ax-left">
-        <div className="ax-scene"><DeepField density={1.15} anchor={{ x: 0.74, y: 0.26 }} /></div>
+        <div className="ax-scene"><DeepField density={1.15} anchor={{ x: 0.52, y: -0.1 }} reachScale={1.15} /></div>
         {/* clears the ground under the copy without hiding the creature */}
         <div className="ax-vignette" aria-hidden="true" />
 
