@@ -134,10 +134,54 @@ export async function balanceOf(userId: string): Promise<number> {
   return Number((rows as any[])[0]?.credits ?? 0);
 }
 
-function entry(userId: string, delta: number, balance: number, kind: string, note?: string) {
-  const q = sql()!;
-  return q`INSERT INTO octopus_ledger (id, user_id, delta, balance, kind, note, at)
-           VALUES (${"led_" + randomBytes(9).toString("hex")}, ${userId}, ${delta}, ${balance}, ${kind}, ${note || null}, ${Date.now()})`;
+const ledgerId = () => "led_" + randomBytes(9).toString("hex");
+
+/**
+ * Move a balance AND record the movement, in one statement.
+ *
+ * They used to be two, outside any transaction: the balance moved, and if the ledger
+ * insert then failed the exception escaped the route as a 500 while the money had
+ * already gone — leaving the two permanently disagreeing, which defeats this module's
+ * one stated guarantee that a balance is always explainable.
+ *
+ * A CTE makes it atomic without a transaction, which matters because the two drivers
+ * this runs on do not share one: an UPDATE that matches no row produces no ledger row
+ * either, so a refused charge leaves nothing behind. `guard` is what makes a debit a
+ * debit — the row only moves while it still covers the amount, which is also the lock
+ * that stops two concurrent requests both passing on a balance that covers one.
+ */
+async function move(
+  userId: string, deltaMicro: number, kind: string, note: string | undefined, guard: "covers" | "none",
+): Promise<{ ok: boolean; balance?: number; moved?: number }> {
+  const q = sql();
+  if (!q) return { ok: false };
+  const rows = guard === "covers"
+    ? await q`WITH moved AS (
+        UPDATE octopus_users SET credits = credits + ${deltaMicro}
+        WHERE id = ${userId} AND credits >= ${-deltaMicro}
+        RETURNING credits
+      )
+      INSERT INTO octopus_ledger (id, user_id, delta, balance, kind, note, at)
+      SELECT ${ledgerId()}, ${userId}, ${deltaMicro}, credits, ${kind}, ${note || null}, ${Date.now()} FROM moved
+      RETURNING balance`
+    // Two single-row CTEs joined, rather than a CTE referring to itself. Every CTE in
+    // a statement reads the same snapshot, so `prev` is the balance before the update
+    // and `moved` RETURNING is the balance after — which makes `after - before` what
+    // ACTUALLY moved, including when the clamp at zero swallowed part of a claw-back.
+    : await q`WITH prev AS (
+        SELECT credits AS c FROM octopus_users WHERE id = ${userId}
+      ), moved AS (
+        UPDATE octopus_users SET credits = GREATEST(0, credits + ${deltaMicro})
+        WHERE id = ${userId}
+        RETURNING credits AS c
+      )
+      INSERT INTO octopus_ledger (id, user_id, delta, balance, kind, note, at)
+      SELECT ${ledgerId()}, ${userId}, moved.c - prev.c, moved.c, ${kind}, ${note || null}, ${Date.now()}
+      FROM moved, prev
+      RETURNING balance, delta`;
+  const row = (rows as any[])[0];
+  if (!row) return { ok: false };
+  return { ok: true, balance: Number(row.balance), moved: row.delta === undefined ? deltaMicro : Number(row.delta) };
 }
 
 /** Admin tops up (or claws back, with a negative amount). Returns the new balance. */
@@ -147,28 +191,13 @@ export async function grant(userId: string, deltaMicro: number, note?: string): 
   await ensure();
   const q = sql();
   if (!q) return { ok: false, error: "database unavailable" };
-  // Clamp at zero — a claw-back cannot drive a balance negative — and RECORD WHAT
-  // ACTUALLY MOVED. Logging the requested delta while the update clamped meant a
-  // clawback larger than the balance left the ledger permanently disagreeing with it,
-  // which defeats this module's one stated guarantee: a balance is always explainable.
-  // The old balance is captured in the same statement rather than read before it, so
-  // the figure logged is what this update actually moved and not what a concurrent one
-  // left behind. Written out explicitly: whether a subquery inside RETURNING sees the
-  // pre- or post-update row is exactly the kind of thing not to be clever about when
-  // the answer is a ledger entry.
-  const rows = await q`UPDATE octopus_users AS u
-    SET credits = GREATEST(0, u.credits + ${deltaMicro})
-    FROM (SELECT id, credits AS prev FROM octopus_users WHERE id = ${userId} FOR UPDATE) AS o
-    WHERE u.id = o.id
-    RETURNING u.credits, (u.credits - o.prev) AS moved`;
-  const row = (rows as any[])[0];
-  const bal = Number(row?.credits ?? NaN);
-  if (!Number.isFinite(bal)) return { ok: false, error: "no such user" };
-  const moved = Number(row?.moved ?? deltaMicro);
-  const applied = Number.isFinite(moved) ? moved : deltaMicro;
-  await entry(userId, applied, bal, applied > 0 ? "grant" : "clawback",
-    applied === deltaMicro ? note : `${note || "adjustment"} (requested ${deltaMicro}, clamped at zero)`);
-  return { ok: true, balance: bal };
+  // Clamped at zero — a claw-back cannot drive a balance negative — and the ledger
+  // records WHAT ACTUALLY MOVED, not what was asked for, so an over-clawback leaves
+  // the two still agreeing.
+  const r = await move(userId, deltaMicro, deltaMicro > 0 ? "grant" : "clawback",
+    note, "none");
+  if (!r.ok) return { ok: false, error: "no such user" };
+  return { ok: true, balance: r.balance };
 }
 
 /**
@@ -182,30 +211,31 @@ export async function debit(userId: string, amountMicro: number, note?: string):
   await ensure();
   const q = sql();
   if (!q) return { ok: false, error: "database unavailable" };
-  // the WHERE clause is the lock: the row only updates when it still covers the charge
-  const rows = await q`UPDATE octopus_users
-    SET credits = credits - ${amountMicro}
-    WHERE id = ${userId} AND credits >= ${amountMicro}
-    RETURNING credits`;
-  const after = (rows as any[])[0];
-  if (!after) {
+  const r = await move(userId, -amountMicro, "debit", note, "covers");
+  if (!r.ok) {
     const bal = await balanceOf(userId);
     return { ok: false, balance: bal, error: `insufficient credits — this query costs ${fmtCredits(amountMicro)} (${fmtUSD(amountMicro)}), balance is ${fmtCredits(bal)}` };
   }
-  const bal = Number(after.credits);
-  await entry(userId, -amountMicro, bal, "debit", note);
-  return { ok: true, charged: amountMicro, balance: bal };
+  return { ok: true, charged: amountMicro, balance: r.balance };
 }
 
-/** Put credits back when a charged query did not actually run (API error, timeout). */
-export async function refund(userId: string, amountMicro: number, note?: string): Promise<void> {
-  if (!creditsEnabled || amountMicro <= 0) return;
-  await ensure();
-  const q = sql();
-  if (!q) return;
-  const rows = await q`UPDATE octopus_users SET credits = credits + ${amountMicro} WHERE id = ${userId} RETURNING credits`;
-  const bal = Number((rows as any[])[0]?.credits ?? 0);
-  await entry(userId, amountMicro, bal, "refund", note);
+/**
+ * Put credits back when a charged query did not actually run.
+ *
+ * It REPORTS whether it landed, and that is the whole change. Every error response was
+ * hard-coded to say "you were not charged" while this returned void and swallowed its
+ * own failures — so the one moment a customer most needs the truth was the one moment
+ * the answer was a constant.
+ */
+export async function refund(userId: string, amountMicro: number, note?: string): Promise<{ ok: boolean; balance?: number }> {
+  if (!creditsEnabled) return { ok: true };
+  if (amountMicro <= 0) return { ok: true, balance: await balanceOf(userId).catch(() => undefined) };
+  try {
+    await ensure();
+    return await move(userId, amountMicro, "refund", note, "none");
+  } catch {
+    return { ok: false };
+  }
 }
 
 export async function ledgerOf(userId: string, limit = 40): Promise<LedgerRow[]> {

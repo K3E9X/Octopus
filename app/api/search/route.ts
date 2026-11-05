@@ -247,12 +247,24 @@ export async function POST(req: NextRequest) {
   // the try: anything that threw after it — the ledger insert, the balance read,
   // building the response — fell into the catch and refunded a second time, creating a
   // full search price out of nothing on every flaky write.
+  // Refunding is not idempotent and the ledger carries no "already refunded" marker,
+  // so the money goes back exactly once — and we SAY WHETHER IT LANDED. Every error
+  // response used to assert "you were not charged" while the refund swallowed its own
+  // failures, which makes the one moment a customer most needs the truth the one
+  // moment the answer was a constant.
+  let attempted = false;
   let refunded = false;
   const giveBack = async (why: string) => {
-    if (refunded || !user) return;
-    refunded = true;
-    await refund(user.id, price, why).catch(() => {});
+    if (attempted || !user) { refunded = !user; return; }
+    attempted = true;
+    const r = await refund(user.id, price, why).catch(() => ({ ok: false }));
+    refunded = r.ok;
   };
+  /** What to tell them, truthfully, when something went wrong after the charge. */
+  const settlement = () =>
+    user && !refunded
+      ? { refunded: false, note: "You were charged for this query and the refund did not go through — contact the operator with the time of this request." }
+      : { refunded: true };
 
   try {
     const res = await leakOsint({
@@ -280,7 +292,7 @@ export async function POST(req: NextRequest) {
       };
       return NextResponse.json({
         error: says[reason], reason,
-        refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
+        ...settlement(), balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
       }, { status: 502 });
     }
 
@@ -298,7 +310,7 @@ export async function POST(req: NextRequest) {
         // change by guessing has now cost two shipped fixes; this is what makes the
         // third unnecessary, and key names cannot carry somebody's record.
         shape: res.shape,
-        refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
+        ...settlement(), balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
       }, { status: 502 });
     }
 
@@ -318,10 +330,16 @@ export async function POST(req: NextRequest) {
       balance: user ? balanceCredits(await balanceOf(user.id)) : undefined,
     });
   } catch {
+    // Reached when our own code fails AFTER the source answered — building the report,
+    // reading the balance. The query ran and the vendor was paid, so a review flagged
+    // refunding here as giving away money we genuinely spent. It is deliberate: the
+    // customer has nothing to show for the charge, and the failure is ours. We eat the
+    // upstream cost rather than bill somebody for a bug. What was NOT defensible, and
+    // is fixed, is telling them they were not charged without checking.
     await giveBack("refund: search threw");
     return NextResponse.json({
-      error: "The search failed — you were not charged.",
-      refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
+      error: "The search failed.",
+      ...settlement(), balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
     }, { status: 500 });
   }
 }
@@ -379,12 +397,24 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
     }).catch(() => {});
   }
 
+  // Refunding is not idempotent and the ledger carries no "already refunded" marker,
+  // so the money goes back exactly once — and we SAY WHETHER IT LANDED. Every error
+  // response used to assert "you were not charged" while the refund swallowed its own
+  // failures, which makes the one moment a customer most needs the truth the one
+  // moment the answer was a constant.
+  let attempted = false;
   let refunded = false;
   const giveBack = async (why: string) => {
-    if (refunded || !user) return;
-    refunded = true;
-    await refund(user.id, price, why).catch(() => {});
+    if (attempted || !user) { refunded = !user; return; }
+    attempted = true;
+    const r = await refund(user.id, price, why).catch(() => ({ ok: false }));
+    refunded = r.ok;
   };
+  /** What to tell them, truthfully, when something went wrong after the charge. */
+  const settlement = () =>
+    user && !refunded
+      ? { refunded: false, note: "You were charged for this query and the refund did not go through — contact the operator with the time of this request." }
+      : { refunded: true };
 
   try {
     const res = await leakOsint({
@@ -393,13 +423,13 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
     });
     if (res.error) {
       await giveBack(`refund: ${res.error}`);
-      return NextResponse.json({ error: "The leak source refused the pivot.", reason: "refused", refunded: true }, { status: 502 });
+      return NextResponse.json({ error: "The leak source refused the pivot.", reason: "refused", ...settlement() }, { status: 502 });
     }
     if (res.unreadable) {
       await giveBack("refund: unreadable response");
       return NextResponse.json({
         error: "The leak source answered in a shape this version cannot read.",
-        reason: "unreadable", shape: res.shape, refunded: true,
+        reason: "unreadable", shape: res.shape, ...settlement(),
       }, { status: 502 });
     }
 
@@ -419,6 +449,6 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
     });
   } catch {
     await giveBack("refund: pivot threw");
-    return NextResponse.json({ error: "The pivot failed — you were not charged.", refunded: true }, { status: 500 });
+    return NextResponse.json({ error: "The pivot failed.", ...settlement() }, { status: 500 });
   }
 }
