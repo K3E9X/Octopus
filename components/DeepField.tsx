@@ -90,6 +90,14 @@ interface Arm {
   coil: number;
   /** the rate of the wave travelling out along it */
   rate: number;
+  /**
+   * How near this arm is, 0 far → 1 near.
+   *
+   * Eight arms drawn at one weight and one brightness read as eight lines on a plane.
+   * An animal has arms in front of and behind its own body, and the only thing that
+   * says so on a flat canvas is that the far ones are thinner, dimmer and cooler.
+   */
+  depth: number;
   /** 0 working → 1 attending to the pointer */
   attn: number;
   /** tip glow just after it passed over a record */
@@ -156,7 +164,7 @@ export default function DeepField({
       unit = Math.min(w, h);
       reach = unit * reachScale;
 
-      const count = Math.round(Math.min(330, (w * h) / 3600) * density);
+      const count = Math.round(Math.min(560, (w * h) / 3400) * density);
       recs = Array.from({ length: count }, () => ({
         x: rand(-80, w), y: rand(0, h), w: rand(16, 58), v: rand(2.5, 9),
         dim: rand(0.09, 0.26), lit: 0,
@@ -172,7 +180,11 @@ export default function DeepField({
       // the frame before they had curled, so the animal read as five arms, not eight.
       arms = Array.from({ length: 8 }, (_, i) => {
         const slot = centre + (-SPREAD / 2 + (i / 7) * SPREAD);
-        const len = reach * rand(0.8, 1.16);
+        // A WIDE SPREAD OF LENGTHS, not a fan of equal spokes. Eight arms within a
+        // third of each other in length is a sea anemone; an octopus has some drawn in
+        // and curled and one or two reaching right across the frame, and that variety
+        // is most of what makes the silhouette read as an animal rather than a burst.
+        const len = reach * rand(0.42, 1.18);
         const seg = len / SEGMENTS;
         return {
           ang: Array.from({ length: SEGMENTS }, () => slot),
@@ -184,6 +196,7 @@ export default function DeepField({
           // way is a flower, and the eye reads a flower as a logo rather than an animal
           coil: (i % 2 ? 1 : -1) * rand(0.55, 1.15),
           rate: rand(0.5, 0.95),
+          depth: rand(0.12, 1),
           attn: 0, found: 0,
         };
       });
@@ -214,9 +227,11 @@ export default function DeepField({
       for (let i = 1; i < SEGMENTS; i++) {
         const u = i / (SEGMENTS - 1);
         // the coil deepens along the arm; the wave travels outward and dies at the base
+        // CURL IS PER JOINT, so the same total bend spread over a longer arm reads as
+        // a straighter line. A long arm needs a tighter coil, not the same one.
         const bend =
-          coil * (0.3 + u) * 0.155 +
-          Math.sin(clock * a.rate * 2.1 - i * 0.52 + a.d1) * 0.06 * u;
+          coil * (0.3 + u) * 0.21 +
+          Math.sin(clock * a.rate * 2.1 - i * 0.52 + a.d1) * 0.07 * u;
         const b = bend * (1 - straight * 0.93);
         a.ang[i] = a.ang[i - 1] + (b > MAX_TURN ? MAX_TURN : b < -MAX_TURN ? -MAX_TURN : b);
       }
@@ -229,38 +244,59 @@ export default function DeepField({
       }
     }
 
+    /**
+     * Two colours and a dissolve.
+     *
+     * The arms were one flat bone grey from shoulder to tip, which is why they read as
+     * wire rather than as an animal: nothing in a living thing is one value along its
+     * whole length. The stroke warms toward the tip — bone into the accent, barely, far
+     * short of orange — and the last sixth fades to nothing instead of stopping at a
+     * round cap, so the tip goes into the dark rather than ending in it.
+     */
+    function armColor(u: number, found: number): string {
+      const warm = Math.min(1, u * 0.55 + found * Math.max(0, u - 0.6) * 2.4);
+      const r = Math.round(232 + (255 - 232) * warm);
+      const g = Math.round(220 + (138 - 220) * warm);
+      const b = Math.round(206 + (61 - 206) * warm);
+      return `rgb(${r},${g},${b})`;
+    }
+
     function drawArm(a: Arm) {
       const n = a.pts, L = n.length;
       const fade = 1 - depth * 0.85;
       if (fade <= 0.01) return;
-      const thick = Math.max(1.5, unit * 0.0062);
+      // near arms are thicker and brighter; far ones recede
+      const near = 0.68 + a.depth * 0.32;
+      const thick = Math.max(1.3, unit * 0.0068) * near;
 
       ctx!.lineCap = "round";
       ctx!.lineJoin = "round";
       for (let i = 1; i < L; i++) {
         const u = i / (L - 1);
+        // the tip dissolves rather than ending
+        const tip = u > 0.84 ? Math.max(0, 1 - (u - 0.84) / 0.16) : 1;
         ctx!.beginPath();
         ctx!.moveTo(n[i - 1].x, n[i - 1].y);
         ctx!.lineTo(n[i].x, n[i].y);
-        // tapering to nothing at the tip, which is what reads as an arm
-        ctx!.lineWidth = Math.max(0.55, thick * (1 - u * 0.82));
-        const lit = a.found * Math.max(0, u - 0.6) * 2.5;
-        ctx!.globalAlpha = clamp((0.3 + a.attn * 0.32) * (1 - u * 0.35) * fade, 0, 1);
-        ctx!.strokeStyle = lit > 0.04
-          ? `rgb(${ACCENT})`
-          : `rgb(${BONE})`;
+        ctx!.lineWidth = Math.max(0.5, thick * (1 - u * 0.8));
+        ctx!.globalAlpha = clamp((0.34 + a.attn * 0.3) * near * (1 - u * 0.22) * tip * fade, 0, 1);
+        ctx!.strokeStyle = armColor(u, a.found);
         ctx!.stroke();
       }
 
-      // Suckers, on the inner edge only, at a quarter of the arm's alpha. They are the
-      // one detail that distinguishes an arm from a tendril, and the one that turns it
-      // into an illustration if it is drawn at full strength.
+      // Suckers, on the INNER edge. They sat on the centreline, which is where a row of
+      // beads goes and not where suckers go — offsetting them perpendicular, on the side
+      // the arm curls toward, is most of what makes the shape read as an arm at all.
+      const side = a.coil >= 0 ? 1 : -1;
       ctx!.fillStyle = `rgb(${BONE})`;
-      ctx!.globalAlpha = (0.11 + a.attn * 0.1) * fade;
-      for (let i = 4; i < L - 1; i += 2) {
+      for (let i = 4; i < L - 2; i += 2) {
         const u = i / (L - 1);
+        const ang = a.ang[Math.min(i, SEGMENTS - 1)];
+        const px = -Math.sin(ang) * side, py = Math.cos(ang) * side;
+        const off = thick * 0.62 * (1 - u * 0.7);
+        ctx!.globalAlpha = (0.14 + a.attn * 0.1) * near * (1 - u * 0.5) * fade;
         ctx!.beginPath();
-        ctx!.arc(n[i].x, n[i].y, Math.max(0.45, thick * 0.42 * (1 - u)), 0, Math.PI * 2);
+        ctx!.arc(n[i].x + px * off, n[i].y + py * off, Math.max(0.4, thick * 0.34 * (1 - u * 0.8)), 0, Math.PI * 2);
         ctx!.fill();
       }
       ctx!.globalAlpha = 1;
@@ -273,6 +309,24 @@ export default function DeepField({
       flinch = Math.max(0, flinch - dt * 2.2);
       const oy = depth * h * 0.3;               // the body drops as the page leaves it
       ctx!.clearRect(0, 0, w, h);
+
+      // THE BODY. Eight strokes meeting at a point is a starburst, and that is exactly
+      // what the convergence looked like once it sat near enough the edge to be seen.
+      // It is not a drawn body — an outline would be a mascot, and the thing works
+      // because you never quite see the animal — it is a soft lightening of the ground
+      // where the mass is, the way something large reads just under the surface.
+      {
+        const ey = by + oy;
+        const rr = unit * 0.3;
+        if (bx > -rr && bx < w + rr && ey > -rr && ey < h + rr) {
+          const gl = ctx!.createRadialGradient(bx, ey, 0, bx, ey, rr);
+          gl.addColorStop(0, `rgba(${BONE},${(0.052 * (1 - depth)).toFixed(4)})`);
+          gl.addColorStop(0.45, `rgba(${BONE},${(0.018 * (1 - depth)).toFixed(4)})`);
+          gl.addColorStop(1, `rgba(${BONE},0)`);
+          ctx!.fillStyle = gl;
+          ctx!.fillRect(bx - rr, ey - rr, rr * 2, rr * 2);
+        }
+      }
 
       // ---- the water, and the way it parts around the pointer --------------------
       // Displacement is a render offset, never written back: data that stayed where a
@@ -328,7 +382,10 @@ export default function DeepField({
       // then down to a quarter — it has looked, and it has gone back to work.
       const gate = ptr.on ? clamp(1 - (ptr.idle - 1.0) / 2.2, 0.22, 1) : 0;
 
-      for (let i = 0; i < arms.length; i++) {
+      // far arms first: an arm in front of another has to be drawn over it, and with
+      // eight arms arriving from one point that overlap is most of the volume
+      const order = arms.map((_, i) => i).sort((p, q) => arms[p].depth - arms[q].depth);
+      for (const i of order) {
         const a = arms[i];
         const want = rank.includes(i) ? gate : 0;
         // in quickly, out slowly: noticing is fast, losing interest is not
