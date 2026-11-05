@@ -97,3 +97,46 @@ test("rounding up is what covers the upstream variance", () => {
   const justOver = (CREDIT_MICRO + 1) / (markup() * MICRO);
   assert.equal(searchCredits(justOver), 2);
 });
+
+// ---- what the markup is, now that a credit is a search ----------------------------
+
+test("the valuation multiplier does not change what anything costs in credits", () => {
+  // It appears in CREDIT_MICRO and again in searchCredits, and cancels. That is the
+  // right behaviour — a three-word name is four credits because it is four times the
+  // work, whatever margin is being taken — and the reason it was wrong to call this
+  // the margin dial. The margin lives in what a pack of credits sells for.
+  const before = process.env.OCTOPUS_MARKUP;
+  try {
+    const ladder = () => [
+      searchCredits(estimateCost("a@b.com", 300)),
+      searchCredits(estimateCost("Jean Dupont", 300)),
+      searchCredits(estimateCost("Jean Pierre Dupont", 300)),
+    ];
+    assert.deepEqual(ladder(), [1, 2, 4]);
+  } finally {
+    if (before === undefined) delete process.env.OCTOPUS_MARKUP;
+    else process.env.OCTOPUS_MARKUP = before;
+  }
+});
+
+test("an absurd multiplier cannot make the price NaN", () => {
+  const before = process.env.OCTOPUS_MARKUP;
+  try {
+    for (const v of ["1e308", "-5", "0", "abc", ""]) {
+      process.env.OCTOPUS_MARKUP = v;
+      assert.ok(Number.isFinite(markup()), `markup must stay finite for ${JSON.stringify(v)}`);
+      assert.ok(markup() >= 1 && markup() <= 1000);
+    }
+  } finally {
+    if (before === undefined) delete process.env.OCTOPUS_MARKUP;
+    else process.env.OCTOPUS_MARKUP = before;
+  }
+});
+
+test("a selector worth nothing is not a cheap search — it has no price at all", () => {
+  // estimateCost("") is 0, and debit() waves a zero charge through as a no-op, so an
+  // empty selector was a free call to a per-request paid API.
+  assert.equal(searchCredits(estimateCost("", 300)), 0);
+  assert.equal(priceCredits(estimateCost("", 300)), 0);
+  // the route refuses it rather than running it; this pins the value the check reads
+});

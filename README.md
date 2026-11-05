@@ -101,15 +101,25 @@ always runs and **says what is missing** rather than faking it:
 | `LEAKOSINT_TOKEN` | No leak data, stated as such — never an empty report |
 | `POSTGRES_URL` | Single-operator: no accounts, no metering, **no audit trail**. Fine for one analyst, never for anything public |
 | `OCTOPUS_SESSION_SECRET` | Sessions are refused rather than signed with a shared constant |
-| `OCTOPUS_MARKUP` | Resale margin over the raw API cost, default `1.6` |
+| `OCTOPUS_MARKUP` | Dollar valuation of a credit, as a multiple of the raw API cost (default `1.6`). **Not the margin** — see below |
 
 ## The business layer
 
 The product resells the API. Every query has a raw cost, the operator is charged a
 marked-up price in credits, and the margin is the business.
 
-Money is an integer — one credit is one micro-dollar — because floating-point dollars
-drift and a balance that drifts leaks money in one direction. The balance check and the
+**A credit is one search.** A plain address at the default depth costs one; a
+multi-word name costs more because it genuinely is more work upstream, and so does a
+deeper sweep. Charges round up to a whole credit, which keeps a balance a whole number
+of searches and absorbs the variance in the upstream price.
+
+The ledger underneath is in micro-dollars — integers, because floating-point dollars
+drift and a balance that drifts leaks money in one direction.
+
+`OCTOPUS_MARKUP` sets what a credit is *worth* in dollars, not what it is *sold* for.
+It cannot change a credit price: a search costs what it costs in work, whatever margin
+is being taken. **The margin lives in what a pack of credits sells for** — which is a
+decision, not a config value, and there is no self-serve way to buy one yet. The balance check and the
 deduction are **one statement**, so two requests racing on the same account cannot both
 pass against a balance that covers one. A query the API refuses is refunded, because it
 did not run. Every movement is recorded, so a balance is always explainable.

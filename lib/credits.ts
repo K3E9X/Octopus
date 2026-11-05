@@ -22,13 +22,26 @@ export const MICRO = 1_000_000;                 // credits per dollar
 export const creditsEnabled = dbEnabled;
 
 /**
- * Resale markup over the raw API cost. The business is the margin, so this is a real
- * dial, read from the environment, defaulting to 1.6x. It is applied once, here, so the
- * quote the operator sees and the amount actually debited can never disagree.
+ * What a credit is worth in dollars, as a multiple of what the query costs upstream.
+ *
+ * IT IS NOT THE MARGIN DIAL ANY MORE, and calling it one was wrong. When a balance was
+ * denominated in micro-dollars this multiplied what a customer was charged. It cannot
+ * now: a credit buys one standard search, and `searchCredits` divides a cost by the
+ * cost of that standard search — so the multiplier appears in the numerator and the
+ * denominator and cancels. Setting it to 10 changes no credit price, no balance and no
+ * trial; a three-word name is four credits because it is four times the work, which is
+ * the right behaviour and the reason the cancellation is not a bug to reverse.
+ *
+ * What it still does, and all it does, is set the DOLLAR VALUATION of a credit — the
+ * figure quoted alongside a price and used to size a grant made in dollars. The margin
+ * now lives where it belongs: in what a pack of credits sells for.
+ *
+ * Bounded at both ends. Unbounded, 1e308 made CREDIT_MICRO Infinity, searchCredits NaN,
+ * and every search a 500 from the database driver.
  */
 export function markup(): number {
   const m = Number(process.env.OCTOPUS_MARKUP);
-  return Number.isFinite(m) && m >= 1 ? m : 1.6;
+  return Number.isFinite(m) && m >= 1 && m <= 1000 ? m : 1.6;
 }
 
 export const toUSD = (micro: number) => micro / MICRO;
@@ -134,13 +147,27 @@ export async function grant(userId: string, deltaMicro: number, note?: string): 
   await ensure();
   const q = sql();
   if (!q) return { ok: false, error: "database unavailable" };
-  // clamp at zero: a claw-back cannot drive a balance negative
-  const rows = await q`UPDATE octopus_users
-    SET credits = GREATEST(0, credits + ${deltaMicro})
-    WHERE id = ${userId} RETURNING credits`;
-  const bal = Number((rows as any[])[0]?.credits ?? NaN);
+  // Clamp at zero — a claw-back cannot drive a balance negative — and RECORD WHAT
+  // ACTUALLY MOVED. Logging the requested delta while the update clamped meant a
+  // clawback larger than the balance left the ledger permanently disagreeing with it,
+  // which defeats this module's one stated guarantee: a balance is always explainable.
+  // The old balance is captured in the same statement rather than read before it, so
+  // the figure logged is what this update actually moved and not what a concurrent one
+  // left behind. Written out explicitly: whether a subquery inside RETURNING sees the
+  // pre- or post-update row is exactly the kind of thing not to be clever about when
+  // the answer is a ledger entry.
+  const rows = await q`UPDATE octopus_users AS u
+    SET credits = GREATEST(0, u.credits + ${deltaMicro})
+    FROM (SELECT id, credits AS prev FROM octopus_users WHERE id = ${userId} FOR UPDATE) AS o
+    WHERE u.id = o.id
+    RETURNING u.credits, (u.credits - o.prev) AS moved`;
+  const row = (rows as any[])[0];
+  const bal = Number(row?.credits ?? NaN);
   if (!Number.isFinite(bal)) return { ok: false, error: "no such user" };
-  await entry(userId, deltaMicro, bal, deltaMicro > 0 ? "grant" : "clawback", note);
+  const moved = Number(row?.moved ?? deltaMicro);
+  const applied = Number.isFinite(moved) ? moved : deltaMicro;
+  await entry(userId, applied, bal, applied > 0 ? "grant" : "clawback",
+    applied === deltaMicro ? note : `${note || "adjustment"} (requested ${deltaMicro}, clamped at zero)`);
   return { ok: true, balance: bal };
 }
 
@@ -197,7 +224,23 @@ export async function ledgerOf(userId: string, limit = 40): Promise<LedgerRow[]>
  * searches" is exactly what the balance says, with none of the arithmetic that made
  * "14,286 cr" mean two of anything.
  */
-export const TRIAL_SEARCHES = Math.max(0, Number(process.env.OCTOPUS_TRIAL_SEARCHES ?? 2));
+/**
+ * `??` only catches undefined, and `${X:-}` in a compose file produces an EMPTY
+ * STRING — which Number() reads as 0. So a deployment that merely listed the variable
+ * without setting it silently turned the trial off, and every signup met "insufficient
+ * credits" on their first search with nothing in any log to explain it. Blank, junk and
+ * absurd values all fall back to the default now, and the ceiling stops a typo from
+ * handing out a billion free searches.
+ */
+function trialSearches(): number {
+  const raw = String(process.env.OCTOPUS_TRIAL_SEARCHES ?? "").trim();
+  if (!raw) return 2;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 2;
+  return Math.min(10_000, Math.floor(n));
+}
+
+export const TRIAL_SEARCHES = trialSearches();
 export const TRIAL_CREDITS = creditsToMicro(TRIAL_SEARCHES);
 
 /** A deployment that prefers to set a dollar figure still can; it wins when present. */

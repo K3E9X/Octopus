@@ -43,17 +43,36 @@ const BASES = new Set<string>(LEGAL_BASES);
 const DEFAULT_LIMIT = 300;
 const clampLimit = (n: unknown) => Math.max(100, Math.min(10000, Number(n) || DEFAULT_LIMIT));
 
+/**
+ * The depth a request will actually run at.
+ *
+ * Shared by the quote and by the charge, because they used to resolve it separately:
+ * the quote read only the query string, while the charge also consulted the browser's
+ * config header and LEAKOSINT_LIMIT — a documented, compose-wired setting. On any
+ * deployment that set it, every quote was priced at 300 and every search billed at the
+ * configured depth. A price shown is a promise; two code paths deciding it is how the
+ * promise gets broken without anybody writing a bug.
+ */
+function resolveLimit(req: NextRequest, explicit?: unknown): number {
+  const cfg = readClientConfig(req);
+  return clampLimit(explicit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT || DEFAULT_LIMIT);
+}
+
 // ---- GET: what would this cost? ---------------------------------------------------
 
 export async function GET(req: NextRequest) {
-  const limit = clampLimit(req.nextUrl.searchParams.get("limit"));
+  const limit = resolveLimit(req, req.nextUrl.searchParams.get("limit"));
 
   // A pivot is quoted as a batch: several selectors, billed per selector, one round
   // trip. The operator sees the total before a single one of them is sent.
   const pivots = (req.nextUrl.searchParams.getAll("pivot") || []).map((x) => x.trim()).filter(Boolean);
   if (pivots.length) {
     const country = (req.nextUrl.searchParams.get("country") || "FR").toUpperCase();
-    const subjects = pivots.slice(0, MAX_PIVOTS).map((p) => buildSubject(p, { defaultCountry: country }));
+    // `exact: false` to match what runPivot sends. buildSubject QUOTES by default, and
+    // quoting collapses a multi-word selector to one token — so the quote was pricing
+    // complexity 1 while the charge billed 5, 16 or 40. Up to six times the figure the
+    // operator was shown, in the shipped interface, with nobody doing anything wrong.
+    const subjects = pivots.slice(0, MAX_PIVOTS).map((p) => buildSubject(p, { defaultCountry: country, exact: false }));
     const each = subjects.map((s) => {
       const usd = estimateCost(s.query, limit);
       return { selector: s.raw, kind: s.kind, query: s.query, usd, credits: searchCredits(usd) };
@@ -137,8 +156,14 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const raw = String(body?.subject || "").trim();
-  const isPivot = Array.isArray(body?.pivots) && body.pivots.length > 0;
-  if (!raw && !isPivot) return NextResponse.json({ error: "Enter something to search for." }, { status: 400 });
+  // Judged on what SURVIVES filtering, not on what was sent. `pivots: ["  "]` passed
+  // the old test, emptied on the way through, and fell into the single path with an
+  // empty selector — which estimateCost prices at zero, which debit waves through as a
+  // no-op. An unlimited free channel to a per-request paid API, and to the audit table.
+  const pivotRaw: string[] = Array.isArray(body?.pivots)
+    ? body.pivots.map((x: unknown) => String(x || "").trim()).filter(Boolean)
+    : [];
+  if (!raw && !pivotRaw.length) return NextResponse.json({ error: "Enter something to search for." }, { status: 400 });
   if (raw.length > 256) return NextResponse.json({ error: "That query is too long to be a selector." }, { status: 400 });
 
   // The accountability gate. Cheap to satisfy, impossible to skip: the record of WHY
@@ -154,11 +179,8 @@ export async function POST(req: NextRequest) {
   const region = String(body?.country || "FR").toUpperCase();
 
   // --- pivot: several selectors, one billed round trip ------------------------------
-  const pivotList: string[] = Array.isArray(body?.pivots)
-    ? body.pivots.map((x: unknown) => String(x || "").trim()).filter(Boolean)
-    : [];
-  if (pivotList.length) {
-    return runPivot(req, pivotList.slice(0, MAX_PIVOTS), { user, legalBasis, region, body });
+  if (pivotRaw.length) {
+    return runPivot(req, pivotRaw.slice(0, MAX_PIVOTS), { user, legalBasis, region, body });
   }
 
   const subject = buildSubject(raw, {
@@ -186,8 +208,13 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT || DEFAULT_LIMIT);
+  const limit = resolveLimit(req, body?.limit);
   const price = priceCredits(estimateCost(subject.query, limit));
+  // Nothing reaches the paid endpoint for free. A selector the biller values at zero is
+  // not a cheap search, it is not a search.
+  if (price <= 0) {
+    return NextResponse.json({ error: "That is not a selector anything can be searched for." }, { status: 400 });
+  }
 
   if (creditsEnabled && user) {
     const charge = await debit(user.id, price, `search: ${subject.canonical.slice(0, 48)}`);
@@ -322,9 +349,12 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
     return NextResponse.json({ error: "This deployment has no leak source configured.", configured: false }, { status: 400 });
   }
 
-  const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT || DEFAULT_LIMIT);
+  const limit = resolveLimit(req, body?.limit);
   const queries = subjects.map((s) => s.query);
   const price = priceCredits(estimateCost(queries, limit));
+  if (price <= 0) {
+    return NextResponse.json({ error: "No selector here can be searched for." }, { status: 400 });
+  }
 
   if (creditsEnabled && user) {
     const charge = await debit(user.id, price, `pivot: ${selectors.length} selectors`);
