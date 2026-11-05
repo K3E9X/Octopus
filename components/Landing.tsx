@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { OctoMark } from "./OctoMark";
 import Sift from "./Sift";
+import { VIEWS, viewCountWord } from "@/lib/views";
 import dynamic from "next/dynamic";
 
 // Decoration behind real markup: it never gates content, so it is loaded after it.
@@ -38,11 +39,29 @@ const STEPS = [
   },
 ];
 
-const VIEWS = [
-  { t: "Subject", d: "The person the rows describe: name, addresses, phones, documents — each value naming the databases that carried it, ranked by how many independently agree." },
-  { t: "By type", d: "Every field ranked worst-first — passwords and bank details at the top, each with what it means and what to do about it." },
-  { t: "By breach", d: "Which leak exposed what, with that breach's own description and date." },
-  { t: "Timeline", d: "When each compromise happened, oldest to newest." },
+/**
+ * What the tool does that a lookup does not.
+ *
+ * The capabilities a reader would otherwise have to buy a search to discover — and the
+ * ones that are genuinely ours rather than the category's.
+ */
+const DOES = [
+  {
+    t: "Pivot",
+    d: "A name identifies nobody; the addresses and numbers inside its results do. One click searches them — several at once, in a single request, priced before it runs — and the ambiguity becomes a person.",
+  },
+  {
+    t: "Cases and history",
+    d: "File a search under a reference and every hop files with it. Your own queries are yours to re-read; nobody else's are.",
+  },
+  {
+    t: "Export",
+    d: "CSV one line per fact, a raw variant with every column the dump returned, and JSON that carries the query — because a report without the question it answers cannot be checked later.",
+  },
+  {
+    t: "Password habits",
+    d: "Three leaked passwords that are one stem with a rotating year is a thing worth being told: changing the newest one leaves the account guessable from the old leak.",
+  },
 ];
 
 export default function Landing({ signedIn }: { signedIn: boolean }) {
@@ -87,10 +106,21 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section className="lk2-lp-sec">
-          <h2>Four ways to read the same facts.</h2>
+          {/* The count comes from the list itself. Written out, it was wrong in four
+              separate places the moment a view was added. */}
+          <h2>{viewCountWord().replace(/^./, (c) => c.toUpperCase())} ways to read the same facts.</h2>
           <div className="lk2-views">
             {VIEWS.map((v) => (
-              <div className="lk2-vcard" key={v.t}><h3>{v.t}</h3><p>{v.d}</p></div>
+              <div className="lk2-vcard" key={v.id}><h3>{v.label}</h3><p>{v.blurb}</p></div>
+            ))}
+          </div>
+        </section>
+
+        <section className="lk2-lp-sec">
+          <h2>And what you do with them.</h2>
+          <div className="lk2-views">
+            {DOES.map((d) => (
+              <div className="lk2-vcard" key={d.t}><h3>{d.t}</h3><p>{d.d}</p></div>
             ))}
           </div>
         </section>

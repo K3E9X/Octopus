@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReport, headline, parseBreachDate, looksFinancial } from "../lib/report.ts";
+import { buildReport, headline, parseBreachDate, looksFinancial, precedenceOrder, ruleFor } from "../lib/report.ts";
 import { buildSubject } from "../lib/subject.ts";
 import type { LeakDatabase } from "../lib/leakosint.ts";
 
@@ -370,4 +370,69 @@ test("end to end: a Facebook dump produces no bank findings", () => {
   assert.equal(cat(r, "financial"), undefined, "not one of them is a bank detail");
   assert.equal(r.highlights.financial.length, 0);
   assert.ok(cat(r, "online"), "they are online identifiers, which is what they are");
+});
+
+// ======================================================================================
+// THE PRECEDENCE ITSELF.
+//
+// The order these rules run in is load-bearing, and while it was implicit it was wrong
+// three times in one session — each time producing a confident, alarming, false
+// statement. These tests assert the ORDER, not only the outcome, so moving a rule is a
+// decision somebody has to make on purpose rather than an accident of editing.
+// ======================================================================================
+
+const item = (kind: string, label: string, value: string) => ({ kind: kind as any, label, value });
+
+test("the precedence is what it is, and changing it has to be deliberate", () => {
+  assert.deepEqual(precedenceOrder(), [
+    "password",        // nothing outranks a leaked secret
+    "financial",       // what a person most needs told
+    "document",        // the raw material of identity theft
+    "identity",        // above the date rule, so a birthday is identity
+    "activity-date",   // above every label rule below it — see "LastLogin"
+    "location",
+    "email",
+    "phone",
+    "professional",    // above the catch-all, so JobTitle is work
+    "online",          // the broadest label rule, so it matches last
+    "counters",
+  ]);
+});
+
+test("REGRESSION: a timestamp is account history, not an online account", () => {
+  // "LastLogin" contains "login". The handle rule used to reach it first.
+  assert.equal(ruleFor(item("date", "LastLogin", "2021-09-30"))?.id, "activity-date");
+  assert.equal(ruleFor(item("date", "LastSeen", "2021-09-30"))?.category, null);
+});
+
+test("REGRESSION: a birthday is identity, even though it is also a date", () => {
+  assert.equal(ruleFor(item("date", "BDay", "1990-01-01"))?.id, "identity");
+  assert.equal(ruleFor(item("date", "DateOfBirth", "1990-01-01"))?.category, "identity");
+});
+
+test("REGRESSION: an identifier column beats a card-shaped value", () => {
+  // a real test card number, in a column called Facebook, is an id
+  assert.equal(ruleFor(item("identifier", "Facebook", "4111111111111111"))?.id, "online");
+  // and the same digits in a column that says card are a card
+  assert.equal(ruleFor(item("other", "CardNumber", "4111111111111111"))?.id, "financial");
+});
+
+test("REGRESSION: BankAccount stays financial despite being typed an identifier", () => {
+  // the upstream classifier types it that way for containing the word "account"
+  assert.equal(ruleFor(item("identifier", "BankAccount", "FR7630006000011234567890189"))?.id, "financial");
+});
+
+test("a password outranks everything, including a card-shaped value", () => {
+  assert.equal(ruleFor(item("credential", "Password", "4111111111111111"))?.id, "password");
+});
+
+test("JobTitle is work, not a profile — the catch-all must not reach it first", () => {
+  assert.equal(ruleFor(item("other", "JobTitle", "Data Engineer"))?.id, "professional");
+});
+
+test("a field nothing recognises is still shown, under its own name", () => {
+  const r = ruleFor(item("other", "InternalFlag", "A7"));
+  assert.equal(r, null, "no rule claims it");
+  const rep = buildReport(JANE, [db("X", "", { Email: "jane.doe@example.com", InternalFlag: "A7" })]);
+  assert.ok(cat(rep, "other"), "and it lands in Other details rather than being dropped");
 });

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { OctoMark } from "./OctoMark";
+import { VIEWS, type ViewId } from "@/lib/views";
 
 // the constellation view is SVG-heavy and only needed once a report exists
 const LeakOrbit = dynamic(() => import("./LeakOrbit"), { ssr: false });
@@ -76,7 +77,8 @@ interface Quote {
 }
 
 type Step = "enter" | "basis" | "loading" | "report";
-type View = "identity" | "services" | "orbit" | "category" | "source" | "timeline" | "records";
+// the list lives in lib/views, so the tabs and the landing cannot disagree about it
+type View = ViewId;
 
 const SEV_LABEL: Record<Sev, string> = { critical: "critical", high: "high", medium: "notable", low: "minor" };
 const SENSITIVE = new Set(["password", "financial", "document"]);
@@ -385,19 +387,25 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
       {report.passwordHabits?.length > 0 && <Habits habits={report.passwordHabits} />}
 
       <div className="lk2-tabs">
-        {([
-          ["identity", "Subject"],
-          ["services", `Services · ${report.services?.length ?? 0}`],
-          ["orbit", "Orbit"],
-          ["category", `By type · ${report.categories.length}`],
-          ["source", `By breach · ${report.breachCount}`],
-          ["timeline", "Timeline"],
-          ["records", `Records · ${report.records?.reduce((n, g) => n + g.rows.length, 0) ?? 0}`],
-        ] as [View, string][]).map(([v, lbl]) => (
-          <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}
-            disabled={(v === "timeline" && report.timeline.length === 0) || (v === "orbit" && report.verdict === "clear")
-              || (v === "records" && !report.records?.length)}>{lbl}</button>
-        ))}
+        {VIEWS.map((v) => {
+          // the count beside a label, where there is one worth showing
+          const n =
+            v.id === "services" ? report.services?.length ?? 0 :
+            v.id === "category" ? report.categories.length :
+            v.id === "source" ? report.breachCount :
+            v.id === "records" ? report.records?.reduce((t, g) => t + g.rows.length, 0) ?? 0 :
+            null;
+          const empty =
+            (v.id === "timeline" && report.timeline.length === 0) ||
+            (v.id === "orbit" && report.verdict === "clear") ||
+            (v.id === "records" && !report.records?.length);
+          return (
+            <button key={v.id} className={view === v.id ? "on" : ""} onClick={() => setView(v.id)}
+              disabled={empty} title={v.blurb}>
+              {v.label}{n !== null ? ` · ${n}` : ""}
+            </button>
+          );
+        })}
       </div>
 
       <div className={"lk2-view" + (view === "identity" ? "" : " lk2-off")}>
@@ -411,8 +419,8 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
 
       {view === "orbit" && <LeakOrbit report={{ subject: report.subject.raw, sources: report.sources, breachCount: report.breachCount, dataPoints: report.dataPoints }} />}
 
-      {/* All three views stay mounted; only the open one shows on screen. Print shows
-          every view so the PDF is the complete report whichever tab was open. */}
+      {/* Every view stays mounted; only the open one shows on screen. Print reveals them
+          all, so the PDF is the whole report whichever tab happened to be open. */}
       <div className={"lk2-view" + (view === "category" ? "" : " lk2-off")}>
         <h4 className="lk2-print-h">By type</h4>
         <div className="lk2-cats">

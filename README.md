@@ -133,7 +133,8 @@ lib/leakosint.ts   the source: cost, rate limit, parsing, refusals
 lib/subject.ts     what was asked for, and what to match rows against
 lib/attribution.ts is this row about the subject?
 lib/identity.ts    rows → a person, every value citing its databases
-lib/report.ts      the three views, built from attributed rows
+lib/report.ts      the report, built from attributed rows
+lib/views.ts       the views a report has — one list, so nothing can disagree about it
 lib/credits.ts     the business layer
 lib/audit.ts       the hash-chained query log
 docs/              the API contract

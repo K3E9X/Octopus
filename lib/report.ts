@@ -1,6 +1,8 @@
 // The report — what the rows actually say about the subject.
 //
-// Three views of the same facts, plus the thing a pile of rows is not: a person.
+// Several views of the same facts, plus the thing a pile of rows is not: a person.
+// The list of them lives in lib/views, because a count written down in prose drifts the
+// first time one is added — and it had drifted in four separate places.
 //
 //   IDENTITY    — the rows consolidated into one subject, every value citing the
 //                 databases that carried it (lib/identity).
@@ -338,39 +340,152 @@ const RANK: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0
 
 const BIRTHISH = /birth|\bdob\b|\bbday\b|born/i;
 
-function categorize(it: ExposureItem): Category | null {
-  // Humanise first so CamelCase / snake_case columns ("CompanyName", "bank_account")
+/**
+ * What a field is, decided by an ORDERED TABLE rather than a run of if-statements.
+ *
+ * The order here is load-bearing, and when it was implicit it was wrong three times in
+ * one working session — each time producing a confident, alarming, false statement,
+ * which is the only kind of defect that really matters in this product:
+ *
+ *   "LastLogin" was shown as an online account, because the rule that recognises
+ *   handles matched the word "login" before anything looked at the field's type.
+ *
+ *   A street called "rue Alexandre Dumas" confirmed a person named Alexandre, because
+ *   the value was read before the column was weighed.
+ *
+ *   A social network's user ids were reported as leaked bank cards, because a
+ *   card-shaped value outranked a column that had already said it held an identifier.
+ *
+ * Writing the precedence down as data fixes the class rather than the three instances.
+ * Each rule carries the reason it sits where it does, so moving one is a decision
+ * somebody has to make on purpose instead of an accident of editing; and the ordering
+ * itself becomes testable — "an identifier column beats a card-shaped value" is an
+ * assertion, where "do not move line 14" is a hope.
+ *
+ * Read top to bottom; the first match wins. A rule returning `null` means the field is
+ * metadata and belongs in no category at all.
+ */
+interface Rule {
+  /** what this rule is, for the test that pins the order */
+  id: string;
+  /** why it sits HERE and not lower — the thing the old comments had to carry */
+  why: string;
+  category: Category | null;
+  match: (c: { kind: ExposureItem["kind"]; label: string; rawLabel: string; value: string }) => boolean;
+}
+
+const PRECEDENCE: Rule[] = [
+  {
+    id: "password",
+    why: "The most dangerous thing a dump can hold. Nothing should ever outrank it.",
+    category: "password",
+    match: (c) => c.kind === "credential" || /\b(pass(word|wd)?|pwd|hash|secret|otp|pin)\b/.test(c.label),
+  },
+  {
+    id: "financial",
+    why:
+      "Second because bank details are what a person most needs told. looksFinancial " +
+      "weighs the column name AGAINST the value shape internally — an earlier fix that " +
+      "skipped this rule for anything typed `identifier` also skipped BankAccount, " +
+      "which the upstream classifier types that way for containing the word 'account'.",
+    category: "financial",
+    match: (c) => looksFinancial(c.rawLabel, c.value),
+  },
+  {
+    id: "document",
+    why: "An identity-document number is the raw material identity theft is built on.",
+    category: "document",
+    match: (c) =>
+      c.kind === "document" ||
+      /\b(passport|national.?id|\bssn\b|\binn\b|snils|licen[cs]e|id.?card|driver|tax.?id|nino)\b/.test(c.label),
+  },
+  {
+    id: "identity",
+    why: "Before the date rule below, so a birthday is identity rather than metadata.",
+    category: "identity",
+    match: (c) =>
+      c.kind === "name" ||
+      /\b(full.?name|^name$|first.?name|last.?name|surname|patronym|\bfio\b|gender|\bsex\b)\b/.test(c.label) ||
+      BIRTHISH.test(c.label),
+  },
+  {
+    id: "activity-date",
+    why:
+      "ABOVE every label rule below it, and that is the whole point of its position. " +
+      "'LastLogin' contains 'login', so the handle rule claimed it and a timestamp was " +
+      "presented as an online account. A date that is not a birthday is account history, " +
+      "and the person it belongs to learns nothing from being shown it.",
+    category: null,
+    match: (c) => c.kind === "date",
+  },
+  {
+    id: "location",
+    why: "Before contact details: an address is more specific than the email beside it.",
+    category: "location",
+    match: (c) =>
+      c.kind === "address" ||
+      /\b(address|street|city|region|country|postal|post.?code|\bzip\b|state|province|\bgeo\b|location)\b/.test(c.label),
+  },
+  {
+    id: "email",
+    why: "A contact detail, below the things that identify or endanger.",
+    category: "email",
+    match: (c) => c.kind === "email" || /e-?mail/.test(c.label),
+  },
+  {
+    id: "phone",
+    why: "As email.",
+    category: "phone",
+    match: (c) => c.kind === "phone" || /\b(phone|mobile|tel|msisdn|numero)\b/.test(c.label),
+  },
+  {
+    id: "professional",
+    why: "Above the catch-all for handles, so 'JobTitle' is work and not a profile.",
+    category: "professional",
+    match: (c) =>
+      /\b(company|employer|job.?title|occupation|industry|department|position|role|level|work|professional|business)\b/.test(c.label),
+  },
+  {
+    id: "online",
+    why:
+      "The broadest label rule, so it goes last among the matches — it recognises " +
+      "'login', 'profile' and every platform name, which appear inside fields that are " +
+      "really something else.",
+    category: "online",
+    match: (c) =>
+      c.kind === "identifier" || c.kind === "login" ||
+      /\b(nick|user.?name|login|profile|handle|telegram|facebook|instagram|twitter|\bvk\b|\bok\b|link|url|domain|site|\bip\b)\b/.test(c.label),
+  },
+  {
+    id: "counters",
+    why: "A tally is not a leaked detail about anybody.",
+    category: null,
+    match: (c) => c.kind === "count" || c.kind === "field",
+  },
+];
+
+/** The rule ids in order, so a test can pin the precedence itself. */
+export const precedenceOrder = (): string[] => PRECEDENCE.map((r) => r.id);
+
+/** Which rule claims a field — exported so a test can name the winner, not just the outcome. */
+export function ruleFor(it: ExposureItem): Rule | null {
+  // Humanised first so CamelCase / snake_case columns ("CompanyName", "bank_account")
   // become "company name" / "bank account" — otherwise \b-bounded keywords never match
   // inside a concatenated column name.
-  const L = humanLabel(it.label).toLowerCase();
-  const v = it.value;
+  const c = {
+    kind: it.kind,
+    label: humanLabel(it.label).toLowerCase(),
+    rawLabel: it.label,
+    value: it.value,
+  };
+  return PRECEDENCE.find((r) => r.match(c)) ?? null;
+}
 
-  if (it.kind === "credential" || /\b(pass(word|wd)?|pwd|hash|secret|otp|pin)\b/.test(L)) return "password";
-  // No kind guard here, deliberately. The first attempt at this fix refused anything
-  // typed `identifier` — which also refused "BankAccount", because the upstream
-  // classifier types that as an identifier for containing the word "account". The
-  // discrimination belongs inside looksFinancial, which weighs the column name against
-  // the value shape, rather than out here where only one of the two is visible.
-  if (looksFinancial(it.label, v)) return "financial";
-  if (it.kind === "document" || /\b(passport|national.?id|\bssn\b|\binn\b|snils|licen[cs]e|id.?card|driver|tax.?id|nino)\b/.test(L)) return "document";
-  if (it.kind === "name" || /\b(full.?name|^name$|first.?name|last.?name|surname|patronym|\bfio\b|gender|\bsex\b)\b/.test(L) || BIRTHISH.test(L)) return "identity";
-
-  // A date that is not a birthday is account history — when it was opened, when it was
-  // last used — and the person it belongs to learned nothing by being shown it.
-  //
-  // This check has to come HERE, before the label rules below, and that is the whole
-  // point of its position. "LastLogin" contains "login", so the rule that recognises
-  // handles claimed it first and a timestamp was being presented as an online account.
-  // Kind beats label whenever the kind is already certain.
-  if (it.kind === "date") return null;
-  if (it.kind === "address" || /\b(address|street|city|region|country|postal|post.?code|\bzip\b|state|province|\bgeo\b|location)\b/.test(L)) return "location";
-  if (it.kind === "email" || /e-?mail/.test(L)) return "email";
-  if (it.kind === "phone" || /\b(phone|mobile|tel|msisdn|numero)\b/.test(L)) return "phone";
-  if (/\b(company|employer|job.?title|occupation|industry|department|position|role|level|work|professional|business)\b/.test(L)) return "professional";
-  if (it.kind === "identifier" || it.kind === "login" || /\b(nick|user.?name|login|profile|handle|telegram|facebook|instagram|twitter|\bvk\b|\bok\b|link|url|domain|site|\bip\b)\b/.test(L)) return "online";
-
-  if (it.kind === "count" || it.kind === "field") return null;
-  return "other";
+function categorize(it: ExposureItem): Category | null {
+  const rule = ruleFor(it);
+  // Nothing matched: it is something this code has never seen, and it is shown under
+  // its own column name rather than dropped.
+  return rule ? rule.category : "other";
 }
 
 function severityOf(c: Category): Severity { return c === "financial" ? "critical" : META[c].severity; }
