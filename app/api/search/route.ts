@@ -144,6 +144,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Refunding is not idempotent and the ledger carries no "already refunded" marker, so
+  // the money has to go back exactly once. The refusal path's refund used to sit INSIDE
+  // the try: anything that threw after it — the ledger insert, the balance read,
+  // building the response — fell into the catch and refunded a second time, creating a
+  // full search price out of nothing on every flaky write.
+  let refunded = false;
+  const giveBack = async (why: string) => {
+    if (refunded || !user) return;
+    refunded = true;
+    await refund(user.id, price, why).catch(() => {});
+  };
+
   try {
     const res = await leakOsint({
       token, request: subject.query, limit,
@@ -153,10 +165,24 @@ export async function POST(req: NextRequest) {
     // The API answers 200 even when it refuses. A refusal is not a clean result, and
     // the money goes back because the query did not run.
     if (res.error) {
-      if (user) await refund(user.id, price, `refund: ${res.error}`);
+      await giveBack(`refund: ${res.error}`);
+      // The upstream's error text is a third party's string, produced by a request that
+      // carried our token. Reflecting it verbatim hands the caller whatever that party
+      // chose to put in it, and some APIs echo the credential back on an auth failure.
+      // The operator gets a category and an instruction; the detail stays server-side.
+      const reason = /token|auth|forbidden/i.test(res.error) ? "configuration"
+        : /limit|too many|rate/i.test(res.error) ? "rate-limited"
+        : /timed out|unreachable/i.test(res.error) ? "unreachable"
+        : "refused";
+      const says: Record<string, string> = {
+        configuration: "The leak source rejected this deployment's credentials — an administrator needs to check the token in /admin.",
+        "rate-limited": "The leak source is rate-limiting this deployment. Try again shortly.",
+        unreachable: "The leak source did not answer in time.",
+        refused: "The leak source refused the query.",
+      };
       return NextResponse.json({
-        error: `The leak source refused the query: ${res.error}`,
-        refunded: true, balance: user ? await balanceOf(user.id) : undefined,
+        error: says[reason], reason,
+        refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
       }, { status: 502 });
     }
 
@@ -176,10 +202,10 @@ export async function POST(req: NextRequest) {
       balance: user ? await balanceOf(user.id) : undefined,
     });
   } catch {
-    if (user) await refund(user.id, price, "refund: search threw");
+    await giveBack("refund: search threw");
     return NextResponse.json({
       error: "The search failed — you were not charged.",
-      refunded: true, balance: user ? await balanceOf(user.id) : undefined,
+      refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
     }, { status: 500 });
   }
 }
