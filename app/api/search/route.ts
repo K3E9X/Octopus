@@ -15,11 +15,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { readClientConfig } from "@/lib/reqconfig";
-import { currentUser } from "@/lib/session-server";
+import { currentUser, authEnabled } from "@/lib/session-server";
 import { leakOsint, estimateCost, complexityOf, tokenize, isBillableWord, formatCost } from "@/lib/leakosint";
 import { buildReport, headline } from "@/lib/report";
 import { buildSubject } from "@/lib/subject";
-import { recordQuery } from "@/lib/audit";
+import { recordQuery, auditEnabled } from "@/lib/audit";
 import { creditsEnabled, priceCredits, debit, refund, balanceOf, fmtCredits, fmtUSD } from "@/lib/credits";
 
 export const runtime = "nodejs";
@@ -75,8 +75,15 @@ export async function GET(req: NextRequest) {
 // ---- POST: run it -----------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "Sign in to run a search.", needsAuth: true }, { status: 401 });
+  // Without a database there is nowhere to keep accounts, so the deployment is
+  // SINGLE-OPERATOR: the tool runs, unmetered and unlogged, and the response says so
+  // on every search rather than implying a protection that does not exist. Demanding
+  // a sign-in here instead would make a database-less deployment simply not work,
+  // which is what the container and compose files promise it does.
+  const user = authEnabled ? await currentUser() : null;
+  if (authEnabled && !user) {
+    return NextResponse.json({ error: "Sign in to run a search.", needsAuth: true }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const raw = String(body?.subject || "").trim();
@@ -112,7 +119,7 @@ export async function POST(req: NextRequest) {
   // Recorded before the query runs. Fire-and-forget: the trail must never be able to
   // block or break collection, but it must exist whether or not the query succeeds.
   recordQuery({
-    operator: user.email,
+    operator: user?.email || "single-operator",
     kind: "search",
     selector: subject.canonical,
     legalBasis,
@@ -120,7 +127,7 @@ export async function POST(req: NextRequest) {
     note: `kind=${subject.kind} limit=${limit} query=${subject.query}`,
   }).catch(() => {});
 
-  if (creditsEnabled) {
+  if (creditsEnabled && user) {
     const charge = await debit(user.id, price, `search: ${subject.canonical.slice(0, 48)}`);
     if (!charge.ok) {
       return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
@@ -136,10 +143,10 @@ export async function POST(req: NextRequest) {
     // The API answers 200 even when it refuses. A refusal is not a clean result, and
     // the money goes back because the query did not run.
     if (res.error) {
-      await refund(user.id, price, `refund: ${res.error}`);
+      if (user) await refund(user.id, price, `refund: ${res.error}`);
       return NextResponse.json({
         error: `The leak source refused the query: ${res.error}`,
-        refunded: true, balance: creditsEnabled ? await balanceOf(user.id) : undefined,
+        refunded: true, balance: user ? await balanceOf(user.id) : undefined,
       }, { status: 502 });
     }
 
@@ -149,14 +156,17 @@ export async function POST(req: NextRequest) {
       headline: headline(report),
       // what was actually asked of the API, so the price shown is explainable
       query: { sent: subject.query, limit, rowsReturned: res.rowCount, databases: res.databases.length },
-      charged: creditsEnabled ? price : 0,
-      balance: creditsEnabled ? await balanceOf(user.id) : undefined,
+      charged: creditsEnabled && user ? price : 0,
+      // Never let silence imply a protection. A deployment with no database has no
+      // accounts, no metering and no query log, and the interface must be able to say so.
+      deployment: { metered: creditsEnabled && !!user, logged: auditEnabled, operator: user?.email || null },
+      balance: user ? await balanceOf(user.id) : undefined,
     });
   } catch {
-    await refund(user.id, price, "refund: search threw");
+    if (user) await refund(user.id, price, "refund: search threw");
     return NextResponse.json({
       error: "The search failed — you were not charged.",
-      refunded: true, balance: creditsEnabled ? await balanceOf(user.id) : undefined,
+      refunded: true, balance: user ? await balanceOf(user.id) : undefined,
     }, { status: 500 });
   }
 }
