@@ -14,6 +14,7 @@ import { createHmac, randomBytes, scrypt as _scrypt, timingSafeEqual } from "nod
 import { promisify } from "node:util";
 import { sql, dbEnabled } from "./db";
 import { passwordProblem } from "./pwrule";
+import { canonicalEmail } from "./emailkey";
 
 const scrypt = promisify(_scrypt) as (p: string | Buffer, s: string | Buffer, k: number) => Promise<Buffer>;
 
@@ -22,16 +23,40 @@ export const SESSION_COOKIE = "octopus_session";
 const SESSION_DAYS = 14;
 
 /**
- * Roles.
+ * Roles, and the one line that matters: WHOEVER SPENDS MONEY CANNOT MINT IT.
  *
- * `tester` is where everybody starts. Registration is open, and an open door that
- * hands out a working account is how a paid upstream balance gets drained by someone
- * running a script — so a new account gets a trial allowance sized in searches and
- * nothing else. `analyst` is the same account once somebody decided it should be one;
- * the difference is a credit balance, not a different code path, because two code
- * paths is how one of them ends up unguarded.
+ * An audit trail signed by someone who can also create the budget proves nothing. So
+ * the two powers are split, and the split is the point of this list rather than a
+ * tidier way to label people:
+ *
+ *   owner    claims the deployment (once, atomically, at the first registration).
+ *            Grants credit without limit, holds the source token, makes other owners.
+ *            This is the account that pays the upstream bill, so it is the only one
+ *            that may decide how much of it gets spent.
+ *   admin    runs the day to day: users, roles below owner, the audit trail. May
+ *            grant credit TO OTHERS, bounded — and never to itself, which is the
+ *            whole reason the role exists separately.
+ *   analyst  searches.
+ *   tester   searches, on a trial allowance. Where every new account starts, because
+ *            registration is open and an open door that hands out a working balance
+ *            is how a paid API gets drained by a script.
+ *   disabled nobody.
+ *
+ * `analyst` and `tester` are deliberately the same code path with different balances.
+ * Two code paths is how one of them ends up unguarded.
  */
-export type Role = "admin" | "analyst" | "tester" | "disabled";
+export type Role = "owner" | "admin" | "analyst" | "tester" | "disabled";
+
+/** Seniority, for comparisons. Nobody may act on a role at or above their own. */
+const RANK: Record<Role, number> = { owner: 4, admin: 3, analyst: 2, tester: 1, disabled: 0 };
+export const outranks = (a: Role, b: Role) => RANK[a] > RANK[b];
+export const isAtLeast = (r: Role, min: Role) => RANK[r] >= RANK[min];
+
+/** The most an `admin` may hand out in one grant. An owner is not bounded. */
+export function adminGrantCap(): number {
+  const n = Number(process.env.OCTOPUS_ADMIN_GRANT_MAX);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 500;
+}
 
 export interface User {
   id: string;
@@ -68,6 +93,28 @@ async function ensureSchema(): Promise<void> {
         last_seen  bigint
       )`;
       await q`CREATE INDEX IF NOT EXISTS octopus_users_email ON octopus_users (email)`;
+
+      // The address as typed is kept — mail has to reach it — but UNIQUENESS is on the
+      // canonical form, so one mailbox is one account however it is spelled.
+      await q`ALTER TABLE octopus_users ADD COLUMN IF NOT EXISTS email_key text`;
+      const unkeyed = await q`SELECT id, email FROM octopus_users WHERE email_key IS NULL`;
+      for (const r of unkeyed as any[]) {
+        await q`UPDATE octopus_users SET email_key = ${canonicalEmail(r.email)} WHERE id = ${r.id}`;
+      }
+      // Best effort: a deployment that already collected aliases cannot take the index
+      // until they are merged, and the check in createUser still blocks new ones.
+      try {
+        await q`CREATE UNIQUE INDEX IF NOT EXISTS octopus_users_email_key ON octopus_users (email_key)`;
+      } catch { /* pre-existing duplicates — see createUser */ }
+
+      // WHO GOT THE ADMIN SEAT. One row, claimed once, by whoever actually got there
+      // first. "Is the table empty" read and then acted on is a race, and six
+      // simultaneous registrations on a fresh instance all won it.
+      await q`CREATE TABLE IF NOT EXISTS octopus_bootstrap (
+        id         int PRIMARY KEY CHECK (id = 1),
+        claimed_by text NOT NULL,
+        at         bigint NOT NULL
+      )`;
     })();
   }
   await ready;
@@ -124,19 +171,55 @@ export async function createUser(email: string, password: string, name?: string)
   await ensureSchema();
   const q = sql();
   if (!q) return { error: "database unavailable" };
-  const existing = await q`SELECT id FROM octopus_users WHERE email = ${mail} LIMIT 1`;
+
+  // One mailbox, one account. Checked on the canonical form so "+tags" and Gmail dots
+  // cannot be used to collect another free trial, and backed by a unique index so two
+  // simultaneous attempts cannot both pass this check.
+  const key = canonicalEmail(mail);
+  const existing = await q`SELECT id FROM octopus_users WHERE email_key = ${key} OR email = ${mail} LIMIT 1`;
   if ((existing as any[]).length) return { error: "that address already has an account" };
 
-  // The first account administers the deployment; everyone after it starts on trial.
-  const first = (await countUsers()) === 0;
   const id = "usr_" + randomBytes(9).toString("hex");
   const salt = randomBytes(16).toString("hex");
   const pw = await hash(password, salt);
   const now = Date.now();
-  const role: Role = first ? "admin" : "tester";
-  await q`INSERT INTO octopus_users (id, email, name, role, pw_hash, pw_salt, created_at)
-          VALUES (${id}, ${mail}, ${name || null}, ${role}, ${pw}, ${salt}, ${now})`;
+
+  // Created as a tester, ALWAYS. The administrator seat is claimed separately and
+  // atomically below, so a failed insert here cannot burn it and a race cannot share it.
+  try {
+    await q`INSERT INTO octopus_users (id, email, email_key, name, role, pw_hash, pw_salt, created_at)
+            VALUES (${id}, ${mail}, ${key}, ${name || null}, ${"tester"}, ${pw}, ${salt}, ${now})`;
+  } catch (e) {
+    const msg = String((e as any)?.message || e);
+    if (/duplicate key|unique/i.test(msg)) return { error: "that address already has an account" };
+    throw e;
+  }
+
+  // Exactly one row can exist here, so exactly one account can ever claim the
+  // deployment. Every later owner is promoted deliberately, by one who already is.
+  let role: Role = "tester";
+  try {
+    const claimed = await q`INSERT INTO octopus_bootstrap (id, claimed_by, at)
+                            VALUES (1, ${id}, ${now})
+                            ON CONFLICT (id) DO NOTHING
+                            RETURNING claimed_by`;
+    if ((claimed as any[]).length) {
+      await q`UPDATE octopus_users SET role = 'owner' WHERE id = ${id}`;
+      role = "owner";
+    }
+  } catch { /* the seat stays unclaimed; an existing admin can still promote */ }
+
   return { user: { id, email: mail, name: name || undefined, role, createdAt: now } };
+}
+
+/** Has the administrator seat been taken? Used to decide what the sign-in page may say. */
+export async function bootstrapClaimed(): Promise<boolean> {
+  if (!authEnabled) return true;
+  await ensureSchema();
+  const q = sql();
+  if (!q) return true;
+  const rows = await q`SELECT 1 FROM octopus_bootstrap WHERE id = 1 LIMIT 1`;
+  return (rows as any[]).length > 0;
 }
 
 /**
@@ -155,7 +238,10 @@ export async function verifyUser(email: string, password: string): Promise<User 
   await ensureSchema();
   const q = sql();
   if (!q) return null;
-  const rows = await q`SELECT * FROM octopus_users WHERE email = ${String(email || "").trim().toLowerCase()} LIMIT 1`;
+  // Found by canonical key as well, so whoever registered as "vic.tim@gmail.com" can
+  // sign in as "victim@gmail.com" — it is the same mailbox and the same account.
+  const typed = String(email || "").trim().toLowerCase();
+  const rows = await q`SELECT * FROM octopus_users WHERE email = ${typed} OR email_key = ${canonicalEmail(typed)} LIMIT 1`;
   const r = (rows as any[])[0];
   // The work happens either way; only the comparison's outcome differs.
   const candidate = await hash(password, r?.pw_salt || DECOY_SALT);
@@ -189,16 +275,28 @@ export async function listUsers(limit = 200): Promise<User[]> {
  * Change a role. The last administrator cannot be demoted or disabled — locking
  * everyone out of the admin panel is not a state the UI should be able to reach.
  */
-export async function setRole(id: string, role: Role): Promise<{ ok: boolean; error?: string }> {
+export async function setRole(id: string, role: Role, actor: User): Promise<{ ok: boolean; error?: string }> {
   if (!authEnabled) return { ok: false, error: "no database" };
   await ensureSchema();
   const q = sql();
   if (!q) return { ok: false, error: "no database" };
   const target = await getUser(id);
   if (!target) return { ok: false, error: "no such user" };
-  if (target.role === "admin" && role !== "admin") {
-    const rows = await q`SELECT count(*)::int AS n FROM octopus_users WHERE role = 'admin'`;
-    if (((rows as any[])[0]?.n ?? 0) <= 1) return { ok: false, error: "this is the last administrator" };
+
+  // Nobody may act on a role at or above their own, in either direction. Without this
+  // an admin promotes itself to owner and the separation is decoration.
+  if (!outranks(actor.role, target.role) && actor.id !== id) {
+    return { ok: false, error: "you cannot change an account at or above your own level" };
+  }
+  if (!outranks(actor.role, role)) {
+    return { ok: false, error: `you cannot grant the ${role} role` };
+  }
+  if (actor.id === id && role !== actor.role) {
+    return { ok: false, error: "you cannot change your own role" };
+  }
+  if (target.role === "owner" && role !== "owner") {
+    const rows = await q`SELECT count(*)::int AS n FROM octopus_users WHERE role = 'owner'`;
+    if (((rows as any[])[0]?.n ?? 0) <= 1) return { ok: false, error: "this is the last owner" };
   }
   await q`UPDATE octopus_users SET role = ${role} WHERE id = ${id}`;
   return { ok: true };

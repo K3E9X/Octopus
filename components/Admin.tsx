@@ -21,6 +21,8 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
   const [source, setSource] = useState<Source | null>(null);
   const [storable, setStorable] = useState(false);
   const [trial, setTrial] = useState("");
+  const [role, setRole] = useState<string>("admin");
+  const [cap, setCap] = useState(500);
   const [msg, setMsg] = useState("");
 
   async function load() {
@@ -31,6 +33,8 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
     setSource(d.source || null);
     setStorable(!!d.storable);
     setTrial(d.trial || "");
+    setRole(d.me?.role || "admin");
+    setCap(d.grantCap ?? 500);
   }
   useEffect(() => { if (!disabledReason) load(); }, [disabledReason]);
 
@@ -90,8 +94,14 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
                 <td className="t-handle">{u.email}{u.id === me?.id ? " · you" : ""}</td>
                 <td>{u.name || "—"}</td>
                 <td>
-                  <select className="api-select adm-role" value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} disabled={u.id === me?.id}>
-                    <option value="admin">admin</option>
+                  {/* Nobody may act on a role at or above their own, so the options
+                      stop where the caller's authority does. The server enforces it
+                      again — a disabled option is a hint, never a guard. */}
+                  <select className="api-select adm-role" value={u.role}
+                    onChange={(e) => changeRole(u.id, e.target.value)}
+                    disabled={u.id === me?.id || (role !== "owner" && u.role === "owner")}>
+                    {role === "owner" && <option value="owner">owner</option>}
+                    {role === "owner" && <option value="admin">admin</option>}
                     <option value="analyst">analyst</option>
                     <option value="tester">tester</option>
                     <option value="disabled">disabled</option>
@@ -100,7 +110,14 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
                 {metered && (
                   <td className="adm-credits">
                     <span>{(u.credits ?? 0).toLocaleString("en-US")}</span>
-                    <Grant onGrant={(usd) => grant(u.id, u.email, usd)} />
+                    <Grant
+                      onGrant={(n) => grant(u.id, u.email, n)}
+                      // An administrator funds other people, within a bound, and never
+                      // their own account. Creating credit spends the upstream balance,
+                      // which is the owner's to spend.
+                      disabled={role !== "owner" && u.id === me?.id}
+                      cap={role === "owner" ? undefined : cap}
+                    />
                   </td>
                 )}
                 <td>{new Date(u.createdAt).toLocaleDateString()}</td>
@@ -262,14 +279,17 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
  * under. The unit is the one the person receiving it cares about: one credit buys one
  * standard search.
  */
-function Grant({ onGrant }: { onGrant: (credits: number) => void }) {
+function Grant({ onGrant, disabled, cap }: { onGrant: (credits: number) => void; disabled?: boolean; cap?: number }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
+  if (disabled) {
+    return <span className="adm-grant-off" title="an administrator cannot credit their own account — ask an owner">—</span>;
+  }
   if (!open) return <button className="adm-grant" onClick={() => setOpen(true)}>credit</button>;
   const give = (n: number) => { onGrant(n); setOpen(false); setCustom(""); };
   return (
     <span className="adm-grantbox">
-      {[10, 100, 500].map((v) => (
+      {[10, 100, 500].filter((v) => !cap || v <= cap).map((v) => (
         <button key={v} className="adm-grant" onClick={() => give(v)}>+{v}</button>
       ))}
       <input
@@ -279,6 +299,7 @@ function Grant({ onGrant }: { onGrant: (credits: number) => void }) {
       />
       <button className="adm-grant" onClick={() => give(Number(custom))} disabled={!custom.trim()}>add</button>
       <button className="adm-grant" onClick={() => setOpen(false)}>×</button>
+      {cap && <em className="adm-cap">max {cap}</em>}
     </span>
   );
 }

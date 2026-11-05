@@ -22,6 +22,7 @@
 //   lib/attribution.ts checks each returned row against.
 
 import { looksLikePhone, phoneIntel } from "./phone";
+import { canonicalEmail } from "./emailkey";
 
 export type SubjectKind = "email" | "phone" | "username" | "name" | "free";
 
@@ -84,27 +85,11 @@ export function detectKind(s: string): SubjectKind {
  * is real and worth matching on — unlike guessing that a local part is a username,
  * which is not, and which is why no such variant is produced here.
  */
-const DOTLESS_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+// The rule itself lives in lib/emailkey, because registration needs the same one and
+// must not pull libphonenumber in to get it.
+export { canonicalEmail } from "./emailkey";
 
-/**
- * The one spelling of an address that two forms of the same mailbox both reduce to.
- *
- * Used on the subject AND on every cell compared against it, because reduction only
- * works when it is applied to both sides: a dump that stored "john.doe@gmail.com" must
- * match a search for "johndoe@gmail.com" and vice versa, and generating spellings of
- * the subject alone can only ever get that right in one direction.
- */
-export function canonicalEmail(addr: string): string {
-  const lower = String(addr ?? "").trim().toLowerCase();
-  const at = lower.lastIndexOf("@");
-  if (at <= 0) return lower;
-  const domain = lower.slice(at + 1);
-  let local = lower.slice(0, at);
-  const plus = local.indexOf("+");
-  if (plus > 0) local = local.slice(0, plus);
-  if (DOTLESS_DOMAINS.has(domain)) local = local.replace(/\./g, "");
-  return local ? local + "@" + domain : lower;
-}
+const DOTLESS_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 
 function emailVariants(addr: string): string[] {
   const lower = addr.toLowerCase();

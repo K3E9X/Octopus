@@ -1221,3 +1221,5 @@ body::after {
 }
 /* the hero's own text must never have to compete with it */
 .lk2-hero-deep > *:not(.deepfield) { position: relative; }
+.adm-grant-off { color: var(--ink-4); font-family: var(--font-mono); font-size: 11px; padding: 0 6px; cursor: default; }
+.adm-cap { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); }

@@ -2,8 +2,8 @@
 // hides a button is not access control.
 
 import { NextRequest, NextResponse } from "next/server";
-import { listUsers, setRole, type Role } from "@/lib/auth";
-import { requireAdmin, authEnabled } from "@/lib/session-server";
+import { listUsers, setRole, adminGrantCap, outranks, type Role } from "@/lib/auth";
+import { requireAdmin, requireOwner, authEnabled } from "@/lib/session-server";
 import { listAudit, verifyAuditChain, auditEnabled } from "@/lib/audit";
 import { grant, balanceOf, ledgerOf, creditsToMicro, balanceCredits, creditsEnabled, trialNote } from "@/lib/credits";
 import { sourceFingerprint, setSourceToken, clearSourceToken, sourceToken, storedKeyAvailable } from "@/lib/sourcekey";
@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   if (!authEnabled) return NextResponse.json({ configured: false });
-  if (!(await requireAdmin())) return NextResponse.json({ error: "administrator only" }, { status: 403 });
+  const caller = await requireAdmin();
+  if (!caller) return NextResponse.json({ error: "administrator only" }, { status: 403 });
   const [users, activity, chain, source] = await Promise.all([
     listUsers(),
     auditEnabled ? listAudit(60) : Promise.resolve([]),
@@ -35,6 +36,9 @@ export async function GET() {
   return NextResponse.json({
     configured: true, metered: creditsEnabled, users: withBalance, activity, chain,
     source, storable: storedKeyAvailable, database, trial: creditsEnabled ? trialNote() : "",
+    // what THIS caller is allowed to do, so the screen offers nothing it cannot deliver
+    me: { id: caller.id, role: caller.role },
+    grantCap: adminGrantCap(),
   });
 }
 
@@ -50,12 +54,16 @@ export async function POST(req: NextRequest) {
   // changing it is a paste rather than a redeploy. The value is never echoed back.
 
   if (body?.action === "source-set") {
+    // The token spends the upstream balance; only whoever pays it holds it.
+    if (!(await requireOwner())) return NextResponse.json({ error: "owner only" }, { status: 403 });
     const r = await setSourceToken(String(body?.token || ""), admin.email);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
     return NextResponse.json({ ok: true, source: await sourceFingerprint() });
   }
 
   if (body?.action === "source-clear") {
+    // The token spends the upstream balance; only whoever pays it holds it.
+    if (!(await requireOwner())) return NextResponse.json({ error: "owner only" }, { status: 403 });
     const r = await clearSourceToken();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
     return NextResponse.json({ ok: true, source: await sourceFingerprint() });
@@ -74,6 +82,8 @@ export async function POST(req: NextRequest) {
    * and it must not be anybody's identifier.
    */
   if (body?.action === "source-test") {
+    // The token spends the upstream balance; only whoever pays it holds it.
+    if (!(await requireOwner())) return NextResponse.json({ error: "owner only" }, { status: 403 });
     const { token, from } = await sourceToken();
     if (!token) return NextResponse.json({ error: "no token is configured to test" }, { status: 400 });
     const term = "octopusleak-connectivity-probe";
@@ -104,7 +114,22 @@ export async function POST(req: NextRequest) {
     if (!id || !Number.isFinite(n) || n === 0) {
       return NextResponse.json({ error: "a user and a non-zero whole number of credits are required" }, { status: 400 });
     }
-    const r = await grant(id, creditsToMicro(n), `admin ${n > 0 ? "grant" : "clawback"} of ${Math.abs(n)} credit(s) by ${admin.email}`);
+
+    // Creating credit is spending the upstream balance, so it is the owner's power.
+    // An admin may pass some on — to SOMEBODY ELSE, and only up to a bound. An
+    // administrator who can top up their own account is an audit trail that proves
+    // nothing, because the same hand signs the spending and the budget.
+    if (admin.role !== "owner") {
+      if (id === admin.id) {
+        return NextResponse.json({ error: "an administrator cannot credit their own account — ask an owner" }, { status: 403 });
+      }
+      const cap = adminGrantCap();
+      if (Math.abs(n) > cap) {
+        return NextResponse.json({ error: `an administrator may move at most ${cap} credits at a time — ask an owner`, cap }, { status: 403 });
+      }
+    }
+
+    const r = await grant(id, creditsToMicro(n), `${admin.role} ${n > 0 ? "grant" : "clawback"} of ${Math.abs(n)} credit(s) by ${admin.email}`);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
     return NextResponse.json({ ok: true, balance: balanceCredits(r.balance ?? 0) });
   }
@@ -115,13 +140,12 @@ export async function POST(req: NextRequest) {
   }
 
   const role = String(body?.role || "") as Role;
-  if (!id || !["admin", "analyst", "tester", "disabled"].includes(role)) {
+  if (!id || !["owner", "admin", "analyst", "tester", "disabled"].includes(role)) {
     return NextResponse.json({ error: "id and a valid role are required" }, { status: 400 });
   }
-  if (id === admin.id && role !== "admin") {
-    return NextResponse.json({ error: "you cannot remove your own administrator role" }, { status: 400 });
-  }
-  const r = await setRole(id, role);
+  // Seniority is enforced in setRole, which knows who is asking — nobody may act on a
+  // role at or above their own, in either direction.
+  const r = await setRole(id, role, admin);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

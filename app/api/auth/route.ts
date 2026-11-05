@@ -1,7 +1,7 @@
 // Sign in, register, sign out. One route, three intents.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createUser, verifyUser, countUsers, signSession, SESSION_COOKIE, SESSION_MAX_AGE, authEnabled, sessionsUsable } from "@/lib/auth";
+import { createUser, verifyUser, countUsers, bootstrapClaimed, signSession, SESSION_COOKIE, SESSION_MAX_AGE, authEnabled, sessionsUsable } from "@/lib/auth";
 import { currentUser } from "@/lib/session-server";
 import { seedStarter, balanceOf, creditsEnabled } from "@/lib/credits";
 
@@ -60,7 +60,12 @@ export async function GET() {
   return NextResponse.json({
     authEnabled,
     sessionsUsable: sessionsUsable(),
-    firstAccount: authEnabled ? (await countUsers()) === 0 : false,
+    // Whether the administrator seat is still open, NOT whether the table is empty.
+    // The old answer was both a race and an advertisement: an unauthenticated caller
+    // was told, by a freshly deployed instance, that admin was there for the taking.
+    // It is now claimed atomically at registration, so this is only ever a hint for
+    // the form's wording.
+    firstAccount: authEnabled ? !(await bootstrapClaimed()) : false,
     metered: creditsEnabled,
     me: me ? { id: me.id, email: me.email, name: me.name, role: me.role } : null,
     balance: me ? await balanceOf(me.id) : undefined,

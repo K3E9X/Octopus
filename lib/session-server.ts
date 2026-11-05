@@ -2,7 +2,7 @@
 // "who is this?" without pulling the whole account module into a client bundle.
 
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, readSession, getUser, authEnabled, sessionsUsable, type User } from "./auth";
+import { SESSION_COOKIE, readSession, getUser, authEnabled, sessionsUsable, isAtLeast, type User } from "./auth";
 
 export { authEnabled, sessionsUsable };
 
@@ -27,8 +27,19 @@ export async function currentUser(): Promise<User | null> {
   return user;
 }
 
-/** For routes that must be an administrator. Returns null when the caller is not. */
+/** For routes an administrator may reach. An owner outranks an admin, so it passes too. */
 export async function requireAdmin(): Promise<User | null> {
   const u = await currentUser();
-  return u && u.role === "admin" ? u : null;
+  return u && isAtLeast(u.role, "admin") ? u : null;
+}
+
+/**
+ * For the two powers reserved to whoever pays the bill: creating credit, and holding
+ * the source token. An admin runs the deployment; only an owner decides how much of
+ * the upstream balance gets spent, because an audit trail signed by someone who can
+ * also mint the budget proves nothing.
+ */
+export async function requireOwner(): Promise<User | null> {
+  const u = await currentUser();
+  return u && u.role === "owner" ? u : null;
 }
