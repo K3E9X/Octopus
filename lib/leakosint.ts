@@ -220,6 +220,10 @@ export function refusalIn(payload: any): string | null {
     if (typeof v === "string" && v.trim()) return v.trim();
     if (typeof v === "number") return String(v);
   }
+  // Observed alongside "Error code": a sibling {"Status":"Error"}. Read as a backstop so
+  // a refusal that renames its message field still cannot come back as a result.
+  const status = (payload as Record<string, unknown>).Status;
+  if (typeof status === "string" && status.toLowerCase() === "error") return "the source reported an error";
   return null;
 }
 

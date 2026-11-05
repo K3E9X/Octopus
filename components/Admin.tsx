@@ -10,19 +10,25 @@ import { Logo } from "./Logo";
 
 interface U { id: string; email: string; name?: string; role: string; createdAt: number; lastSeen?: number; credits?: number }
 interface A { id: number; at: number; operator: string; kind: string; selector: string; legalBasis: string; caseId?: string }
+/** What the server is willing to say about the token — a fingerprint, never the value. */
+interface Source { source: "stored" | "environment" | "none"; tail?: string; length?: number; setAt?: number; setBy?: string }
 
 export default function Admin({ me, disabledReason }: { me?: { id: string; email: string }; disabledReason?: string }) {
   const [users, setUsers] = useState<U[]>([]);
   const [activity, setActivity] = useState<A[]>([]);
   const [chain, setChain] = useState<{ intact: boolean; checked: number; brokenAt?: number } | null>(null);
   const [metered, setMetered] = useState(false);
+  const [source, setSource] = useState<Source | null>(null);
+  const [storable, setStorable] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function load() {
     const r = await fetch("/api/admin");
     const d = await r.json();
     if (d?.users) { setUsers(d.users); setActivity(d.activity || []); setChain(d.chain || null); }
-      setMetered(!!d.metered);
+    setMetered(!!d.metered);
+    setSource(d.source || null);
+    setStorable(!!d.storable);
   }
   useEffect(() => { if (!disabledReason) load(); }, [disabledReason]);
 
@@ -66,6 +72,8 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
       </header>
 
       {msg && <div className="adm-msg">{msg}</div>}
+
+      <SourceKey source={source} storable={storable} onDone={(m) => { setMsg(m); setTimeout(() => setMsg(""), 6000); load(); }} />
 
       <section>
         <h2>Accounts <em>{users.length}</em></h2>
@@ -128,5 +136,113 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
         </table>
       </section>
     </div>
+  );
+}
+
+// ---- the source token -------------------------------------------------------------
+//
+// The one credential the product needs. Pasted once here and used by every search on
+// the deployment, so changing it is a paste rather than a redeploy.
+//
+// It is never displayed back. The server returns a fingerprint — where the token in
+// force comes from, its last four characters, its length, when it was set and by whom —
+// which is everything an administrator needs to answer "is the right one in there" and
+// nothing that leaks through a screenshot or a support ticket.
+
+function SourceKey({ source, storable, onDone }: { source: Source | null; storable: boolean; onDone: (m: string) => void }) {
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [test, setTest] = useState<{ ok: boolean; detail?: string; reason?: string; spent?: string } | null>(null);
+
+  const post = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    const r = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    setBusy(false);
+    return { ok: r.ok, d };
+  };
+
+  const save = async () => {
+    const { ok, d } = await post({ action: "source-set", token });
+    if (!ok) { onDone(d.error || "could not save the token"); return; }
+    setToken(""); setTest(null);
+    onDone("Token saved. Every search on this deployment now uses it.");
+  };
+
+  const clear = async () => {
+    if (!window.confirm("Remove the stored token? Searches will fall back to LEAKOSINT_TOKEN in the environment, if one is set — otherwise the product stops returning data.")) return;
+    const { ok, d } = await post({ action: "source-clear" });
+    onDone(ok ? "Stored token removed." : (d.error || "could not remove the token"));
+  };
+
+  const runTest = async () => {
+    if (!window.confirm("Testing runs one real query against the index, at the minimum depth — about $0.003.\n\nThere is no free way to check a token: a deliberately malformed request would be free, and the endpoint answers those by blocking this deployment's IP for about 30 seconds.\n\nRun it?")) return;
+    setTest(null);
+    const { d } = await post({ action: "source-test" });
+    setTest(d);
+  };
+
+  const configured = source && source.source !== "none";
+  return (
+    <section>
+      <h2>
+        Leak source <em>LeakOSINT</em>
+        <span className={"adm-chain " + (configured ? "ok" : "bad")}>
+          {configured ? `token in force · from the ${source!.source}` : "no token — the product returns no data"}
+        </span>
+      </h2>
+      <p className="adm-note">
+        The only source this product queries. A token comes from the bot&rsquo;s <code>/api</code> command and bills per
+        request, so it is never written to the audit log and never displayed back here — to change it, paste a new one.
+      </p>
+
+      <div className="adm-src">
+        <div className="adm-src-state">
+          {configured ? (
+            <>
+              <code>{"•".repeat(Math.max(4, (source!.length || 12) - 4))}{source!.tail}</code>
+              <span>
+                {source!.source === "environment"
+                  ? "set by LEAKOSINT_TOKEN in the environment — a stored token below would take precedence"
+                  : `stored ${source!.setAt ? new Date(source!.setAt).toLocaleString() : ""}${source!.setBy ? ` by ${source!.setBy}` : ""}`}
+              </span>
+            </>
+          ) : (
+            <span>Nothing configured. Every search will say the deployment has no leak source rather than return an empty report.</span>
+          )}
+        </div>
+
+        {storable ? (
+          <>
+            <div className="adm-src-form">
+              <input
+                value={token} onChange={(e) => setToken(e.target.value)} spellCheck={false} autoComplete="off"
+                type="password" placeholder="123456789:AbCdEf12"
+                onKeyDown={(e) => { if (e.key === "Enter" && token.trim()) save(); }}
+              />
+              <button className="ping-btn" onClick={save} disabled={busy || !token.trim()}>
+                {configured ? "Replace token" : "Save token"}
+              </button>
+              {configured && source!.source === "stored" && (
+                <button className="ping-btn" onClick={clear} disabled={busy}>Remove</button>
+              )}
+              <button className="ping-btn" onClick={runTest} disabled={busy || !configured}>Test · ~$0.003</button>
+            </div>
+            {test && (
+              <div className={"adm-src-test " + (test.ok ? "ok" : "bad")}>
+                {test.ok
+                  ? <>Reached the index{test.spent ? ` · spent ${test.spent}` : ""}. {test.detail}</>
+                  : <>The source refused: {test.reason}</>}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="adm-note">
+            This deployment has no database, so there is nowhere to keep a token. Set <code>LEAKOSINT_TOKEN</code> in the
+            environment instead — a field here would silently do nothing.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

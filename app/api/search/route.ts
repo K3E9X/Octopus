@@ -20,6 +20,7 @@ import { leakOsint, estimateCost, complexityOf, tokenize, isBillableWord, format
 import { buildReport, headline } from "@/lib/report";
 import { buildSubject } from "@/lib/subject";
 import { recordQuery, auditEnabled } from "@/lib/audit";
+import { sourceToken } from "@/lib/sourcekey";
 import { creditsEnabled, priceCredits, debit, refund, balanceOf, fmtCredits, fmtUSD } from "@/lib/credits";
 
 export const runtime = "nodejs";
@@ -108,9 +109,17 @@ export async function POST(req: NextRequest) {
   });
 
   const cfg = readClientConfig(req);
-  const token = cfg.leakosint || process.env.LEAKOSINT_TOKEN || "";
+  // Precedence is deliberate: a token an ADMINISTRATOR stored for the deployment beats
+  // the environment, which beats a key an individual browser supplied. The deployment's
+  // answer is the deployment's answer, and it can be changed without a redeploy.
+  const stored = await sourceToken();
+  const token = stored.token || cfg.leakosint || "";
   if (!token) {
-    return NextResponse.json({ error: "This deployment has no leak-data source configured.", configured: false }, { status: 400 });
+    return NextResponse.json({
+      error: "This deployment has no leak source configured.",
+      hint: "An administrator sets the LeakOSINT token in /admin, or LEAKOSINT_TOKEN in the environment.",
+      configured: false,
+    }, { status: 400 });
   }
 
   const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT);

@@ -1,8 +1,20 @@
-// Optional Postgres (Neon) persistence. Activates only when a connection string
-// is present in the environment; otherwise the app falls back to localStorage.
-// Set POSTGRES_URL (or DATABASE_URL / NEON_DATABASE_URL) as a Vercel env var to enable.
+// Postgres, wherever it lives.
+//
+// Accounts, credits, the audit trail and the stored source token all need somewhere
+// durable. Absent a connection string there is no database, and every module that
+// depends on one degrades explicitly and says so — that is the one thing this file
+// guarantees to callers.
+//
+// TWO DRIVERS, ONE INTERFACE. The original client was Neon's serverless driver, which
+// does not speak the Postgres wire protocol at all: it posts SQL to Neon's HTTPS
+// endpoint. That is right on Vercel and simply cannot reach a Postgres you run
+// yourself, so `docker compose --profile db` promised a local database the application
+// had no way to talk to. Now the connection string decides: a neon.tech host keeps the
+// HTTP driver, anything else gets a normal pooled TCP connection, and both are handed
+// back as the same tagged-template function so no caller knows or cares which it got.
 
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
 const URL =
   process.env.POSTGRES_URL ||
@@ -12,54 +24,71 @@ const URL =
 
 export const dbEnabled = URL.length > 0;
 
-let _sql: NeonQueryFunction<false, false> | null = null;
-let _ready: Promise<void> | null = null;
+/**
+ * The shape every caller uses:  await q`SELECT … WHERE id = ${value}`
+ *
+ * Interpolations are parameters, never string concatenation, in both drivers. That is
+ * the whole reason the codebase speaks tagged templates and not strings.
+ */
+export type SqlFn = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>;
 
-export function sql(): NeonQueryFunction<false, false> | null {
+/** Neon's HTTP driver — used only for Neon's own hosts, which is all it can reach. */
+const isNeonHost = (url: string) => /\.neon\.tech(?::|\/|$)/i.test(url) || /\bneon\.build\b/i.test(url);
+
+let _sql: SqlFn | null = null;
+let _pool: Pool | null = null;
+
+function tcpDriver(url: string): SqlFn {
+  if (!_pool) {
+    _pool = new Pool({
+      connectionString: url,
+      // A serverless-ish runtime opens and drops connections constantly; a small pool
+      // with a short idle timeout keeps a self-hosted Postgres from accumulating them.
+      max: Number(process.env.PGPOOL_MAX) || 5,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 8_000,
+      // A local or in-compose Postgres has no certificate worth verifying; a managed one
+      // reached over the internet does. Opt in explicitly rather than disabling globally.
+      ssl: /\bsslmode=require\b/i.test(url) ? { rejectUnauthorized: false } : undefined,
+    });
+    // A pool that throws on an idle client's error takes the process down with it.
+    _pool.on("error", () => { /* the next query will surface a real failure */ });
+  }
+  const pool = _pool;
+  return async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    // "SELECT … $1 … $2" — the values never touch the SQL text
+    const text = strings.reduce((acc, part, i) => acc + part + (i < values.length ? `$${i + 1}` : ""), "");
+    const res = await pool.query(text, values as any[]);
+    return res.rows;
+  };
+}
+
+export function sql(): SqlFn | null {
   if (!dbEnabled) return null;
-  if (!_sql) _sql = neon(URL);
+  if (!_sql) _sql = isNeonHost(URL) ? (neon(URL) as unknown as SqlFn) : tcpDriver(URL);
   return _sql;
 }
 
-/** Create the cases table once per cold start. */
-export async function ensureSchema(): Promise<void> {
-  const q = sql();
-  if (!q) return;
-  if (!_ready) {
-    _ready = (async () => {
-      // migrate legacy tables from the Tusna → Octopus rename. Each rename only fires
-      // when the old table exists and the new one doesn't yet, so existing server-side
-      // cases carry over. Table names are constants (no injection surface).
-      try { await q`ALTER TABLE IF EXISTS tusna_cases RENAME TO octopus_cases`; } catch { /* skip */ }
-      try { await q`ALTER TABLE IF EXISTS tusna_snapshots RENAME TO octopus_snapshots`; } catch { /* skip */ }
-      try { await q`ALTER TABLE IF EXISTS tusna_decisions RENAME TO octopus_decisions`; } catch { /* skip */ }
-      await q`CREATE TABLE IF NOT EXISTS octopus_cases (
-        id        text PRIMARY KEY,
-        name      text NOT NULL,
-        seed      text,
-        mode      text,
-        saved_at  bigint NOT NULL,
-        signals   jsonb NOT NULL
-      )`;
-      // append-only history: every save appends an immutable snapshot, so an
-      // investigation has a chain of custody (what was seen, and when).
-      await q`CREATE TABLE IF NOT EXISTS octopus_snapshots (
-        snap_id   text PRIMARY KEY,
-        case_id   text NOT NULL,
-        seed      text,
-        taken_at  bigint NOT NULL,
-        signals   jsonb NOT NULL
-      )`;
-      await q`CREATE INDEX IF NOT EXISTS octopus_snap_case ON octopus_snapshots (case_id, taken_at DESC)`;
-      // analyst decisions (confirm/reject) per seed — the feedback loop
-      await q`CREATE TABLE IF NOT EXISTS octopus_decisions (
-        seed       text NOT NULL,
-        node_id    text NOT NULL,
-        status     text NOT NULL,
-        updated_at bigint NOT NULL,
-        PRIMARY KEY (seed, node_id)
-      )`;
-    })();
+/** Which driver is in use — for the admin screen, so "it is not connecting" is diagnosable. */
+export const driverName = (): "neon-http" | "postgres-tcp" | "none" =>
+  !dbEnabled ? "none" : isNeonHost(URL) ? "neon-http" : "postgres-tcp";
+
+/**
+ * Is the database actually reachable?
+ *
+ * A connection string is a configuration, not a connection. Every module here treats a
+ * failed query as "degrade quietly", which is right in a request path and wrong on an
+ * admin screen whose entire job is to tell an operator what is working.
+ */
+export async function dbReachable(): Promise<{ ok: boolean; driver: string; error?: string }> {
+  const driver = driverName();
+  if (!dbEnabled) return { ok: false, driver, error: "no connection string configured" };
+  try {
+    const q = sql();
+    if (!q) return { ok: false, driver, error: "no driver" };
+    await q`SELECT 1`;
+    return { ok: true, driver };
+  } catch (e) {
+    return { ok: false, driver, error: String((e as Error)?.message || e).slice(0, 200) };
   }
-  await _ready;
 }

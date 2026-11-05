@@ -213,3 +213,11 @@ test("a number under six digits is free; six digits is a word", () => {
   assert.equal(isBillableWord("123456"), true);
   assert.equal(isBillableWord("01.01.1990"), false, "a date is never a word");
 });
+
+test("the live invalid-token shape is a refusal — keys and Status alike", () => {
+  // verbatim from the endpoint: an invalid token with a well-formed request
+  assert.match(refusalIn({ "Error code": "Invalid token. Get the correct token in the bot.", Status: "Error" }) || "", /Invalid token/);
+  // and a Status:Error whose message field we do not recognise is still never a result
+  assert.ok(refusalIn({ Status: "Error" }));
+  assert.equal(refusalIn({ Status: "Success", List: {} }), null);
+});

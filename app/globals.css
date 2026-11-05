@@ -2009,3 +2009,23 @@ body:has(.lp) { overflow: auto; }
   .lk2-print-h { display: block !important; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #666; margin: 24px 0 10px; }
   .lk2-others-grid { display: flex !important; }
 }
+
+/* ---- admin: the source token ---- */
+/* The value is never rendered — only a fingerprint — so this block styles a masked
+   string and a state line, never an input holding a readable secret. */
+.adm-src { border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 18px 20px; background: var(--bg-1); display: flex; flex-direction: column; gap: 14px; }
+.adm-src-state { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.adm-src-state code { font-family: var(--font-mono); font-size: 14px; color: var(--ink); letter-spacing: .08em; }
+.adm-src-state span { font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+.adm-src-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.adm-src-form input {
+  flex: 1; min-width: 240px; background: var(--bg-2); border: 1px solid var(--bd);
+  border-radius: var(--r-sm); color: var(--ink); font-family: var(--font-mono);
+  font-size: 14px; padding: 10px 12px; outline: none; transition: border-color .14s;
+}
+.adm-src-form input:focus { border-color: var(--bd-strong); }
+.adm-src-form input::placeholder { color: var(--ink-4); letter-spacing: 0; }
+.adm-src-test { font-size: 13px; line-height: 1.5; border-left: 2px solid; padding-left: 12px; }
+.adm-src-test.ok { color: var(--ink-2); border-color: var(--sev-low); }
+.adm-src-test.bad { color: var(--sev-crit); border-color: var(--sev-crit); }
+.adm-note code { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); }
