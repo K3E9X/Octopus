@@ -21,14 +21,18 @@
 //   description of what that breach was. Flattening that into one list would throw away
 //   the single most useful thing it returns — which dump a fact came from.
 //
-// AN ERROR IS NOT A RESULT. The endpoint answers HTTP 200 to everything, including a
-// refusal, and signals the refusal only in the body. Verified against the live API: a
-// bad token or a tripped rate limit comes back as {"error": "You have made too many
-// requests..."}. Reading that as data is the worst bug this module can have, because
-// "the API refused" and "this person is clean" are opposite findings that look alike
-// from the outside. Every refusal shape we have observed is checked, the salvage path
-// is never allowed to see an error payload, and an unrecognised body is salvaged only
-// when it carries no refusal marker at all.
+//   AN ERROR IS NOT A RESULT. The endpoint answers HTTP 200 to everything, including a
+//   refusal, and signals it only in the body — under two different keys. The published
+//   documentation says "Error code"; the live endpoint sends "error". Both are read
+//   here, before anything else touches the payload, because reading a refusal as data
+//   is the worst bug this module can have: "the API refused" and "this person is clean"
+//   are opposite findings that look identical from the outside. The vendor's own Python
+//   sample checks only "Error code" and raises a KeyError on the live shape.
+//
+// The contract this implements is written down in docs/leakosint-api.md, including the
+// places the documentation and the live endpoint disagree. Everything above is checked
+// against it by tests/leakosint.test.ts — the price especially, because that number is
+// what the business resells and a drift in it is a drift in the margin.
 
 import { harvest, type ExposureItem, type ExposureKind } from "./exposure";
 

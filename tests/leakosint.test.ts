@@ -176,3 +176,40 @@ test("an empty or absent error string is not a refusal", () => {
   assert.equal(refusalIn({}), null);
   assert.equal(refusalIn(null), null);
 });
+
+// ---- the price, pinned to the published formula ----------------------------------
+// This is what the business resells, so a drift here is a drift in the margin. The
+// documentation states one figure outright — "with the default limit of 100, most
+// requests cost $0.003" — and that is the anchor every other case is derived from.
+
+test("the documentation's own headline price is reproduced exactly", () => {
+  assert.equal(estimateCost("example@gmail.com", 100), 0.003);
+  assert.equal(estimateCost("google", 100), 0.003);
+});
+
+test("the complexity ladder prices each word count as published", () => {
+  assert.equal(complexityOf("google"), 1);
+  assert.equal(complexityOf("Petya Ivanov"), 5);
+  assert.equal(complexityOf("Elon Reeve Musk"), 16);
+  // every word here is four characters or longer — "one"/"two" would be free
+  assert.equal(complexityOf("alpha bravo charlie delta"), 40);
+});
+
+test("short words are free, so a five-word name can bill as three", () => {
+  // "De" and "La" are under four characters and are not words to the biller
+  assert.equal(complexityOf("Jean Pierre De La Tour"), 16);
+  assert.equal(estimateCost("Jean Pierre De La Tour", 100), estimateCost("Elon Reeve Musk", 100));
+});
+
+test("quoting a full name is the documented way to pay a sixth of the price", () => {
+  const quoted = estimateCost('"Elon Reeve Musk"', 100);
+  const bare = estimateCost("Elon Reeve Musk", 100);
+  assert.equal(quoted, 0.003);
+  assert.ok(bare > quoted * 2.9, "three bare words cost three times a quoted phrase");
+});
+
+test("a number under six digits is free; six digits is a word", () => {
+  assert.equal(isBillableWord("12345"), false);
+  assert.equal(isBillableWord("123456"), true);
+  assert.equal(isBillableWord("01.01.1990"), false, "a date is never a word");
+});
