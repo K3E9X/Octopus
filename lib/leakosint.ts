@@ -21,10 +21,14 @@
 //   description of what that breach was. Flattening that into one list would throw away
 //   the single most useful thing it returns — which dump a fact came from.
 //
-// Not verified against the live endpoint from this environment: the proxy here refuses
-// CONNECT to leakosintapi.com. The parser is therefore written to survive a shape that
-// differs from the documentation rather than to assume it, and anything it does not
-// recognise is surfaced under its own key instead of dropped.
+// AN ERROR IS NOT A RESULT. The endpoint answers HTTP 200 to everything, including a
+// refusal, and signals the refusal only in the body. Verified against the live API: a
+// bad token or a tripped rate limit comes back as {"error": "You have made too many
+// requests..."}. Reading that as data is the worst bug this module can have, because
+// "the API refused" and "this person is clean" are opposite findings that look alike
+// from the outside. Every refusal shape we have observed is checked, the salvage path
+// is never allowed to see an error payload, and an unrecognised body is salvaged only
+// when it carries no refusal marker at all.
 
 import { harvest, type ExposureItem, type ExposureKind } from "./exposure";
 
@@ -183,6 +187,26 @@ function rowItems(db: LeakDatabase, row: Record<string, string>): ExposureItem[]
 
 // ---- the call -----------------------------------------------------------------------
 
+/**
+ * Did the endpoint refuse?
+ *
+ * It answers 200 with the reason in the body, and it has used more than one key for it:
+ * "error" is what the live API sends for an invalid token and for the rate limit,
+ * "Error code" is what the documentation describes. Both are read, plus the capitalised
+ * variants, because the cost of missing one is reporting a refusal as a clean result.
+ */
+const ERROR_KEYS = ["error", "Error", "Error code", "error_code", "errorCode", "ErrorCode"];
+
+export function refusalIn(payload: any): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  for (const k of ERROR_KEYS) {
+    const v = (payload as Record<string, unknown>)[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number") return String(v);
+  }
+  return null;
+}
+
 /** The key the API uses to say "ran fine, matched nothing". */
 const NO_RESULTS = "No results found";
 
@@ -231,9 +255,8 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
     );
     if (!res.ok) return { ...empty, error: `HTTP ${res.status}` };
     const data = await res.json();
-    if (data && typeof data === "object" && "Error code" in data) {
-      return { ...empty, error: String((data as any)["Error code"]) };
-    }
+    const refusal = refusalIn(data);
+    if (refusal) return { ...empty, error: refusal };
 
     const databases = parseList(data);
     const items: ExposureItem[] = [];

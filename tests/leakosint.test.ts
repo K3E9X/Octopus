@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost } from "../lib/leakosint.ts";
+import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost, refusalIn } from "../lib/leakosint.ts";
 import type { LeakOsintResult } from "../lib/leakosint.ts";
 
 // ---- the billing rules ---------------------------------------------------------
@@ -147,4 +147,32 @@ test("a missing token never reaches the network", async () => {
     assert.match(res.error!, /no LeakOSINT token/);
     assert.equal(called, false);
   } finally { (globalThis as any).fetch = real; }
+});
+
+// ---- refusals, as the live endpoint actually sends them ---------------------------
+// The API answers HTTP 200 to everything and puts the refusal in the body. These
+// payloads are verbatim from the live endpoint; reading one as data would report "the
+// API refused" and "this person is clean" as the same finding.
+
+test("the rate-limit refusal the live API really sends is read as an error", () => {
+  const live = { error: "You have made too many requests that have invalid data. You will be able to make requests again in 30 seconds. If you have a large list of queries that need to be completed, use file search in the bot." };
+  assert.match(refusalIn(live) || "", /too many requests/);
+});
+
+test("every refusal key the API has used is recognised", () => {
+  assert.equal(refusalIn({ error: "bad token" }), "bad token");
+  assert.equal(refusalIn({ "Error code": "402" }), "402");
+  assert.equal(refusalIn({ Error: "nope" }), "nope");
+  assert.equal(refusalIn({ errorCode: 429 }), "429");
+});
+
+test("a real result carries no refusal marker", () => {
+  assert.equal(refusalIn({ List: { "Some Dump": { Data: [{ Email: "a@b.c" }], InfoLeak: "x" } } }), null);
+  assert.equal(refusalIn({ List: { "No results found": { Data: [] } } }), null);
+});
+
+test("an empty or absent error string is not a refusal", () => {
+  assert.equal(refusalIn({ error: "   " }), null, "whitespace is not a reason");
+  assert.equal(refusalIn({}), null);
+  assert.equal(refusalIn(null), null);
 });
