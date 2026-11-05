@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listUsers, setRole, type Role } from "@/lib/auth";
 import { requireAdmin, authEnabled } from "@/lib/session-server";
 import { listAudit, verifyAuditChain, auditEnabled } from "@/lib/audit";
-import { grant, balanceOf, ledgerOf, fromUSD, creditsEnabled, trialNote } from "@/lib/credits";
+import { grant, balanceOf, ledgerOf, creditsToMicro, balanceCredits, creditsEnabled, trialNote } from "@/lib/credits";
 import { sourceFingerprint, setSourceToken, clearSourceToken, sourceToken, storedKeyAvailable } from "@/lib/sourcekey";
 import { leakOsint, estimateCost, formatCost } from "@/lib/leakosint";
 import { dbReachable } from "@/lib/db";
@@ -30,7 +30,7 @@ export async function GET() {
   const database = await dbReachable();
   // balance per user, so the admin sees who is low without clicking into each
   const withBalance = creditsEnabled
-    ? await Promise.all(users.map(async (u) => ({ ...u, credits: await balanceOf(u.id) })))
+    ? await Promise.all(users.map(async (u) => ({ ...u, credits: balanceCredits(await balanceOf(u.id)) })))
     : users;
   return NextResponse.json({
     configured: true, metered: creditsEnabled, users: withBalance, activity, chain,
@@ -95,14 +95,18 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- balances --------------------------------------------------------------------
-  // top up (or claw back) a balance. Admin enters dollars; we store micro-dollars.
+  // Granted in CREDITS — one credit, one search. Dollars were never the unit anybody
+  // administering this thinks in: the question is "how many more searches should they
+  // get", and the answer should be the number you type. Negative claws back.
   if (body?.action === "grant") {
     if (!creditsEnabled) return NextResponse.json({ error: "no database — the tool runs unmetered" }, { status: 400 });
-    const usd = Number(body?.usd);
-    if (!id || !Number.isFinite(usd) || usd === 0) return NextResponse.json({ error: "a user and a non-zero dollar amount are required" }, { status: 400 });
-    const r = await grant(id, fromUSD(usd), `admin ${usd > 0 ? "grant" : "clawback"} by ${admin.email}`);
+    const n = Math.trunc(Number(body?.credits ?? body?.usd));
+    if (!id || !Number.isFinite(n) || n === 0) {
+      return NextResponse.json({ error: "a user and a non-zero whole number of credits are required" }, { status: 400 });
+    }
+    const r = await grant(id, creditsToMicro(n), `admin ${n > 0 ? "grant" : "clawback"} of ${Math.abs(n)} credit(s) by ${admin.email}`);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
-    return NextResponse.json({ ok: true, balance: r.balance });
+    return NextResponse.json({ ok: true, balance: balanceCredits(r.balance ?? 0) });
   }
 
   if (body?.action === "ledger") {

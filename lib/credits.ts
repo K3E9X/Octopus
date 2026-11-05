@@ -15,6 +15,7 @@
 // pretending a balance it cannot keep.
 
 import { sql, dbEnabled } from "./db";
+import { estimateCost } from "./leakosint";
 import { randomBytes } from "node:crypto";
 
 export const MICRO = 1_000_000;                 // credits per dollar
@@ -33,15 +34,57 @@ export function markup(): number {
 export const toUSD = (micro: number) => micro / MICRO;
 export const fromUSD = (usd: number) => Math.round(usd * MICRO);
 
-/** The price we charge, in credits, for a raw API cost in dollars. Rounded UP: never
- *  undercharge, because the API bills us the real cost regardless. */
+/**
+ * What we take off a balance for a query, in micro-dollars.
+ *
+ * Always a whole number of credits' worth, so a balance stays a whole number of
+ * searches and "47 credits" never quietly becomes "46 and a bit".
+ */
 export function priceCredits(rawUsd: number): number {
-  return Math.ceil(rawUsd * markup() * MICRO);
+  return creditsToMicro(searchCredits(rawUsd));
 }
 
 /** For display. */
 export const fmtUSD = (micro: number) => (toUSD(micro) < 0.01 ? `$${toUSD(micro).toFixed(4)}` : `$${toUSD(micro).toFixed(3)}`);
-export const fmtCredits = (micro: number) => `${micro.toLocaleString("en-US")} cr`;
+
+// ---- the credit ------------------------------------------------------------------
+//
+// TWO UNITS, on purpose, and they are not the same thing.
+//
+// The LEDGER is in micro-dollars, because money that drifts leaks in one direction and
+// an integer cannot drift. Nothing about that changes.
+//
+// What a person is shown and charged is a CREDIT: one standard search, at the default
+// depth, on a one-word selector. A balance is only ever asked one question — "how many
+// more searches do I have" — and "7,143 cr" cannot answer it. One credit can.
+//
+// Charges round UP to a whole credit, which is both what makes the number legible and
+// what covers the variance in the upstream price. A query that costs more upstream
+// still costs more here: a three-word name is four credits because it genuinely is
+// about four times the work.
+
+/** One standard search: a single word at the default depth, with the markup applied. */
+export const CREDIT_MICRO = Math.ceil(estimateCost("standard", 300) * markup() * MICRO);
+
+/** What a raw API cost is worth in whole credits. Never free, always rounded up. */
+export function searchCredits(rawUsd: number): number {
+  if (rawUsd <= 0) return 0;
+  return Math.max(1, Math.ceil((rawUsd * markup() * MICRO) / CREDIT_MICRO));
+}
+
+export const creditsToMicro = (credits: number) => Math.round(credits * CREDIT_MICRO);
+
+/** A balance in whole searches. Floored: a part-credit cannot buy a search. */
+export const balanceCredits = (micro: number) =>
+  Number.isFinite(micro) ? Math.floor(micro / CREDIT_MICRO) : micro;
+
+export const fmtCredits = (micro: number) => {
+  const n = balanceCredits(micro);
+  return `${n.toLocaleString("en-US")} credit${n === 1 ? "" : "s"}`;
+};
+
+/** For a price rather than a balance, where the figure is already whole. */
+export const fmtPrice = (credits: number) => `${credits} credit${credits === 1 ? "" : "s"}`;
 
 let ready: Promise<void> | null = null;
 async function ensure(): Promise<void> {
@@ -150,24 +193,14 @@ export async function ledgerOf(userId: string, limit = 40): Promise<LedgerRow[]>
 /**
  * The trial.
  *
- * Sized in SEARCHES rather than in dollars, because dollars mean nothing to whoever is
- * setting it and a price that moves with the depth setting would quietly change what
- * "two free searches" buys. Two is the default; a deployment that wants none sets zero
- * and new accounts simply start empty.
- *
- * It is approximate on purpose and the interface says so: a one-word query at the
- * default depth is the unit, and a three-word name costs about twice that. Overstating
- * it would be worse than being vague — somebody would run two names and find the
- * second one refused.
+ * Counted in searches, which is now also the unit it is charged in — so "two free
+ * searches" is exactly what the balance says, with none of the arithmetic that made
+ * "14,286 cr" mean two of anything.
  */
 export const TRIAL_SEARCHES = Math.max(0, Number(process.env.OCTOPUS_TRIAL_SEARCHES ?? 2));
+export const TRIAL_CREDITS = creditsToMicro(TRIAL_SEARCHES);
 
-/** The raw API cost of one plain one-word query at the default depth. */
-const ONE_SEARCH_USD = 0.0002 * (5 + Math.sqrt(300));
-
-export const TRIAL_CREDITS = TRIAL_SEARCHES > 0 ? priceCredits(ONE_SEARCH_USD * TRIAL_SEARCHES) : 0;
-
-/** Kept for deployments that set an explicit dollar figure; it wins when present. */
+/** A deployment that prefers to set a dollar figure still can; it wins when present. */
 const EXPLICIT_STARTER = Number(process.env.OCTOPUS_STARTER_USD);
 export const STARTER_CREDITS = Number.isFinite(EXPLICIT_STARTER) && EXPLICIT_STARTER > 0
   ? fromUSD(EXPLICIT_STARTER)
@@ -175,11 +208,11 @@ export const STARTER_CREDITS = Number.isFinite(EXPLICIT_STARTER) && EXPLICIT_STA
 
 export async function seedStarter(userId: string): Promise<void> {
   if (!creditsEnabled || STARTER_CREDITS <= 0) return;
-  await grant(userId, STARTER_CREDITS, `trial: about ${TRIAL_SEARCHES} search${TRIAL_SEARCHES === 1 ? "" : "es"}`);
+  await grant(userId, STARTER_CREDITS, `trial: ${TRIAL_SEARCHES} search${TRIAL_SEARCHES === 1 ? "" : "es"}`);
 }
 
 /** What the trial is worth, for the interface to state without recomputing it. */
 export const trialNote = () =>
   TRIAL_SEARCHES > 0
-    ? `New accounts start with about ${TRIAL_SEARCHES} search${TRIAL_SEARCHES === 1 ? "" : "es"} (${fmtCredits(STARTER_CREDITS)}). A multi-word name costs more than a single address, so the figure is approximate.`
+    ? `New accounts start with ${fmtCredits(STARTER_CREDITS)}. One credit is one standard search; a multi-word name costs more, and so does a deeper one.`
     : "New accounts start with no balance; an administrator grants credits.";

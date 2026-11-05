@@ -21,7 +21,7 @@ import { buildReport, headline } from "@/lib/report";
 import { buildSubject } from "@/lib/subject";
 import { recordQuery, auditEnabled } from "@/lib/audit";
 import { sourceToken } from "@/lib/sourcekey";
-import { creditsEnabled, priceCredits, debit, refund, balanceOf, fmtCredits, fmtUSD } from "@/lib/credits";
+import { creditsEnabled, priceCredits, searchCredits, balanceCredits, fmtPrice, debit, refund, balanceOf, fmtUSD } from "@/lib/credits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,13 +56,13 @@ export async function GET(req: NextRequest) {
     const subjects = pivots.slice(0, MAX_PIVOTS).map((p) => buildSubject(p, { defaultCountry: country }));
     const each = subjects.map((s) => {
       const usd = estimateCost(s.query, limit);
-      return { selector: s.raw, kind: s.kind, query: s.query, usd, credits: priceCredits(usd) };
+      return { selector: s.raw, kind: s.kind, query: s.query, usd, credits: searchCredits(usd) };
     });
     const usdTotal = estimateCost(subjects.map((s) => s.query), limit);
-    const credits = priceCredits(usdTotal);
+    const credits = searchCredits(usdTotal);
     return NextResponse.json({
       pivot: true, limit, metered: creditsEnabled, each,
-      total: { usd: usdTotal, credits, formatted: creditsEnabled ? fmtCredits(credits) : formatCost(usdTotal) },
+      total: { usd: usdTotal, credits, formatted: creditsEnabled ? fmtPrice(credits) : formatCost(usdTotal) },
     });
   }
 
@@ -86,8 +86,8 @@ export async function GET(req: NextRequest) {
       // the ones that are free: dates, anything under 4 characters, short numbers
       ignored: toks.filter((t) => !isBillableWord(t)),
       usd,
-      credits: priceCredits(usd),
-      formatted: creditsEnabled ? fmtCredits(priceCredits(usd)) : formatCost(usd),
+      credits: searchCredits(usd),
+      formatted: creditsEnabled ? fmtPrice(searchCredits(usd)) : formatCost(usd),
     };
   };
 
@@ -192,7 +192,10 @@ export async function POST(req: NextRequest) {
   if (creditsEnabled && user) {
     const charge = await debit(user.id, price, `search: ${subject.canonical.slice(0, 48)}`);
     if (!charge.ok) {
-      return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
+      return NextResponse.json({
+        error: charge.error, insufficient: true,
+        balance: balanceCredits(charge.balance ?? 0), price: searchCredits(estimateCost(subject.query, limit)),
+      }, { status: 402 });
     }
   }
 
@@ -250,7 +253,7 @@ export async function POST(req: NextRequest) {
       };
       return NextResponse.json({
         error: says[reason], reason,
-        refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
+        refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
       }, { status: 502 });
     }
 
@@ -264,7 +267,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: "The leak source answered in a shape this version cannot read. Nothing is claimed about this subject either way.",
         reason: "unreadable",
-        refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
+        refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
       }, { status: 502 });
     }
 
@@ -277,17 +280,17 @@ export async function POST(req: NextRequest) {
       headline: headline(report),
       // what was actually asked of the API, so the price shown is explainable
       query: { sent: subject.query, limit, rowsReturned: res.rowCount, databases: res.databases.length },
-      charged: creditsEnabled && user ? price : 0,
+      charged: creditsEnabled && user ? searchCredits(estimateCost(subject.query, limit)) : 0,
       // Never let silence imply a protection. A deployment with no database has no
       // accounts, no metering and no query log, and the interface must be able to say so.
       deployment: { metered: creditsEnabled && !!user, logged: auditEnabled, operator: user?.email || null },
-      balance: user ? await balanceOf(user.id) : undefined,
+      balance: user ? balanceCredits(await balanceOf(user.id)) : undefined,
     });
   } catch {
     await giveBack("refund: search threw");
     return NextResponse.json({
       error: "The search failed — you were not charged.",
-      refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
+      refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
     }, { status: 500 });
   }
 }
@@ -322,7 +325,10 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
   if (creditsEnabled && user) {
     const charge = await debit(user.id, price, `pivot: ${selectors.length} selectors`);
     if (!charge.ok) {
-      return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
+      return NextResponse.json({
+        error: charge.error, insufficient: true,
+        balance: balanceCredits(charge.balance ?? 0), price: searchCredits(estimateCost(queries, limit)),
+      }, { status: 402 });
     }
   }
 
@@ -371,8 +377,8 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
       pivot: true,
       reports,
       query: { sent: queries, limit, rowsReturned: res.rowCount, databases: res.databases.length },
-      charged: creditsEnabled && user ? price : 0,
-      balance: user ? await balanceOf(user.id) : undefined,
+      charged: creditsEnabled && user ? searchCredits(estimateCost(queries, limit)) : 0,
+      balance: user ? balanceCredits(await balanceOf(user.id)) : undefined,
     });
   } catch {
     await giveBack("refund: pivot threw");

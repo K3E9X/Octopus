@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MICRO, priceCredits, markup, toUSD, fromUSD, fmtUSD, fmtCredits } from "../lib/credits.ts";
+import { markup, priceCredits, fromUSD, toUSD, fmtUSD, MICRO, CREDIT_MICRO, searchCredits, creditsToMicro, balanceCredits, fmtCredits } from "../lib/credits.ts";
 import { estimateCost } from "../lib/leakosint.ts";
 
 // The money math is pure and testable; the DB-backed balance is not reachable from CI.
@@ -16,12 +16,16 @@ test("the default markup is above 1 — the margin is the business", () => {
   assert.ok(markup() >= 1);
 });
 
-test("price is the raw cost times markup, rounded UP so we never undercharge", () => {
-  const raw = estimateCost("google", 100);           // $0.003
-  const expected = Math.ceil(raw * markup() * MICRO);
-  assert.equal(priceCredits(raw), expected);
-  // rounding is always up, never down: a fraction of a micro-dollar still costs one
-  assert.equal(priceCredits(0.0000001), 1);
+test("a charge is whole credits' worth, and never less than the API cost", () => {
+  // What leaves a balance is now a whole number of CREDITS expressed in micro-dollars,
+  // not the exact marked-up figure. Rounding up is what keeps a balance a whole number
+  // of searches and what absorbs the variance in the upstream price — a query costing
+  // a hair over one credit must take two, or the margin is set by the rounding.
+  const raw = estimateCost("google", 100);           // $0.003 upstream
+  assert.equal(priceCredits(raw) % CREDIT_MICRO, 0, "no part-credit is ever left behind");
+  assert.ok(priceCredits(raw) >= raw * markup() * MICRO, "never below the marked-up cost");
+  // anything at all costs one credit; nothing costs nothing
+  assert.equal(priceCredits(0.0000001), CREDIT_MICRO);
   assert.equal(priceCredits(0), 0);
 });
 
@@ -40,6 +44,56 @@ test("integer money does not drift — a hundred small charges sum exactly", () 
 test("display is legible at the scale it lands on", () => {
   assert.match(fmtUSD(3000), /^\$0\.0030$/);          // 3000 micro-dollars = $0.003
   assert.match(fmtUSD(1_250_000), /^\$1\.250$/);
-  assert.equal(fmtCredits(4800), "4,800 cr");
-  assert.equal(fmtCredits(1_000_000), "1,000,000 cr");
+  // a balance is read in searches, because that is the only question anybody asks of it
+  assert.equal(fmtCredits(creditsToMicro(1)), "1 credit");
+  assert.equal(fmtCredits(creditsToMicro(4_800)), "4,800 credits");
+});
+
+// ---- the credit is a search ----------------------------------------------------
+// Two units, deliberately: the ledger is micro-dollars because money that drifts leaks
+// in one direction, and what a person is shown is a SEARCH, because a balance is only
+// ever asked one question and "7,143 cr" cannot answer it.
+
+test("one standard search is exactly one credit", () => {
+  assert.equal(searchCredits(estimateCost("someone@example.com", 300)), 1);
+});
+
+test("a cheaper search is still a whole credit — never free", () => {
+  assert.equal(searchCredits(estimateCost("someone@example.com", 100)), 1);
+  assert.equal(searchCredits(0.0000001), 1);
+  assert.equal(searchCredits(0), 0, "but nothing costs nothing");
+});
+
+test("work that costs more upstream costs more credits", () => {
+  const one = searchCredits(estimateCost("someone@example.com", 300));
+  const two = searchCredits(estimateCost("Jean Dupont", 300));
+  const four = searchCredits(estimateCost("Jean Pierre Dupont", 300));
+  assert.equal(one, 1);
+  assert.equal(two, 2);
+  assert.equal(four, 4);
+  assert.ok(four > two && two > one, "the ladder follows the real cost");
+});
+
+test("a deeper sweep costs more", () => {
+  assert.ok(searchCredits(estimateCost("a@b.com", 10000)) > searchCredits(estimateCost("a@b.com", 300)));
+});
+
+test("a charge is always a whole number of credits' worth, so a balance stays whole", () => {
+  for (const q of ["a@b.com", "Jean Dupont", "Jean Pierre Dupont"]) {
+    const micro = priceCredits(estimateCost(q, 300));
+    assert.equal(micro % CREDIT_MICRO, 0, `${q} must not leave a part-credit behind`);
+  }
+});
+
+test("a balance reads as whole searches, floored — a part-credit buys nothing", () => {
+  assert.equal(balanceCredits(creditsToMicro(47)), 47);
+  assert.equal(balanceCredits(creditsToMicro(1) - 1), 0, "just under one search is no searches");
+  assert.equal(fmtCredits(creditsToMicro(1)), "1 credit");
+  assert.equal(fmtCredits(creditsToMicro(2)), "2 credits");
+});
+
+test("rounding up is what covers the upstream variance", () => {
+  // a query costing a hair over one credit is charged two, never one
+  const justOver = (CREDIT_MICRO + 1) / (markup() * MICRO);
+  assert.equal(searchCredits(justOver), 2);
 });

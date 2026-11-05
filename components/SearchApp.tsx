@@ -185,7 +185,7 @@ export default function SearchApp() {
         <nav>
           <a href="#plans">Plans</a>
           {account?.authed
-            ? <>{account.metered && typeof account.balance === "number" && <span className="lk2-bal">{account.balance.toLocaleString("en-US")} cr</span>}<Link href="/admin">Admin</Link></>
+            ? <>{account.metered && typeof account.balance === "number" && <span className="lk2-bal" title="one credit is one standard search">{account.balance.toLocaleString("en-US")} credit{account.balance === 1 ? "" : "s"}</span>}<Link href="/admin">Admin</Link></>
             : <Link className="lk2-cta" href="/signin">Sign in</Link>}
         </nav>
       </header>
@@ -594,7 +594,7 @@ function Plans({ authed }: { authed: boolean }) {
   return (
     <section className="lk2-plans" id="plans">
       <h2>Plans</h2>
-      <p className="lk2-plans-sub">Every search costs real money upstream, so a plan is a balance of credits you spend as you search. A wider query and a deeper one both cost more, and both are priced before you run them.</p>
+      <p className="lk2-plans-sub"><b>One credit is one search.</b> A plain address at the default depth costs one; a multi-word name costs more because it genuinely is more work upstream, and so does a deeper sweep. Whatever it comes to, you see the figure before you spend it.</p>
       <div className="lk2-plan-grid">
         {PLANS.map((p) => (
           <div className={"lk2-plan" + (p.featured ? " featured" : "")} key={p.name}>

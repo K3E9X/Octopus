@@ -45,12 +45,14 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
   // Granting credit is the lever that matters day to day — deciding who gets to keep
   // searching — so it is an inline control rather than a browser prompt, and it takes
   // an amount in dollars because that is the unit the bill arrives in.
-  async function grant(id: string, email: string, usd: number) {
-    if (!Number.isFinite(usd) || usd === 0) { setMsg("enter a non-zero amount"); return; }
-    const r = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "grant", id, usd }) });
+  async function grant(id: string, email: string, credits: number) {
+    const n = Math.trunc(credits);
+    if (!Number.isFinite(n) || n === 0) { setMsg("enter a non-zero number of credits"); return; }
+    const r = await fetch("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "grant", id, credits: n }) });
     const d = await r.json();
     if (!r.ok) { setMsg(d.error || "grant failed"); return; }
-    setMsg(`${email}: balance now ${(d.balance ?? 0).toLocaleString("en-US")} cr`);
+    const b = d.balance ?? 0;
+    setMsg(`${email}: ${b.toLocaleString("en-US")} credit${b === 1 ? "" : "s"} — about that many searches.`);
     load();
   }
 
@@ -81,7 +83,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
         <h2>Accounts <em>{users.length}</em></h2>
         {trial && <p className="adm-note">{trial}</p>}
         <table className="datatable">
-          <thead><tr><th>email</th><th>name</th><th>role</th>{metered && <th>credits</th>}<th>created</th><th>last seen</th></tr></thead>
+          <thead><tr><th>email</th><th>name</th><th>role</th>{metered && <th>credits · searches</th>}<th>created</th><th>last seen</th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
@@ -252,26 +254,27 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
 }
 
 /**
- * Add credit to one account.
+ * Add credit to one account, in SEARCHES.
  *
- * Three amounts that mean something — roughly a handful of searches, a working week,
- * a month — plus a free field, because the useful grant is often neither. A claw-back
- * is the same control with a negative number; the server clamps the balance at zero so
- * it can never go under.
+ * Three amounts that mean something — a handful, a hundred, five hundred — plus a free
+ * field, because the useful grant is often neither. A claw-back is the same control
+ * with a negative number; the server clamps the balance at zero so it can never go
+ * under. The unit is the one the person receiving it cares about: one credit buys one
+ * standard search.
  */
-function Grant({ onGrant }: { onGrant: (usd: number) => void }) {
+function Grant({ onGrant }: { onGrant: (credits: number) => void }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   if (!open) return <button className="adm-grant" onClick={() => setOpen(true)}>credit</button>;
-  const give = (usd: number) => { onGrant(usd); setOpen(false); setCustom(""); };
+  const give = (n: number) => { onGrant(n); setOpen(false); setCustom(""); };
   return (
     <span className="adm-grantbox">
-      {[0.05, 1, 5].map((v) => (
-        <button key={v} className="adm-grant" onClick={() => give(v)}>+${v}</button>
+      {[10, 100, 500].map((v) => (
+        <button key={v} className="adm-grant" onClick={() => give(v)}>+{v}</button>
       ))}
       <input
-        value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="$"
-        inputMode="decimal" aria-label="amount in dollars"
+        value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d-]/g, ""))}
+        placeholder="±n" inputMode="numeric" aria-label="number of credits"
         onKeyDown={(e) => { if (e.key === "Enter") give(Number(custom)); }}
       />
       <button className="adm-grant" onClick={() => give(Number(custom))} disabled={!custom.trim()}>add</button>
