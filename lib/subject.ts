@@ -159,7 +159,7 @@ export interface BuildOpts {
    * Quote a multi-word query so the API treats it as ONE word.
    *
    * This is not only a price lever, it changes what is searched. Unquoted, the API
-   * runs every permutation of the words and finds "Musk Elon Reeve" too — thorough,
+   * runs every permutation of the words and finds "Doe John Q" too — thorough,
    * and sixteen times the complexity. Quoted, it matches the phrase as written —
    * a sixth of the price and strictly fewer rows. Neither is the right default for
    * everyone, so the caller chooses and the interface prices both.

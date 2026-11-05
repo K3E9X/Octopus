@@ -18,15 +18,28 @@
 // the unsorted look and lands on it. Strip every animation and the picture still says
 // what it means, which is the only version worth shipping.
 
-/** Each row: the columns it shows, and whether it is about the subject. */
+/**
+ * Each row: the columns it shows, and whether it is about the subject.
+ *
+ * EVERY VALUE HERE IS FICTIONAL, and deliberately unusable. This is a public page
+ * about leaked personal data, so a label that looks like somebody's address is a
+ * label that IS somebody's address — surnames belong to real people whether or not
+ * one was in mind. So: the reserved `example.com` domain, "Doe" as the universal
+ * placeholder for a person who does not exist, a number from the range regulators
+ * reserve for fiction, and an IBAN whose country code is not a country. Each is also
+ * cut short, so none of them is a complete value even by accident.
+ *
+ * The three "other" rows still make the point the illustration exists for: two share
+ * a surname with the subject, and one is a STREET that merely contains it.
+ */
 const ROWS: { cells: number[]; mine: boolean; label: string }[] = [
-  { cells: [34, 18, 26], mine: true, label: "m.nadour@…" },
-  { cells: [22, 30, 14], mine: false, label: "a.nadour@…" },
-  { cells: [28, 22, 30], mine: true, label: "+33 6 12…" },
-  { cells: [18, 26, 22], mine: false, label: "rue Nadour" },
-  { cells: [30, 16, 24], mine: true, label: "FR76 3000…" },
-  { cells: [24, 28, 18], mine: false, label: "s.nadour@…" },
-  { cells: [20, 24, 28], mine: true, label: "14 rue des…" },
+  { cells: [34, 18, 26], mine: true, label: "j.doe@example…" },
+  { cells: [22, 30, 14], mine: false, label: "a.doe@example…" },
+  { cells: [28, 22, 30], mine: true, label: "+33 6 39 98…" },
+  { cells: [18, 26, 22], mine: false, label: "rue Doe" },
+  { cells: [30, 16, 24], mine: true, label: "XX00 0000…" },
+  { cells: [24, 28, 18], mine: false, label: "s.doe@example…" },
+  { cells: [20, 24, 28], mine: true, label: "1 Example St…" },
 ];
 
 export default function Sift() {
