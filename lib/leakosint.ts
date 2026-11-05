@@ -71,6 +71,8 @@ export interface LeakOsintResult {
   cost: number;
   /** the API said the query ran and matched nothing — NOT the same as an error */
   empty: boolean;
+  /** when unreadable: the payload's top-level key names, so a shape change is diagnosable */
+  shape?: string;
   /**
    * The endpoint answered with a body we could not read.
    *
@@ -247,9 +249,9 @@ export function refusalIn(payload: any): string | null {
 /** The key the API uses to say "ran fine, matched nothing". */
 const NO_RESULTS = "No results found";
 
-function parseList(payload: any): LeakDatabase[] {
-  const list = payload?.List;
-  if (!list || typeof list !== "object") return [];
+/** Pull the databases out of one `List` object. */
+function databasesIn(list: any): LeakDatabase[] {
+  if (!list || typeof list !== "object" || Array.isArray(list)) return [];
   const out: LeakDatabase[] = [];
   for (const [name, body] of Object.entries<any>(list)) {
     if (name === NO_RESULTS) continue;
@@ -259,6 +261,69 @@ function parseList(payload: any): LeakDatabase[] {
     out.push({ name, info: String(body?.InfoLeak || "").trim(), rows });
   }
   return out;
+}
+
+/**
+ * Find the results, wherever this response put them.
+ *
+ * A single query answers `{"List": {"<database>": {...}}}`, which is what the
+ * documentation describes and all it describes — it shows how to SEND a batch and
+ * never shows what one comes BACK as. It does not come back as that: a batch nests a
+ * `List` per query, so the top level is keyed by something other than a database and
+ * the documented reader finds nothing at all. The pivot shipped broken for exactly
+ * that reason, reporting a perfectly good answer as a shape it could not read.
+ *
+ * So: take the top-level `List` when there is one, and otherwise look one level down
+ * for objects that carry their own. Databases are merged by name across queries —
+ * two queries that both hit "Collection #1" are the same dump, and keeping two copies
+ * of it would double every row in the per-breach view. Attribution then decides which
+ * rows belong to which subject, which is the step that makes merging safe.
+ */
+function listsIn(payload: any): any[] {
+  if (!payload || typeof payload !== "object") return [];
+  if (payload.List) return [payload.List];
+  const out: any[] = [];
+  for (const value of Object.values<any>(payload)) {
+    if (value && typeof value === "object" && value.List) out.push(value.List);
+  }
+  return out;
+}
+
+/**
+ * Did the endpoint run the query and match nothing?
+ *
+ * "No results found" arrives as a database NAME, in every List the response carries.
+ * Checking only the top-level one meant a BATCH that matched nothing had no readable
+ * database, fell through to the salvage path, and was reported as a payload we could
+ * not understand — turning a clean, correct, cheap answer into an error and a refund.
+ */
+function matchedNothing(payload: any): boolean {
+  const lists = listsIn(payload);
+  if (!lists.length) return false;
+  return lists.every(
+    (l) => l && typeof l === "object" && Object.keys(l).length > 0 && Object.keys(l).every((k) => k === NO_RESULTS),
+  );
+}
+
+function parseList(payload: any): LeakDatabase[] {
+  const groups = listsIn(payload);
+  if (!groups.length) return [];
+
+  const merged = new Map<string, LeakDatabase>();
+  for (const list of groups) {
+    for (const db of databasesIn(list)) {
+      const existing = merged.get(db.name);
+      if (!existing) { merged.set(db.name, { ...db, rows: [...db.rows] }); continue; }
+      if (!existing.info && db.info) existing.info = db.info;
+      // the same row can be returned by two queries in one batch; it is one row
+      const seen = new Set(existing.rows.map((r) => JSON.stringify(r)));
+      for (const r of db.rows) {
+        const k = JSON.stringify(r);
+        if (!seen.has(k)) { seen.add(k); existing.rows.push(r); }
+      }
+    }
+  }
+  return [...merged.values()];
 }
 
 export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
@@ -308,16 +373,17 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
     // payload, which faithfully turned "No results found. Try changing your request."
     // into a finding. That is the same mistake as reading a refusal as data, one layer
     // down. A recognised empty answer is an answer; it is never salvaged.
-    const list = (data as any)?.List;
-    const onlyEmpty = list && typeof list === "object" && Object.keys(list).every((k) => k === NO_RESULTS);
-    if (onlyEmpty) return { databases: [], items: [], rowCount: 0, cost, empty: true };
+    if (matchedNothing(data)) return { databases: [], items: [], rowCount: 0, cost, empty: true };
 
     // The documented shape yielded nothing but the endpoint answered: harvest the raw
     // payload rather than report a clean result off a response we simply failed to read.
     if (!items.length && data && Object.keys(data).length) {
       const salvaged = harvest(data).map((i) => ({ ...i, source: "leakosint · unparsed" }));
       if (salvaged.length) {
-        return { databases: [], items: salvaged, rowCount: 0, cost, empty: false, unreadable: true };
+        // The KEYS, never the values: enough to recognise a shape change from a bug
+        // report, and nothing that could carry somebody's record into a log.
+        const shape = Object.keys(data as object).slice(0, 8).join(", ");
+        return { databases: [], items: salvaged, rowCount: 0, cost, empty: false, unreadable: true, shape };
       }
     }
 

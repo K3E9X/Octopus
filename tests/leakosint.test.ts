@@ -1,7 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost, refusalIn } from "../lib/leakosint.ts";
+import { leakOsint } from "../lib/leakosint.ts";
 import type { LeakOsintResult } from "../lib/leakosint.ts";
+
+/**
+ * Run leakOsint against a canned payload by standing in for fetch.
+ *
+ * The endpoint bills per request, so the parser is exercised against fixtures rather
+ * than against the live API — the shapes below are the ones observed from it.
+ */
+async function parseFixture(payload: unknown) {
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } })) as any;
+  try {
+    return await leakOsint({ token: "1:aaaaaa", request: "probe", limit: 100 });
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
 
 // ---- the billing rules ---------------------------------------------------------
 // These are where the money is: a three-word query is 16x the complexity of a
@@ -220,4 +239,63 @@ test("the live invalid-token shape is a refusal — keys and Status alike", () =
   // and a Status:Error whose message field we do not recognise is still never a result
   assert.ok(refusalIn({ Status: "Error" }));
   assert.equal(refusalIn({ Status: "Success", List: {} }), null);
+});
+
+// ---- batch responses ---------------------------------------------------------------
+// The documentation shows how to SEND several queries at once and never shows what one
+// comes back as. It does not come back as a single top-level List, which is why the
+// pivot shipped reporting a perfectly good answer as "a shape this version cannot read".
+
+test("a single-query response still parses, unchanged", async () => {
+  const res = await parseFixture({
+    List: { "Dump A": { InfoLeak: "In 2019 something leaked.", Data: [{ Email: "a@b.c" }] } },
+  });
+  assert.equal(res.databases.length, 1);
+  assert.equal(res.databases[0].rows.length, 1);
+  assert.equal(res.unreadable, undefined);
+});
+
+test("a batch response nests a List per query, and all of it is read", async () => {
+  const res = await parseFixture({
+    "a@b.c": { List: { "Dump A": { InfoLeak: "x", Data: [{ Email: "a@b.c" }] } } },
+    "+33612345678": { List: { "Dump B": { InfoLeak: "y", Data: [{ Phone: "+33612345678" }] } } },
+  });
+  assert.deepEqual(res.databases.map((d) => d.name).sort(), ["Dump A", "Dump B"]);
+  assert.equal(res.rowCount, 2);
+  assert.notEqual(res.unreadable, true, "a readable batch is not 'unreadable'");
+});
+
+test("the same dump hit by two queries is one dump, not two", async () => {
+  const res = await parseFixture({
+    q1: { List: { "Collection #1": { InfoLeak: "a stuffing list", Data: [{ Email: "a@b.c" }] } } },
+    q2: { List: { "Collection #1": { InfoLeak: "a stuffing list", Data: [{ Email: "d@e.f" }] } } },
+  });
+  assert.equal(res.databases.length, 1, "merged by name");
+  assert.equal(res.databases[0].rows.length, 2, "both rows kept");
+});
+
+test("a row returned by two queries in one batch counts once", async () => {
+  const row = { Email: "a@b.c", Password: "x" };
+  const res = await parseFixture({
+    q1: { List: { D: { InfoLeak: "", Data: [row] } } },
+    q2: { List: { D: { InfoLeak: "", Data: [row] } } },
+  });
+  assert.equal(res.databases[0].rows.length, 1);
+});
+
+test("a batch that matched nothing is empty, not unreadable", async () => {
+  const res = await parseFixture({
+    q1: { List: { "No results found": { InfoLeak: "No results found.", Data: [] } } },
+    q2: { List: { "No results found": { InfoLeak: "No results found.", Data: [] } } },
+  });
+  assert.equal(res.rowCount, 0);
+  assert.notEqual(res.unreadable, true);
+});
+
+test("a payload with no List anywhere is unreadable, and says what it saw", async () => {
+  const res = await parseFixture({ somethingNew: 1, alsoThis: "x" });
+  assert.equal(res.unreadable, true);
+  assert.match(res.shape || "", /somethingNew/);
+  // the SHAPE, never the content
+  assert.ok(!(res.shape || "").includes("x"));
 });
