@@ -19,7 +19,7 @@ test("the rule names what is missing rather than just refusing", () => {
   assert.equal(passwordProblem("abcdefghi1"), null);
 });
 
-test("every strength score has a label — a non-empty passphrase never renders blank", () => {
+test("every strength score has a label, a non-empty passphrase never renders blank", () => {
   for (let s = 0; s <= 4; s++) assert.ok(STRENGTH_LABEL[s]?.length > 0, `score ${s} has no label`);
 });
 

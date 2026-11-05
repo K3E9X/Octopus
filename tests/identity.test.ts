@@ -44,7 +44,7 @@ test("accents do not split a name into two findings", () => {
   assert.ok(id.facets.name![0].variants?.includes("Jérôme Durand"), "the other spelling is kept, not lost");
 });
 
-test("the same number written three ways consolidates — the trunk-prefix case", () => {
+test("the same number written three ways consolidates, the trunk-prefix case", () => {
   const id = consolidate([
     row("A", [["phone", "Phone", "+33612345678"]]),
     row("B", [["phone", "Mobile", "06 12 34 56 78"]]),

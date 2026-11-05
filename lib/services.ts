@@ -2,8 +2,8 @@
 //
 // The grid of logos is the thing this category is known for, and it is normally built
 // by PROBING: ask each site's password-reset endpoint whether the address is
-// registered. That answer rots — most of those endpoints are gone or behind a
-// challenge — and it was never free.
+// registered. That answer rots, most of those endpoints are gone or behind a
+// challenge, and it was never free.
 //
 // The breaches already answer a different question, and arguably a better one. A dump
 // named "Deezer 2019" is a service, a date, and the fact that this person's record was
@@ -12,7 +12,7 @@
 //
 // ONE DISTINCTION THE PROBING PRODUCTS CANNOT MAKE, and the reason this module is not
 // just a string split. Half of what the index returns is not a service at all:
-// "Collection #1", "COMB", "AntiPublic" are AGGREGATES — credential lists assembled
+// "Collection #1", "COMB", "AntiPublic" are AGGREGATES, credential lists assembled
 // from other breaches, often from sources nobody has ever identified. Rendering those
 // as a logo tile would tell somebody they have an account at a company that does not
 // exist. They are counted, named and kept, under their own heading, saying what they
@@ -23,7 +23,7 @@ export type SourceKind = "social" | "service" | "aggregate";
 /**
  * The social networks, named.
  *
- * They get their own heading because they are what somebody actually scans for — a
+ * They get their own heading because they are what somebody actually scans for, a
  * breach at a bank and a breach at a forum are both "a service", but only one of them
  * is the question being asked when a person looks at this grid. Matching is on the
  * reduced name, so "Facebook 2021" and "facebook" land together.
@@ -43,7 +43,7 @@ const SOCIAL = new Set([
 ]);
 
 export interface ServiceTile {
-  /** the service as a person would name it — "Deezer", not "Deezer 2019" */
+  /** the service as a person would name it, "Deezer", not "Deezer 2019" */
   name: string;
   /** the dump names this came from; several years of one service collapse into one tile */
   dumps: string[];
@@ -65,7 +65,7 @@ export interface ServiceTile {
  * and "collection 5" land together.
  */
 // Written as a prefix match on purpose. A trailing \b after "combo" fails on
-// "Combolist" — the word boundary is not there, the letter "l" is — and these names
+// "Combolist", the word boundary is not there, the letter "l" is, and these names
 // are compounds far more often than they are standalone words.
 const AGGREGATE = /\b(?:collections?|combo\w*|comb\b|compilations?|anti.?public|breach.?comp\w*|cracked|leakbase|stealer\w*|logs?\b|dumps?\b|mix\b|база|сборник)/i;
 
@@ -91,7 +91,7 @@ export function serviceOf(dumpName: string, info = ""): { name: string; kind: So
   if (!raw) return { name: "Unnamed source", kind: "aggregate", year };
 
   if (AGGREGATE.test(raw)) {
-    // keep the file's own name — it identifies the list, and nothing else does
+    // keep the file's own name, it identifies the list, and nothing else does
     return { name: raw.replace(/\s+/g, " "), kind: "aggregate", year };
   }
 
@@ -114,7 +114,7 @@ export interface SourceLike {
 /**
  * Collapse a report's sources into one tile per service.
  *
- * Several dumps of one company — a 2012 breach and a 2019 one — are one tile with a
+ * Several dumps of one company, a 2012 breach and a 2019 one, are one tile with a
  * span of years, because the question a reader has is "who holds my data", not "how
  * many files is it spread across". The files are still listed on the tile.
  */
@@ -144,7 +144,7 @@ export function serviceGrid(sources: SourceLike[]): ServiceTile[] {
     }
   }
 
-  // Social networks first — they are what somebody scans this grid for — then other
+  // Social networks first, they are what somebody scans this grid for, then other
   // services, then the aggregated lists, which are not places anybody has an account.
   // Within each, the source that gave up the most is read first.
   const ORDER: Record<SourceKind, number> = { social: 0, service: 1, aggregate: 2 };

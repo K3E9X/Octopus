@@ -1,20 +1,20 @@
-// The report — what the rows actually say about the subject.
+// The report, what the rows actually say about the subject.
 //
 // Several views of the same facts, plus the thing a pile of rows is not: a person.
 // The list of them lives in lib/views, because a count written down in prose drifts the
-// first time one is added — and it had drifted in four separate places.
+// first time one is added, and it had drifted in four separate places.
 //
-//   IDENTITY    — the rows consolidated into one subject, every value citing the
+//   IDENTITY, the rows consolidated into one subject, every value citing the
 //                 databases that carried it (lib/identity).
-//   BY CATEGORY — what each datum IS, ranked by how much it should worry whoever it
+//   BY CATEGORY, what each datum IS, ranked by how much it should worry whoever it
 //                 belongs to, deduped, with the concrete step to take on it.
-//   BY SOURCE   — which breach exposed what, with that breach's own description.
-//   TIMELINE    — the compromises in date order.
+//   BY SOURCE, which breach exposed what, with that breach's own description.
+//   TIMELINE, the compromises in date order.
 //
 // The gate everything passes through first is ATTRIBUTION. The API searches every
 // permutation of a query's words, so a result set contains rows that matched something
 // without being about the person asked for. Those rows are counted and shown as what
-// they are — other people — and never folded into the subject's identity. A tool that
+// they are, other people, and never folded into the subject's identity. A tool that
 // quietly merges them produces a confident, detailed, wrong answer, which is worse than
 // producing nothing.
 //
@@ -62,7 +62,7 @@ export interface CategoryReport {
 export interface SourceReport {
   /** the breach / database name */
   name: string;
-  /** what that breach was — the provenance line the API ships per database */
+  /** what that breach was, the provenance line the API ships per database */
   info: string;
   /** a human date pulled from the description, when there is one */
   date?: string;
@@ -85,7 +85,7 @@ export interface SearchReport {
   subject: { raw: string; kind: Subject["kind"]; canonical: string; unique: boolean; note?: string };
   /** how exposed, in one word, for the headline */
   verdict: "clear" | "exposed" | "critical";
-  /** the rows consolidated into one person — every value citing its databases */
+  /** the rows consolidated into one person, every value citing its databases */
   identity: Identity;
   /** that identity in one readable line */
   summary: string;
@@ -116,16 +116,16 @@ export interface SearchReport {
    * full, grouped by whoever they appear to be.
    *
    * These ARE the answer to a name search, so they are shown open rather than folded
-   * away. They are grouped, not merged — two groups may still be the same person under
+   * away. They are grouped, not merged, two groups may still be the same person under
    * two addresses, and the tool does not know which.
    */
   candidates: OtherSubject[];
-  /** people who matched only PART of the selector — a shared surname, nothing more */
+  /** people who matched only PART of the selector, a shared surname, nothing more */
   others: OtherSubject[];
   /**
    * Every attributed row, verbatim, column by column, grouped by database.
    *
-   * The views above classify, rank and deduplicate — all of which involve judgement,
+   * The views above classify, rank and deduplicate, all of which involve judgement,
    * and judgement can be wrong. This is the row as the API returned it, with the
    * dump's own column names and nothing removed: the activity timestamps the
    * categories drop as metadata, the internal flags nobody can interpret, the fields
@@ -139,7 +139,7 @@ export interface SearchReport {
   /**
    * Who holds this person's data, one tile per service.
    *
-   * The grid every product in this category shows — built from the breaches already
+   * The grid every product in this category shows, built from the breaches already
    * paid for rather than by probing sites, which costs nothing extra and makes a
    * claim that is checkable. Aggregated credential lists are kept apart from real
    * services, because telling somebody they have an account at "Collection #1" is
@@ -153,8 +153,8 @@ export interface SearchReport {
    * A list of leaked passwords tells someone their passwords leaked. Noticing that
    * three of them are one stem with a rotating suffix tells them something they did
    * not know and can act on: changing the current one changes nothing, because the
-   * next one is guessable from the last. Deterministic — it is string structure, not
-   * a judgement — so it can be shown without a hedge.
+   * next one is guessable from the last. Deterministic, it is string structure, not
+   * a judgement, so it can be shown without a hedge.
    */
   passwordHabits: PasswordHabit[];
 }
@@ -179,7 +179,7 @@ export interface RecordGroup {
   info: string;
   /** the rows, exactly as the source returned them */
   rows: Record<string, string>[];
-  /** how each row was judged — so a reader can see why it is here */
+  /** how each row was judged, so a reader can see why it is here */
   attribution: Attribution[];
 }
 
@@ -219,7 +219,7 @@ const ID_LABEL = /\b(id|uid|guid|user.?id|profile|account.?id|facebook|fb|instag
  * produced about fourteen "credit cards", each rendered as critical, under the words
  * "this is what enables direct-debit fraud".
  *
- * Luhn is still required — it rules out typos — but it is now the last test rather
+ * Luhn is still required, it rules out typos, but it is now the last test rather
  * than the only one. A number must also start like a card somebody could actually
  * have been issued, and be a length that issuer uses.
  */
@@ -240,21 +240,21 @@ function looksLikeCard(digits: string): boolean {
 
 export function looksFinancial(label: string, value: string): boolean {
   // The label is normalised FIRST. These patterns are \b-bounded, and an underscore is
-  // a word character — so "profile_id" never matched \bprofile\b, and "BankAccount"
+  // a word character, so "profile_id" never matched \bprofile\b, and "BankAccount"
   // never matched \baccount.?number\b either. Both arrive from dumps in exactly those
   // shapes, and categorize() was already humanising for its own rules while passing the
   // raw string here.
   const L = humanLabel(label).toLowerCase();
 
   // A field whose NAME says identifier is an identifier, whatever its digits look like
-  // — unless the same name also says money, which is how "BankAccount" stays financial
+  //, unless the same name also says money, which is how "BankAccount" stays financial
   // despite containing "account".
   if (ID_LABEL.test(L) && !FIN_LABEL.test(L)) return false;
   if (FIN_LABEL.test(L)) return true;
   const v = value.replace(/[\s-]/g, "");
   if (IBAN_RE.test(v)) return true;
   if (looksLikeCard(v)) return true;
-  // A French RIB is 23 digits and nothing else of that length is common — but it is
+  // A French RIB is 23 digits and nothing else of that length is common, but it is
   // still only read as one when no column name has claimed the field already.
   if (/^\d{23}$/.test(v)) return true;
   return false;
@@ -297,7 +297,7 @@ const META: Record<Category, { label: string; severity: Severity; meaning: strin
   location: {
     label: "Address & location", severity: "medium",
     meaning: "A physical address tied to you has leaked, sometimes down to the flat number.",
-    action: "Weigh it when a caller or letter cites your address as proof they are legitimate — it no longer is.",
+    action: "Weigh it when a caller or letter cites your address as proof they are legitimate, it no longer is.",
   },
   email: {
     label: "Email addresses", severity: "medium",
@@ -311,7 +311,7 @@ const META: Record<Category, { label: string; severity: Severity; meaning: strin
   },
   online: {
     label: "Online accounts", severity: "low",
-    meaning: "Usernames, handles and profile links tied to you appear in breach data — this is how separate accounts get tied back to one person.",
+    meaning: "Usernames, handles and profile links tied to you appear in breach data, this is how separate accounts get tied back to one person.",
     action: "Know these accounts can be linked to you; retire any you no longer use.",
   },
   professional: {
@@ -333,7 +333,7 @@ const ORDER: Category[] = [
 const RANK: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 
 // ---- classification ------------------------------------------------------------------
-// Category is decided from the column LABEL first (it carries the most intent — a column
+// Category is decided from the column LABEL first (it carries the most intent, a column
 // called "BankAccount" or "JobTitle" says exactly what it is), then the raw kind, then
 // the value shape. Order matters: financial overrides, identity beats online so a name
 // does not land under "handles", location beats contact.
@@ -344,7 +344,7 @@ const BIRTHISH = /birth|\bdob\b|\bbday\b|born/i;
  * What a field is, decided by an ORDERED TABLE rather than a run of if-statements.
  *
  * The order here is load-bearing, and when it was implicit it was wrong three times in
- * one working session — each time producing a confident, alarming, false statement,
+ * one working session, each time producing a confident, alarming, false statement,
  * which is the only kind of defect that really matters in this product:
  *
  *   "LastLogin" was shown as an online account, because the rule that recognises
@@ -359,7 +359,7 @@ const BIRTHISH = /birth|\bdob\b|\bbday\b|born/i;
  * Writing the precedence down as data fixes the class rather than the three instances.
  * Each rule carries the reason it sits where it does, so moving one is a decision
  * somebody has to make on purpose instead of an accident of editing; and the ordering
- * itself becomes testable — "an identifier column beats a card-shaped value" is an
+ * itself becomes testable, "an identifier column beats a card-shaped value" is an
  * assertion, where "do not move line 14" is a hope.
  *
  * Read top to bottom; the first match wins. A rule returning `null` means the field is
@@ -368,7 +368,7 @@ const BIRTHISH = /birth|\bdob\b|\bbday\b|born/i;
 interface Rule {
   /** what this rule is, for the test that pins the order */
   id: string;
-  /** why it sits HERE and not lower — the thing the old comments had to carry */
+  /** why it sits HERE and not lower, the thing the old comments had to carry */
   why: string;
   category: Category | null;
   match: (c: { kind: ExposureItem["kind"]; label: string; rawLabel: string; value: string }) => boolean;
@@ -385,7 +385,7 @@ const PRECEDENCE: Rule[] = [
     id: "financial",
     why:
       "Second because bank details are what a person most needs told. looksFinancial " +
-      "weighs the column name AGAINST the value shape internally — an earlier fix that " +
+      "weighs the column name AGAINST the value shape internally, an earlier fix that " +
       "skipped this rule for anything typed `identifier` also skipped BankAccount, " +
       "which the upstream classifier types that way for containing the word 'account'.",
     category: "financial",
@@ -448,7 +448,7 @@ const PRECEDENCE: Rule[] = [
   {
     id: "online",
     why:
-      "The broadest label rule, so it goes last among the matches — it recognises " +
+      "The broadest label rule, so it goes last among the matches, it recognises " +
       "'login', 'profile' and every platform name, which appear inside fields that are " +
       "really something else.",
     category: "online",
@@ -467,10 +467,10 @@ const PRECEDENCE: Rule[] = [
 /** The rule ids in order, so a test can pin the precedence itself. */
 export const precedenceOrder = (): string[] => PRECEDENCE.map((r) => r.id);
 
-/** Which rule claims a field — exported so a test can name the winner, not just the outcome. */
+/** Which rule claims a field, exported so a test can name the winner, not just the outcome. */
 export function ruleFor(it: ExposureItem): Rule | null {
   // Humanised first so CamelCase / snake_case columns ("CompanyName", "bank_account")
-  // become "company name" / "bank account" — otherwise \b-bounded keywords never match
+  // become "company name" / "bank account", otherwise \b-bounded keywords never match
   // inside a concatenated column name.
   const c = {
     kind: it.kind,
@@ -595,7 +595,7 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
       const items = itemsFromRow(db, row);
 
       // Kept before anything is classified, so the raw view cannot inherit a mistake
-      // made downstream. Rows belonging to nobody we asked for stay out — those are
+      // made downstream. Rows belonging to nobody we asked for stay out, those are
       // the API's collateral, not the subject's record.
       if (verdict.attribution !== "none") {
         const g = byDatabase.get(db.name) ?? { database: db.name, info: db.info, rows: [], attribution: [] };
@@ -624,7 +624,7 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
           continue;
         }
         // otherwise the row is one CANDIDATE record among the people who share the
-        // name — shown in full, grouped, and never folded into a single person
+        // name, shown in full, grouped, and never folded into a single person
         const anchor = anchorOf(items) || "(unidentified)";
         const key = "cand:" + anchor.toLowerCase();
         const group = foreign.get(key) ?? { anchor, matched: new Set<string>(), sources: new Set<string>(), findings: [], full: true };
@@ -756,7 +756,7 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
  * One line for the report card.
  *
  * On a subject that does not designate one person, the count of other people found is
- * part of the headline rather than a footnote — it is the single most important thing
+ * part of the headline rather than a footnote, it is the single most important thing
  * to know before reading a name search's results as if they were one person's.
  */
 export function headline(r: SearchReport): string {
@@ -768,14 +768,14 @@ export function headline(r: SearchReport): string {
     const crit = r.categories.find((c) => c.severity === "critical");
     const base = `${r.dataPoints} leaked data point${r.dataPoints === 1 ? "" : "s"} across ${r.breachCount} breach${r.breachCount === 1 ? "" : "es"}`;
     const what = crit ? `${base}, including ${crit.label.toLowerCase()}` : base;
-    return `${what} — grouped into ${n} candidate record${n === 1 ? "" : "s"}, because a name does not identify one person.`;
+    return `${what}, grouped into ${n} candidate record${n === 1 ? "" : "s"}, because a name does not identify one person.`;
   }
   const extra = r.others.length
     ? ` ${r.others.length} other ${r.others.length === 1 ? "person" : "people"} matched part of this query and ${r.others.length === 1 ? "is" : "are"} listed separately.`
     : "";
   if (r.verdict === "clear") {
     const nothing = r.excluded.total
-      ? `No row found that is about ${r.subject.raw} — ${r.excluded.total} returned row${r.excluded.total === 1 ? "" : "s"} belonged to someone else.`
+      ? `No row found that is about ${r.subject.raw}, ${r.excluded.total} returned row${r.excluded.total === 1 ? "" : "s"} belonged to someone else.`
       : "No exposure found at this search depth.";
     return nothing + extra;
   }
@@ -789,7 +789,7 @@ export function headline(r: SearchReport): string {
 export interface PivotTarget {
   value: string;
   kind: "email" | "phone" | "username";
-  /** which databases carried it — a value three dumps agree on is the better hop */
+  /** which databases carried it, a value three dumps agree on is the better hop */
   sources: string[];
 }
 
@@ -801,7 +801,7 @@ export interface PivotTarget {
  * selectors that DO identify somebody. Searching one of them turns the ambiguity into
  * a person.
  *
- * The subject is never offered back — pivoting onto the query you just ran is a round
+ * The subject is never offered back, pivoting onto the query you just ran is a round
  * trip that buys nothing and bills for it. Most-corroborated first, because a value
  * three independent dumps agree on is the hop least likely to be a typo in one of them.
  */

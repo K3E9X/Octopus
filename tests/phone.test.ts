@@ -6,7 +6,7 @@ import { phoneKey } from "../lib/phone.ts";
 
 test("a number is matched past its country code even when the range is unassignable", () => {
   // ARCEP reserves 06 39 98 xx xx for fiction, so libphonenumber answers isValid()
-  // false — while parsing it to exactly the right E.164. These are one subscriber.
+  // false, while parsing it to exactly the right E.164. These are one subscriber.
   assert.equal(phoneKey("+33 6 39 98 41 02", "FR"), phoneKey("0639984102", "FR"));
   // Ofcom's drama range, same story
   assert.equal(phoneKey("+44 7700 900123", "GB"), phoneKey("07700 900123", "GB"));
@@ -22,7 +22,7 @@ test("and two different subscribers still do not collide", () => {
 
 test("junk does not collide with a subscriber, and text keys to nothing", () => {
   // Trusting the parse means the parser now also stamps a region code onto short junk:
-  // "12" keys as "+3312". That is harmless — it cannot collide with a real number, and
+  // "12" keys as "+3312". That is harmless, it cannot collide with a real number, and
   // two dumps holding the same junk SHOULD consolidate rather than read as two facts.
   assert.notEqual(phoneKey("12", "FR"), phoneKey("+33 6 39 98 41 02", "FR"));
   assert.equal(phoneKey("abc", "FR"), "");

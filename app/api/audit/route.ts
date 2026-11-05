@@ -2,8 +2,8 @@
 //
 // ADMINISTRATOR ONLY. This endpoint shipped with no authentication at all, which made
 // the single most sensitive table in the deployment world-readable: every operator's
-// address, every selector anyone had ever searched — the real people this tool was
-// pointed at — plus the declared basis and case reference for each. A breach-lookup
+// address, every selector anyone had ever searched, the real people this tool was
+// pointed at, plus the declared basis and case reference for each. A breach-lookup
 // product leaking its own query log is worse than most of what it searches for.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,12 +14,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  // No database means no accounts, so there is nobody to authorise — and also no trail
+  // No database means no accounts, so there is nobody to authorise, and also no trail
   // to read. Saying so is the honest answer; serving the endpoint open is not.
   if (!authEnabled || !auditEnabled) {
     return NextResponse.json({
       configured: false,
-      note: "No database configured — queries are NOT being logged, and there are no accounts to authorise this view. Set POSTGRES_URL.",
+      note: "No database configured. Queries are NOT being logged, and there are no accounts to authorise this view. Set POSTGRES_URL.",
     });
   }
   if (!(await requireAdmin())) {

@@ -16,7 +16,7 @@ test("a secret decomposes into stem, trailing digits and tail", () => {
   assert.equal(p.capShape, "Title");
 });
 
-test("only a TRAILING digit run is stripped — an internal digit is part of the stem", () => {
+test("only a TRAILING digit run is stripped, an internal digit is part of the stem", () => {
   // stripping it would collapse "Tr0ubador" onto "trubador" and merge unrelated secrets
   assert.equal(pwPattern("Tr0ubador")!.root, "tr0ubador");
 });
@@ -32,7 +32,7 @@ test("a pattern link is always weaker than exact reuse", () => {
   assert.ok(pattern.strength <= 58, "an inferred habit must never score like an observed string");
 });
 
-test("identical secrets are NOT a pattern match — that is exact reuse", () => {
+test("identical secrets are NOT a pattern match, that is exact reuse", () => {
   assert.equal(patternMatch("Valoire2019!", "Valoire2019!").linkable, false);
 });
 

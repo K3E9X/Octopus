@@ -2,7 +2,7 @@
 //
 // The dates were already being collected and thrown away as decoration. They are the
 // most operational thing in the whole exposure: WHEN someone was compromised, how many
-// times, and — the finding that actually changes what you do next — whether the password
+// times, and, the finding that actually changes what you do next, whether the password
 // they were using in 2019 is still the one they were using in 2023.
 //
 // That last one is not a nicety. A credential from a 2019 dump that the subject has
@@ -38,7 +38,7 @@ export function dateOf(raw: string): string | null {
 
 /**
  * Build the chronology. Breach names very often carry their own date ("Collection #1
- * (2019-01)"), so the name is parsed as well as the date fields — dropping those would
+ * (2019-01)"), so the name is parsed as well as the date fields, dropping those would
  * lose most of the timeline on sources that never emit a date field at all.
  */
 export function compromiseTimeline(items: ExposureItem[]): CompromiseEvent[] {
@@ -69,7 +69,7 @@ export interface HygieneFinding {
   kind: "still-in-use" | "rotated" | "escalating" | "repeat-victim";
   headline: string;
   detail: string;
-  /** 0-100 — how much this should change what the analyst does next */
+  /** 0-100, how much this should change what the analyst does next */
   weight: number;
 }
 
@@ -77,7 +77,7 @@ export interface HygieneFinding {
  * What the chronology means.
  *
  * Every finding here is stated as a bounded claim. "Still in use" means the same secret
- * appears at two dates, which is evidence the subject did not rotate it — not proof the
+ * appears at two dates, which is evidence the subject did not rotate it, not proof the
  * account is live today, and the wording says so. A tool that reports "credential valid"
  * off a dump date would be inventing a fact nobody observed.
  */
@@ -96,7 +96,7 @@ export function hygiene(items: ExposureItem[], events: CompromiseEvent[]): Hygie
       out.push({
         kind: "still-in-use",
         headline: "The same password across the whole exposure window",
-        detail: `Every recovered credential over ${years} year(s) (${span.first.slice(0, 7)} → ${span.last.slice(0, 7)}) is the same string. The subject did not rotate after being compromised, which makes this credential materially more likely to still be live than its age suggests. It is still not proof the account works today — nobody tried it.`,
+        detail: `Every recovered credential over ${years} year(s) (${span.first.slice(0, 7)} → ${span.last.slice(0, 7)}) is the same string. The subject did not rotate after being compromised, which makes this credential materially more likely to still be live than its age suggests. It is still not proof the account works today, nobody tried it.`,
         weight: 82,
       });
     } else if (secrets.length > 1) {
@@ -125,7 +125,7 @@ export function hygiene(items: ExposureItem[], events: CompromiseEvent[]): Hygie
     out.push({
       kind: "repeat-victim",
       headline: `Infected ${stealerCount} times`,
-      detail: `${stealerCount} separate infostealer events. Repeat infection points at the machine or the habits, not one unlucky click — and each event is a fresh, complete capture of whatever was in the browser at the time.`,
+      detail: `${stealerCount} separate infostealer events. Repeat infection points at the machine or the habits, not one unlucky click, and each event is a fresh, complete capture of whatever was in the browser at the time.`,
       weight: 66,
     });
   }

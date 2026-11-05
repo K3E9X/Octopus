@@ -11,7 +11,7 @@
 import type { NextRequest } from "next/server";
 
 export interface ClientConfig {
-  /** LeakOSINT token — the only credential the product needs */
+  /** LeakOSINT token, the only credential the product needs */
   leakosint?: string;
   /** rows per query, 100–10000; raises both the result count and the price */
   leakosintLimit?: number;

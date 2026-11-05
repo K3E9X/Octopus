@@ -1,8 +1,8 @@
-// Credits — the business layer.
+// Credits, the business layer.
 //
 // The product resells LeakOSINT: every query has a raw API cost, we charge the operator
 // a marked-up price in credits, and the margin is the business. This module owns the
-// balance, the ledger and the one rule that cannot be got wrong — you cannot spend
+// balance, the ledger and the one rule that cannot be got wrong, you cannot spend
 // credits you do not have, checked atomically so two requests racing cannot both pass.
 //
 // MONEY IS AN INTEGER. One credit is one micro-dollar (1 USD = 1_000_000 credits).
@@ -27,12 +27,12 @@ export const creditsEnabled = dbEnabled;
  * IT IS NOT THE MARGIN DIAL ANY MORE, and calling it one was wrong. When a balance was
  * denominated in micro-dollars this multiplied what a customer was charged. It cannot
  * now: a credit buys one standard search, and `searchCredits` divides a cost by the
- * cost of that standard search — so the multiplier appears in the numerator and the
+ * cost of that standard search, so the multiplier appears in the numerator and the
  * denominator and cancels. Setting it to 10 changes no credit price, no balance and no
  * trial; a three-word name is four credits because it is four times the work, which is
  * the right behaviour and the reason the cancellation is not a bug to reverse.
  *
- * What it still does, and all it does, is set the DOLLAR VALUATION of a credit — the
+ * What it still does, and all it does, is set the DOLLAR VALUATION of a credit, the
  * figure quoted alongside a price and used to size a grant made in dollars. The margin
  * now lives where it belongs: in what a pack of credits sells for.
  *
@@ -68,8 +68,8 @@ export const fmtUSD = (micro: number) => (toUSD(micro) < 0.01 ? `$${toUSD(micro)
 // an integer cannot drift. Nothing about that changes.
 //
 // What a person is shown and charged is a CREDIT: one standard search, at the default
-// depth, on a one-word selector. A balance is only ever asked one question — "how many
-// more searches do I have" — and "7,143 cr" cannot answer it. One credit can.
+// depth, on a one-word selector. A balance is only ever asked one question, "how many
+// more searches do I have", and "7,143 cr" cannot answer it. One credit can.
 //
 // Charges round UP to a whole credit, which is both what makes the number legible and
 // what covers the variance in the upstream price. A query that costs more upstream
@@ -105,7 +105,7 @@ async function ensure(): Promise<void> {
     ready = (async () => {
       const q = sql();
       if (!q) return;
-      // credits live ON the user row — one balance per account, the obvious shape
+      // credits live ON the user row, one balance per account, the obvious shape
       await q`ALTER TABLE IF EXISTS octopus_users ADD COLUMN IF NOT EXISTS credits bigint NOT NULL DEFAULT 0`;
       // and every movement is recorded, so a balance is always explainable
       await q`CREATE TABLE IF NOT EXISTS octopus_ledger (
@@ -141,13 +141,13 @@ const ledgerId = () => "led_" + randomBytes(9).toString("hex");
  *
  * They used to be two, outside any transaction: the balance moved, and if the ledger
  * insert then failed the exception escaped the route as a 500 while the money had
- * already gone — leaving the two permanently disagreeing, which defeats this module's
+ * already gone, leaving the two permanently disagreeing, which defeats this module's
  * one stated guarantee that a balance is always explainable.
  *
  * A CTE makes it atomic without a transaction, which matters because the two drivers
  * this runs on do not share one: an UPDATE that matches no row produces no ledger row
  * either, so a refused charge leaves nothing behind. `guard` is what makes a debit a
- * debit — the row only moves while it still covers the amount, which is also the lock
+ * debit, the row only moves while it still covers the amount, which is also the lock
  * that stops two concurrent requests both passing on a balance that covers one.
  */
 async function move(
@@ -166,7 +166,7 @@ async function move(
       RETURNING balance`
     // Two single-row CTEs joined, rather than a CTE referring to itself. Every CTE in
     // a statement reads the same snapshot, so `prev` is the balance before the update
-    // and `moved` RETURNING is the balance after — which makes `after - before` what
+    // and `moved` RETURNING is the balance after, which makes `after - before` what
     // ACTUALLY moved, including when the clamp at zero swallowed part of a claw-back.
     : await q`WITH prev AS (
         SELECT credits AS c FROM octopus_users WHERE id = ${userId}
@@ -186,12 +186,12 @@ async function move(
 
 /** Admin tops up (or claws back, with a negative amount). Returns the new balance. */
 export async function grant(userId: string, deltaMicro: number, note?: string): Promise<{ ok: boolean; balance?: number; error?: string }> {
-  if (!creditsEnabled) return { ok: false, error: "no database — the tool runs unmetered" };
+  if (!creditsEnabled) return { ok: false, error: "no database, the tool runs unmetered" };
   if (!Number.isInteger(deltaMicro) || deltaMicro === 0) return { ok: false, error: "a non-zero whole amount is required" };
   await ensure();
   const q = sql();
   if (!q) return { ok: false, error: "database unavailable" };
-  // Clamped at zero — a claw-back cannot drive a balance negative — and the ledger
+  // Clamped at zero, a claw-back cannot drive a balance negative, and the ledger
   // records WHAT ACTUALLY MOVED, not what was asked for, so an over-clawback leaves
   // the two still agreeing.
   const r = await move(userId, deltaMicro, deltaMicro > 0 ? "grant" : "clawback",
@@ -214,7 +214,7 @@ export async function debit(userId: string, amountMicro: number, note?: string):
   const r = await move(userId, -amountMicro, "debit", note, "covers");
   if (!r.ok) {
     const bal = await balanceOf(userId);
-    return { ok: false, balance: bal, error: `insufficient credits — this query costs ${fmtCredits(amountMicro)} (${fmtUSD(amountMicro)}), balance is ${fmtCredits(bal)}` };
+    return { ok: false, balance: bal, error: `insufficient credits, this query costs ${fmtCredits(amountMicro)} (${fmtUSD(amountMicro)}), balance is ${fmtCredits(bal)}` };
   }
   return { ok: true, charged: amountMicro, balance: r.balance };
 }
@@ -224,7 +224,7 @@ export async function debit(userId: string, amountMicro: number, note?: string):
  *
  * It REPORTS whether it landed, and that is the whole change. Every error response was
  * hard-coded to say "you were not charged" while this returned void and swallowed its
- * own failures — so the one moment a customer most needs the truth was the one moment
+ * own failures, so the one moment a customer most needs the truth was the one moment
  * the answer was a constant.
  */
 export async function refund(userId: string, amountMicro: number, note?: string): Promise<{ ok: boolean; balance?: number }> {
@@ -250,13 +250,13 @@ export async function ledgerOf(userId: string, limit = 40): Promise<LedgerRow[]>
 /**
  * The trial.
  *
- * Counted in searches, which is now also the unit it is charged in — so "two free
+ * Counted in searches, which is now also the unit it is charged in, so "two free
  * searches" is exactly what the balance says, with none of the arithmetic that made
  * "14,286 cr" mean two of anything.
  */
 /**
  * `??` only catches undefined, and `${X:-}` in a compose file produces an EMPTY
- * STRING — which Number() reads as 0. So a deployment that merely listed the variable
+ * STRING, which Number() reads as 0. So a deployment that merely listed the variable
  * without setting it silently turned the trial off, and every signup met "insufficient
  * credits" on their first search with nothing in any log to explain it. Blank, junk and
  * absurd values all fall back to the default now, and the ceiling stops a typo from

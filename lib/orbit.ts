@@ -2,12 +2,12 @@
 //
 // The orbit used to be a picture of the exposure: the subject in the middle, a ring of
 // breaches around them, a dot for every field. It was decoration, and it told you
-// nothing the other views did not already say better — worse, past about ten breaches
+// nothing the other views did not already say better, worse, past about ten breaches
 // the ring ran out of circumference and the whole thing collapsed into a smear.
 //
 // THE QUESTION IT CAN ANSWER THAT NOTHING ELSE CAN is structural. Every other view
 // reads the facts; only this one reads how they are JOINED. Two breaches belong to the
-// same person because some value appears in both — and that means the claim "these five
+// same person because some value appears in both, and that means the claim "these five
 // databases are all about one person" is a graph, with load-bearing edges in it.
 //
 // Three things fall out of that, and all three are answers an analyst actually needs:
@@ -15,14 +15,14 @@
 //   THE SPINE. The value that ties the most databases together is the one the whole
 //   identity rests on, and it is also the best thing to pivot on.
 //
-//   FRAGMENTS. If the graph is not connected, the report is not one person — it is two
+//   FRAGMENTS. If the graph is not connected, the report is not one person, it is two
 //   or more clusters that happen to share a selector, which is exactly the failure this
 //   product claims to prevent. A breach alone in its own fragment is corroborated by
 //   nothing, however many fields it leaked.
 //
 //   LOAD-BEARING FACTS. A value whose removal BREAKS the graph into more pieces is one
 //   the conclusion depends on. If a shared address turns out to be a block of flats, or
-//   a shared handle turns out to be a common word, the identity splits — and the
+//   a shared handle turns out to be a common word, the identity splits, and the
 //   operator should be told which facts carry that weight before they act on the
 //   report, not after.
 //
@@ -39,7 +39,7 @@ export interface OrbitSource {
   findings: { category: string; value: string; label: string; severity: string }[];
 }
 
-/** A value that appears in more than one database — the only thing that joins them. */
+/** A value that appears in more than one database, the only thing that joins them. */
 export interface Thread {
   /** stable id: category and the normalised value */
   id: string;
@@ -80,7 +80,7 @@ export interface OrbitGraph {
   isolated: string[];
 }
 
-/** Worst first — an edge carrying a password is not the same as one carrying a city. */
+/** Worst first, an edge carrying a password is not the same as one carrying a city. */
 const CAT_RANK: Record<string, number> = {
   password: 0, financial: 1, document: 2, identity: 3,
   email: 4, phone: 5, location: 6, online: 7, professional: 8, other: 9,
@@ -90,8 +90,8 @@ const worst = (a: string, b: string) => ((CAT_RANK[a] ?? 9) <= (CAT_RANK[b] ?? 9
 /**
  * Which values are worth drawing a line for.
  *
- * NOT every shared value. A severity word, a country, a "yes" — values that recur
- * because they are common, not because they are the same person — would join every
+ * NOT every shared value. A severity word, a country, a "yes", values that recur
+ * because they are common, not because they are the same person, would join every
  * database to every other and make the graph a solid block that says nothing. A thread
  * has to be something that could identify somebody: long enough to be specific, and in
  * a category that carries identity rather than describing it.
@@ -153,7 +153,7 @@ function edgesFrom(threads: Thread[]): OrbitEdge[] {
  * The graph, with every thread in place.
  *
  * `dropped` lets the caller ask the counterfactual: give it a thread id and the graph
- * comes back as if that value had never been shared — which is what "pull a thread"
+ * comes back as if that value had never been shared, which is what "pull a thread"
  * does, and what decides whether a thread is load-bearing.
  */
 export function buildGraph(sources: OrbitSource[], dropped: string[] = []): OrbitGraph {
@@ -183,8 +183,7 @@ export function buildGraph(sources: OrbitSource[], dropped: string[] = []): Orbi
   const components = componentsOf(names, edges);
 
   // A thread is load-bearing if taking it out leaves more fragments than before. Worked
-  // out by actually removing it, rather than by a rule about what looks important —
-  // a bridge is a property of the graph, not of the value's category.
+  // out by actually removing it, rather than by a rule about what looks important, // a bridge is a property of the graph, not of the value's category.
   for (const t of live) {
     const without = componentsOf(names, edgesFrom(live.filter((x) => x.id !== t.id)));
     t.loadBearing = without.length > components.length;
@@ -239,7 +238,7 @@ export function describeGraph(g: OrbitGraph): string {
 //
 // The old layout put every breach on one ellipse at equal angles, with the radius capped
 // at 200px. Twelve breaches fit. Twenty do not, and the report the user was looking at
-// had enough that the circles overlapped their own labels — the ring simply ran out of
+// had enough that the circles overlapped their own labels, the ring simply ran out of
 // circumference and nobody had checked what happened next.
 //
 // A ring is the wrong shape anyway once the graph means something. Connected databases
@@ -247,8 +246,8 @@ export function describeGraph(g: OrbitGraph): string {
 // the view is now for; a ring puts two unrelated breaches side by side and draws a line
 // across the middle between two that belong together.
 //
-// So: a small force relaxation — connected nodes pull together, every pair pushes apart,
-// a weak pull to the centre keeps it on the canvas — followed by a collision pass that
+// So: a small force relaxation, connected nodes pull together, every pair pushes apart,
+// a weak pull to the centre keeps it on the canvas, followed by a collision pass that
 // is not a force but a hard constraint. Forces get you a good arrangement; they do not
 // get you a guarantee. The separation pass does, and it is the part under test.
 
@@ -296,7 +295,7 @@ export function layoutGraph(g: OrbitGraph, opts: LayoutOpts): Placed[] {
     const cool = 1 - it / iters;
 
     // springs: a shared value pulls two databases together, and more shared values pull
-    // harder — the distance between two nodes ends up meaning something
+    // harder, the distance between two nodes ends up meaning something
     for (const e of g.edges) {
       const a = at.get(e.a), b = at.get(e.b);
       if (!a || !b) continue;
@@ -308,8 +307,8 @@ export function layoutGraph(g: OrbitGraph, opts: LayoutOpts): Placed[] {
       b.x -= dx * f; b.y -= dy * f;
     }
 
-    // repulsion, every pair. n is the number of breaches one person appears in — tens,
-    // not thousands — so the quadratic pass is cheaper than a quadtree would be.
+    // repulsion, every pair. n is the number of breaches one person appears in, tens,
+    // not thousands, so the quadratic pass is cheaper than a quadtree would be.
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const a = p[i], b = p[j];
@@ -332,7 +331,7 @@ export function layoutGraph(g: OrbitGraph, opts: LayoutOpts): Placed[] {
   }
 
   // THE GUARANTEE. Forces produce a good arrangement; they do not promise one. This
-  // pass is a hard constraint, repeated until it has nothing left to do — which is what
+  // pass is a hard constraint, repeated until it has nothing left to do, which is what
   // the test asserts, rather than asserting that the forces were tuned nicely.
   for (let pass = 0; pass < 220; pass++) {
     let moved = false;
@@ -364,8 +363,8 @@ export function layoutGraph(g: OrbitGraph, opts: LayoutOpts): Placed[] {
 // ---- drawing a hypergraph without drawing a hairball --------------------------------
 //
 // One value shared by twenty-two databases is not two hundred and thirty-one facts. It
-// is ONE fact. Drawing it as pairwise edges says the opposite — a complete graph, every
-// database tied to every other — and a complete graph on twenty-two nodes is an
+// is ONE fact. Drawing it as pairwise edges says the opposite, a complete graph, every
+// database tied to every other, and a complete graph on twenty-two nodes is an
 // unreadable mat of lines whichever way you lay it out. There is no layout that fixes
 // it, because the picture is wrong before the layout runs.
 //
@@ -374,7 +373,7 @@ export function layoutGraph(g: OrbitGraph, opts: LayoutOpts): Placed[] {
 // thirty-one, and the shape now says the true thing: these databases are joined BY
 // SOMETHING, and you can see what, and how many others are holding the same one.
 //
-// The pairwise edges stay in the model — connectivity, fragments and load-bearing are
+// The pairwise edges stay in the model, connectivity, fragments and load-bearing are
 // questions about the real graph and are computed on it. This is how it is DRAWN.
 
 /** Grow the arrangement about its own centre until it uses the canvas. Never shrinks. */
@@ -489,7 +488,7 @@ export function layoutBipartite(g: OrbitGraph, opts: LayoutOpts): Bipartite {
   }
   // FILL THE FRAME. The relaxation settles at whatever size its rest lengths imply,
   // which for twenty-two databases hanging off one hub was a disc about a quarter of
-  // the canvas with the rest of it empty — correct, and a waste of every pixel the
+  // the canvas with the rest of it empty, correct, and a waste of every pixel the
   // reader has. Scaling up about the centre is safe in a way scaling down is not: it
   // only ever increases the distance between two nodes, so the separation guarantee
   // survives it.

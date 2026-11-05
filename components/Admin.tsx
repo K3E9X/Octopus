@@ -1,7 +1,7 @@
 "use client";
 
 // Administration: who has access, what they have been running, and whether the audit
-// chain is intact. Deliberately not a dashboard of charts — the questions an operator
+// chain is intact. Deliberately not a dashboard of charts, the questions an operator
 // actually has are "who can get in" and "what did they do".
 
 import { useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { Logo } from "./Logo";
 
 interface U { id: string; email: string; name?: string; role: string; createdAt: number; lastSeen?: number; credits?: number }
 interface A { id: number; at: number; operator: string; kind: string; selector: string; legalBasis: string; caseId?: string }
-/** What the server is willing to say about the token — a fingerprint, never the value. */
+/** What the server is willing to say about the token, a fingerprint, never the value. */
 interface Source { source: "stored" | "environment" | "none"; tail?: string; length?: number; setAt?: number; setBy?: string }
 
 export default function Admin({ me, disabledReason }: { me?: { id: string; email: string }; disabledReason?: string }) {
@@ -46,8 +46,8 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
     load();
   }
 
-  // Granting credit is the lever that matters day to day — deciding who gets to keep
-  // searching — so it is an inline control rather than a browser prompt, and it takes
+  // Granting credit is the lever that matters day to day, deciding who gets to keep
+  // searching, so it is an inline control rather than a browser prompt, and it takes
   // an amount in dollars because that is the unit the bill arrives in.
   async function grant(id: string, email: string, credits: number) {
     const n = Math.trunc(credits);
@@ -56,7 +56,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
     const d = await r.json();
     if (!r.ok) { setMsg(d.error || "grant failed"); return; }
     const b = d.balance ?? 0;
-    setMsg(`${email}: ${b.toLocaleString("en-US")} credit${b === 1 ? "" : "s"} — about that many searches.`);
+    setMsg(`${email}: ${b.toLocaleString("en-US")} credit${b === 1 ? "" : "s"}, about that many searches.`);
     load();
   }
 
@@ -92,11 +92,11 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
             {users.map((u) => (
               <tr key={u.id}>
                 <td className="t-handle">{u.email}{u.id === me?.id ? " · you" : ""}</td>
-                <td>{u.name || "—"}</td>
+                <td>{u.name || ","}</td>
                 <td>
                   {/* Nobody may act on a role at or above their own, so the options
                       stop where the caller's authority does. The server enforces it
-                      again — a disabled option is a hint, never a guard. */}
+                      again, a disabled option is a hint, never a guard. */}
                   <select className="api-select adm-role" value={u.role}
                     onChange={(e) => changeRole(u.id, e.target.value)}
                     disabled={u.id === me?.id || (role !== "owner" && u.role === "owner")}>
@@ -140,7 +140,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
         </h2>
         <p className="adm-note">
           Every selector query is written to an append-only, hash-chained trail. A deletion or an edit anywhere in the
-          middle breaks the chain and shows up here — tamper-evident, not tamper-proof.
+          middle breaks the chain and shows up here, tamper-evident, not tamper-proof.
         </p>
         <table className="datatable">
           <thead><tr><th>when</th><th>operator</th><th>kind</th><th>selector</th><th>legal basis</th></tr></thead>
@@ -167,9 +167,8 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
 // The one credential the product needs. Pasted once here and used by every search on
 // the deployment, so changing it is a paste rather than a redeploy.
 //
-// It is never displayed back. The server returns a fingerprint — where the token in
-// force comes from, its last four characters, its length, when it was set and by whom —
-// which is everything an administrator needs to answer "is the right one in there" and
+// It is never displayed back. The server returns a fingerprint, where the token in
+// force comes from, its last four characters, its length, when it was set and by whom, // which is everything an administrator needs to answer "is the right one in there" and
 // nothing that leaks through a screenshot or a support ticket.
 
 function SourceKey({ source, storable, onDone }: { source: Source | null; storable: boolean; onDone: (m: string) => void }) {
@@ -193,13 +192,13 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
   };
 
   const clear = async () => {
-    if (!window.confirm("Remove the stored token? Searches will fall back to LEAKOSINT_TOKEN in the environment, if one is set — otherwise the product stops returning data.")) return;
+    if (!window.confirm("Remove the stored token? Searches will fall back to LEAKOSINT_TOKEN in the environment, if one is set. Otherwise the product stops returning data.")) return;
     const { ok, d } = await post({ action: "source-clear" });
     onDone(ok ? "Stored token removed." : (d.error || "could not remove the token"));
   };
 
   const runTest = async () => {
-    if (!window.confirm("Testing runs one real query against the index, at the minimum depth — about $0.003.\n\nThere is no free way to check a token: a deliberately malformed request would be free, and the endpoint answers those by blocking this deployment's IP for about 30 seconds.\n\nRun it?")) return;
+    if (!window.confirm("Testing runs one real query against the index, at the minimum depth, about $0.003.\n\nThere is no free way to check a token: a deliberately malformed request would be free, and the endpoint answers those by blocking this deployment's IP for about 30 seconds.\n\nRun it?")) return;
     setTest(null);
     const { d } = await post({ action: "source-test" });
     setTest(d);
@@ -211,12 +210,12 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
       <h2>
         Leak source <em>LeakOSINT</em>
         <span className={"adm-chain " + (configured ? "ok" : "bad")}>
-          {configured ? `token in force · from the ${source!.source}` : "no token — the product returns no data"}
+          {configured ? `token in force · from the ${source!.source}` : "no token: the product returns no data"}
         </span>
       </h2>
       <p className="adm-note">
         The only source this product queries. A token comes from the bot&rsquo;s <code>/api</code> command and bills per
-        request, so it is never written to the audit log and never displayed back here — to change it, paste a new one.
+        request, so it is never written to the audit log and never displayed back here. To change it, paste a new one.
       </p>
 
       <div className="adm-src">
@@ -226,7 +225,7 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
               <code>{"•".repeat(Math.max(4, (source!.length || 12) - 4))}{source!.tail}</code>
               <span>
                 {source!.source === "environment"
-                  ? "set by LEAKOSINT_TOKEN in the environment — a stored token below would take precedence"
+                  ? "set by LEAKOSINT_TOKEN in the environment, a stored token below would take precedence"
                   : `stored ${source!.setAt ? new Date(source!.setAt).toLocaleString() : ""}${source!.setBy ? ` by ${source!.setBy}` : ""}`}
               </span>
             </>
@@ -262,7 +261,7 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
         ) : (
           <p className="adm-note">
             This deployment has no database, so there is nowhere to keep a token. Set <code>LEAKOSINT_TOKEN</code> in the
-            environment instead — a field here would silently do nothing.
+            environment instead, a field here would silently do nothing.
           </p>
         )}
       </div>
@@ -273,7 +272,7 @@ function SourceKey({ source, storable, onDone }: { source: Source | null; storab
 /**
  * Add credit to one account, in SEARCHES.
  *
- * Three amounts that mean something — a handful, a hundred, five hundred — plus a free
+ * Three amounts that mean something, a handful, a hundred, five hundred, plus a free
  * field, because the useful grant is often neither. A claw-back is the same control
  * with a negative number; the server clamps the balance at zero so it can never go
  * under. The unit is the one the person receiving it cares about: one credit buys one
@@ -283,7 +282,7 @@ function Grant({ onGrant, disabled, cap }: { onGrant: (credits: number) => void;
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   if (disabled) {
-    return <span className="adm-grant-off" title="an administrator cannot credit their own account — ask an owner">—</span>;
+    return <span className="adm-grant-off" title="an administrator cannot credit their own account, ask an owner">,</span>;
   }
   if (!open) return <button className="adm-grant" onClick={() => setOpen(true)}>credit</button>;
   const give = (n: number) => { onGrant(n); setOpen(false); setCustom(""); };

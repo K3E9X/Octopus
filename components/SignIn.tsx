@@ -1,6 +1,6 @@
 "use client";
 
-// Access — the sign-in / create-access screen, built to the Abyss reference.
+// Access, the sign-in / create-access screen, built to the Abyss reference.
 //
 // Left: the creature, the mark, the pitch, behind a vignette that clears the ground
 // under the copy. Right: the form, 380px, tab-switched between the two intents.
@@ -8,7 +8,7 @@
 // Two things in the reference are NOT here, and their absence is the point. "Continue
 // with passkey" and "forgot?" are both real controls in the mock, and this deployment
 // has neither a WebAuthn flow nor a reset flow behind them. A dead button on an auth
-// screen is not a cosmetic shortfall — it is a person typing an address into a form
+// screen is not a cosmetic shortfall, it is a person typing an address into a form
 // that will never send them anything. They come back when the backend does.
 //
 // Everything else is wired to the real /api/auth, including the two states the mock has
@@ -25,9 +25,9 @@ import { passwordProblem, strength, STRENGTH_LABEL } from "@/lib/pwrule";
 
 // The same field as the landing: the mass a search reaches into, and the few things
 // it pulls out. It replaced a WebGL wireframe sphere that said "generic technology
-// product" rather than anything about breach data — and took a 600 KB 3D library with
+// product" rather than anything about breach data, and took a 600 KB 3D library with
 // it, on the one page a visitor sees before they have agreed to anything.
-const DeepField = dynamic(() => import("./DeepField"), { ssr: false });
+const Collector = dynamic(() => import("./Collector"), { ssr: false });
 
 /** What an account actually buys, in four lines. Same four the landing leads with. */
 const PITCH: [string, string][] = [
@@ -43,7 +43,7 @@ export default function SignIn() {
   const router = useRouter();
   const params = useSearchParams();
   // "/app" was the old console. It no longer exists, so every sign-in that did not
-  // arrive carrying a ?next= landed on a 404 — which is most of them.
+  // arrive carrying a ?next= landed on a 404, which is most of them.
   const next = params.get("next") || "/search";
   const [mode, setMode] = useState<"signin" | "register">(params.get("mode") === "register" ? "register" : "signin");
   const [state, setState] = useState<{ authEnabled: boolean; sessionsUsable: boolean; firstAccount: boolean } | null>(null);
@@ -82,9 +82,10 @@ export default function SignIn() {
 
   return (
     <div className="ax">
-      {/* left — the creature and the pitch */}
+      {/* left, the creature and the pitch */}
       <div className="ax-left">
-        <div className="ax-scene"><DeepField density={1.15} anchor={{ x: 0.52, y: -0.1 }} reachScale={1.15} /></div>
+        <div className="ax-scene"><Collector density={1.15} anchor={{ x: 0.52, y: -0.14 }} reachScale={1.25}
+          clear={{ x: 0.36, y: 0.76, rx: 0.46, ry: 0.4 }} /></div>
         {/* clears the ground under the copy without hiding the creature */}
         <div className="ax-vignette" aria-hidden="true" />
 
@@ -111,7 +112,7 @@ export default function SignIn() {
         </div>
       </div>
 
-      {/* right — the form */}
+      {/* right, the form */}
       <div className="ax-right">
         <div className="ax-form">
           {blocked ? (
@@ -119,7 +120,7 @@ export default function SignIn() {
               <h2>{!state!.authEnabled ? "This deployment has no accounts" : "Sessions are not configured"}</h2>
               <p>
                 {!state!.authEnabled
-                  ? "There is no database, so there is nowhere to keep them. The instance runs in single-operator mode and the tool is open — set POSTGRES_URL to put it behind accounts."
+                  ? "There is no database, so there is nowhere to keep them. The instance runs in single-operator mode and the tool is open, set POSTGRES_URL to put it behind accounts."
                   : "Set OCTOPUS_SESSION_SECRET to 16 characters or more. Without it sessions cannot be signed, and a shared fallback secret would let any deployment forge another's."}
               </p>
               <Link className="ax-submit" href="/search">Open the search</Link>
@@ -142,7 +143,7 @@ export default function SignIn() {
               </p>
 
               {state?.firstAccount && isSignup && (
-                <p className="ax-first">This is the first account on this instance — it becomes the administrator.</p>
+                <p className="ax-first">This is the first account on this instance, it becomes the administrator.</p>
               )}
 
               <form onSubmit={submit}>

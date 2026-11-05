@@ -11,7 +11,7 @@ export { authEnabled, sessionsUsable };
  *
  * The role is re-read from the database on every request and a disabled account
  * resolves to nobody. lib/auth justifies its stateless cookie by saying "revocation is
- * handled by the role check that follows it" — there was no such check anywhere, so a
+ * handled by the role check that follows it", there was no such check anywhere, so a
  * disabled or fired analyst kept working, and kept spending the operator's upstream
  * balance, for the full fourteen days of their cookie. Signing out and changing a
  * password were equally cosmetic.

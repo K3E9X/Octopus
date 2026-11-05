@@ -1,14 +1,14 @@
 // Password patterns as a behavioural fingerprint.
 //
 // `Soleil2019!` and `Soleil2021!` are not the same secret, so exact-match reuse misses
-// them entirely — and they are almost certainly the same person. People do not pick a
+// them entirely, and they are almost certainly the same person. People do not pick a
 // fresh password, they increment the one they had. The root, the shape of the numeric
 // part and the punctuation tail together form a habit, and a habit is evidence.
 //
 // It is strictly WEAKER than an exact match and the code says so everywhere: an exact
 // reuse is one observed string, a pattern match is an inference about how someone
-// behaves. Two people can independently land on "Marseille2020!" — a city and a year is
-// a very popular way to build a password — so the guard here is harsher than the one in
+// behaves. Two people can independently land on "Marseille2020!", a city and a year is
+// a very popular way to build a password, so the guard here is harsher than the one in
 // lib/reuse.ts, not softer.
 
 export interface PwPattern {
@@ -18,7 +18,7 @@ export interface PwPattern {
   digits?: string;
   /** the punctuation tail that was stripped, if any */
   tail?: string;
-  /** true when the digits look like a year — the commonest increment */
+  /** true when the digits look like a year, the commonest increment */
   yearLike: boolean;
   /** did the stem keep any internal capitalisation pattern worth matching */
   capShape: string;
@@ -52,7 +52,7 @@ export function pwPattern(secretRaw: string): PwPattern | null {
 
   return {
     root, digits: digits || undefined, tail: tail || undefined, yearLike, capShape,
-    // the digits are deliberately NOT in the key — varying them is the whole point
+    // the digits are deliberately NOT in the key, varying them is the whole point
     key: `${root}|${capShape}|${tail}|${digits ? digits.length : 0}`,
   };
 }
@@ -87,18 +87,18 @@ export interface PatternVerdict {
 export function patternMatch(a: string, b: string): PatternVerdict {
   const pa = pwPattern(a), pb = pwPattern(b);
   if (!pa || !pb) return { linkable: false, strength: 0, reason: "not decomposable" };
-  if (a === b) return { linkable: false, strength: 0, reason: "identical secrets — that is exact reuse, not a pattern" };
+  if (a === b) return { linkable: false, strength: 0, reason: "identical secrets, that is exact reuse, not a pattern" };
   if (pa.key !== pb.key) return { linkable: false, strength: 0, reason: "different habit" };
   if (pa.root.length < 5) return { linkable: false, strength: 0, reason: `root "${pa.root}" is too short to be distinctive` };
   if (WEAK_ROOTS.has(pa.root)) {
-    return { linkable: false, strength: 0, reason: `"${pa.root}" is a very common password stem — unrelated people land on it independently` };
+    return { linkable: false, strength: 0, reason: `"${pa.root}" is a very common password stem, unrelated people land on it independently` };
   }
   if (/^[a-z]+$/.test(pa.root) && pa.root.length < 7 && !pa.tail) {
     return { linkable: false, strength: 0, reason: `a short all-lowercase stem with no punctuation is too weak a habit to link on` };
   }
 
   // Strength: the longer and more structured the habit, the less likely two strangers
-  // share it. Capped well below exact reuse — this is an inference, not an observation.
+  // share it. Capped well below exact reuse, this is an inference, not an observation.
   let s = 26 + Math.min(20, (pa.root.length - 5) * 3);
   if (pa.tail) s += 8;                        // a punctuation tail is a personal tic
   if (pa.capShape === "mixed") s += 6;
@@ -108,7 +108,7 @@ export function patternMatch(a: string, b: string): PatternVerdict {
   return {
     linkable: true,
     strength,
-    reason: `"${a}" and "${b}" share the stem "${pa.root}"${pa.tail ? ` and the tail "${pa.tail}"` : ""}${pa.yearLike ? `, differing only in the year` : ", differing only in the numeric part"} — the same password habit, incremented`,
+    reason: `"${a}" and "${b}" share the stem "${pa.root}"${pa.tail ? ` and the tail "${pa.tail}"` : ""}${pa.yearLike ? `, differing only in the year` : ", differing only in the numeric part"}, the same password habit, incremented`,
   };
 }
 

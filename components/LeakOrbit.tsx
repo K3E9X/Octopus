@@ -1,13 +1,13 @@
 "use client";
 
-// The Orbit — what holds this identity together, and what breaks if one fact is wrong.
+// The Orbit, what holds this identity together, and what breaks if one fact is wrong.
 //
 // It used to be a constellation: the subject in the middle, a ring of breaches around
 // them, every field drawn as a satellite. Two things were wrong with it.
 //
 // It did not survive its own data. Every breach sat at an equal angle on one ellipse
 // whose radius was capped, so past about a dozen the circles overlapped each other and
-// their own labels, and the satellites — up to twelve per breach — turned the whole
+// their own labels, and the satellites, up to twelve per breach, turned the whole
 // thing into a smear. Nobody had asked what the twentieth breach would look like.
 //
 // And it answered nothing. It was the same facts as the other views, arranged in a
@@ -15,7 +15,7 @@
 //
 // WHAT IT IS FOR NOW. Every other view reads the facts; this is the only one that can
 // read how they are JOINED. Two breaches belong to the same person because some value
-// appears in both — so "these five databases are one person" is a graph, and graphs
+// appears in both, so "these five databases are one person" is a graph, and graphs
 // have load-bearing edges. Pull a thread and the view recomputes without it: if the
 // identity falls into pieces, that fact was carrying the conclusion, and the operator
 // should know which facts those are BEFORE they act on the report.
@@ -98,7 +98,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
         </defs>
 
         {/* One line per database that carried a value, meeting at the value itself.
-            Drawn pairwise this was a complete graph — twenty-two databases sharing one
+            Drawn pairwise this was a complete graph, twenty-two databases sharing one
             email is two hundred and thirty-one lines saying one thing. */}
         <g>
           {full.threads.map((t) => {
@@ -120,7 +120,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
           })}
         </g>
 
-        {/* the values themselves — the thing that makes these databases one person */}
+        {/* the values themselves, the thing that makes these databases one person */}
         <g>
           {full.threads.map((t) => {
             const h = hubAt.get(t.id);
@@ -132,15 +132,14 @@ export default function LeakOrbit({ report }: { report: Report }) {
                 onMouseEnter={() => setHotThread(t.id)} onMouseLeave={() => setHotThread(null)}
                 onClick={() => setPulled(pulled === t.id ? null : t.id)}>
                 {/* Load-bearing is a property of the VALUE, so it is drawn on the value.
-                    Dashing its lines instead meant the spine — which joins everything —
-                    dashed most of the graph, and an exception that covers the picture
+                    Dashing its lines instead meant the spine, which joins everything, dashed most of the graph, and an exception that covers the picture
                     has stopped being one. */}
                 {t.loadBearing && <circle cx={h.x} cy={h.y} r={h.r + 5} className="lk2-hub-ring" stroke={catColor(t.category)} />}
                 <circle cx={h.x} cy={h.y} r={h.r} fill={catColor(t.category)} className="lk2-hub-c" />
                 {/* On hover only. A label under a hub that twenty databases surround is
                     printed on top of them; the panel names every thread anyway. */}
                 {hot && <text x={h.x} y={h.y + h.r + 14} className="lk2-hub-l" textAnchor="middle">{short(t.value, 26)}</text>}
-                <title>{t.value} — in {t.databases.length} databases{t.loadBearing ? ". Load-bearing: remove it and the identity splits." : ""}</title>
+                <title>{t.value}, in {t.databases.length} databases{t.loadBearing ? ". Load-bearing: remove it and the identity splits." : ""}</title>
               </g>
             );
           })}
@@ -161,7 +160,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
                 <text x={p.x} y={p.y + 1} className="lk2-node-n" textAnchor="middle">{nd.weight}</text>
                 {(labelAll || active || alone) &&
                   <text x={p.x} y={p.y + p.r + 15} className="lk2-node-l" textAnchor="middle">{short(p.name, 18)}</text>}
-                <title>{p.name} — {nd.weight} distinct values{alone ? ", joined to nothing" : ""}</title>
+                <title>{p.name}, {nd.weight} distinct values{alone ? ", joined to nothing" : ""}</title>
               </g>
             );
           })}
@@ -186,7 +185,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
                 Without <b>{short(liveThreads.find((t) => t.id === pulled)?.value || "", 34)}</b>:{" "}
                 {consequence.after > consequence.before
                   ? <>the identity falls into <b>{consequence.after} fragments</b>
-                      {consequence.isolates.length > 0 && <> — {consequence.isolates.join(", ")} connect to nothing else</>}.</>
+                      {consequence.isolates.length > 0 && <>, {consequence.isolates.join(", ")} connect to nothing else</>}.</>
                   : <>nothing changes. Other values still join the same databases, so the conclusion does not rest on this one.</>}
               </p>
               <button onClick={() => setPulled(null)}>Put it back</button>
@@ -222,7 +221,7 @@ export default function LeakOrbit({ report }: { report: Report }) {
               </ul>
               {bearing.length > 0 && (
                 <p className="lk2-orbit-note">
-                  {bearing.length} of these {liveThreads.length} are load-bearing — marked, and ringed in the graph.
+                  {bearing.length} of these {liveThreads.length} are load-bearing, marked, and ringed in the graph.
                   If one turns out to be a coincidence rather than the same person, the report is no longer about one person.
                 </p>
               )}

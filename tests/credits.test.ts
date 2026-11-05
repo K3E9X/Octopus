@@ -12,14 +12,14 @@ test("one credit is one micro-dollar", () => {
   assert.equal(toUSD(1_000_000), 1);
 });
 
-test("the default markup is above 1 — the margin is the business", () => {
+test("the default markup is above 1, the margin is the business", () => {
   assert.ok(markup() >= 1);
 });
 
 test("a charge is whole credits' worth, and never less than the API cost", () => {
   // What leaves a balance is now a whole number of CREDITS expressed in micro-dollars,
   // not the exact marked-up figure. Rounding up is what keeps a balance a whole number
-  // of searches and what absorbs the variance in the upstream price — a query costing
+  // of searches and what absorbs the variance in the upstream price, a query costing
   // a hair over one credit must take two, or the margin is set by the rounding.
   const raw = estimateCost("google", 100);           // $0.003 upstream
   assert.equal(priceCredits(raw) % CREDIT_MICRO, 0, "no part-credit is ever left behind");
@@ -29,12 +29,12 @@ test("a charge is whole credits' worth, and never less than the API cost", () =>
   assert.equal(priceCredits(0), 0);
 });
 
-test("the charged price tracks the API cost — a dearer query costs the operator more", () => {
+test("the charged price tracks the API cost, a dearer query costs the operator more", () => {
   assert.ok(priceCredits(estimateCost("alpha bravo charlie", 100)) > priceCredits(estimateCost("google", 100)));
   assert.ok(priceCredits(estimateCost("google", 10000)) > priceCredits(estimateCost("google", 100)));
 });
 
-test("integer money does not drift — a hundred small charges sum exactly", () => {
+test("integer money does not drift, a hundred small charges sum exactly", () => {
   const one = priceCredits(estimateCost("google", 100));
   let bal = 100 * one;
   for (let i = 0; i < 100; i++) bal -= one;
@@ -58,7 +58,7 @@ test("one standard search is exactly one credit", () => {
   assert.equal(searchCredits(estimateCost("someone@example.com", 300)), 1);
 });
 
-test("a cheaper search is still a whole credit — never free", () => {
+test("a cheaper search is still a whole credit, never free", () => {
   assert.equal(searchCredits(estimateCost("someone@example.com", 100)), 1);
   assert.equal(searchCredits(0.0000001), 1);
   assert.equal(searchCredits(0), 0, "but nothing costs nothing");
@@ -85,7 +85,7 @@ test("a charge is always a whole number of credits' worth, so a balance stays wh
   }
 });
 
-test("a balance reads as whole searches, floored — a part-credit buys nothing", () => {
+test("a balance reads as whole searches, floored, a part-credit buys nothing", () => {
   assert.equal(balanceCredits(creditsToMicro(47)), 47);
   assert.equal(balanceCredits(creditsToMicro(1) - 1), 0, "just under one search is no searches");
   assert.equal(fmtCredits(creditsToMicro(1)), "1 credit");
@@ -102,8 +102,8 @@ test("rounding up is what covers the upstream variance", () => {
 
 test("the valuation multiplier does not change what anything costs in credits", () => {
   // It appears in CREDIT_MICRO and again in searchCredits, and cancels. That is the
-  // right behaviour — a three-word name is four credits because it is four times the
-  // work, whatever margin is being taken — and the reason it was wrong to call this
+  // right behaviour, a three-word name is four credits because it is four times the
+  // work, whatever margin is being taken, and the reason it was wrong to call this
   // the margin dial. The margin lives in what a pack of credits sells for.
   const before = process.env.OCTOPUS_MARKUP;
   try {
@@ -133,7 +133,7 @@ test("an absurd multiplier cannot make the price NaN", () => {
   }
 });
 
-test("a selector worth nothing is not a cheap search — it has no price at all", () => {
+test("a selector worth nothing is not a cheap search, it has no price at all", () => {
   // estimateCost("") is 0, and debit() waves a zero charge through as a no-op, so an
   // empty selector was a free call to a per-request paid API.
   assert.equal(searchCredits(estimateCost("", 300)), 0);

@@ -1,4 +1,4 @@
-// Octopus mark — the product's own Orbit view as a logo: a cyan seed node with its
+// Octopus mark, the product's own Orbit view as a logo: a cyan seed node with its
 // halo, growing eight monoline tentacles that end in the nodes it correlates. Theme-
 // aware through the app's CSS variables (--ink-2 / --ink-3 / --ink-4 / --accent), so it
 // sits identically on the void and light grounds. Pure SVG, no dependencies.

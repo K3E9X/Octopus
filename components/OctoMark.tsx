@@ -1,7 +1,7 @@
 // The octopus mark from the Abyss references: eight arms reaching out, a ringed eye.
 //
-// It is drawn rather than imported so it can inherit the palette — the arms take a
-// warm bone, the eye takes the accent — and so the same geometry serves the 40px
+// It is drawn rather than imported so it can inherit the palette, the arms take a
+// warm bone, the eye takes the accent, and so the same geometry serves the 40px
 // header lockup and the 66px ignition mark without a second asset.
 //
 // `float` and `glow` are opt-in: the mark is used inside the cockpit chrome too, where

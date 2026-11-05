@@ -1,4 +1,4 @@
-// Subject lookup — the product's one endpoint.
+// Subject lookup, the product's one endpoint.
 //
 // GET  quotes. It costs nothing, calls nothing, and returns what the query WOULD cost
 //      with the billing broken down, because the upstream API bills per request and
@@ -35,7 +35,7 @@ const BASES = new Set<string>(LEGAL_BASES);
  * Search depth.
  *
  * The documentation calls this a result limit, but it is also "la plage de recherche
- * dans la base de données" — how far into the dumps the query reaches. 100 is the API's
+ * dans la base de données", how far into the dumps the query reaches. 100 is the API's
  * own default and the cheapest; the vendor's reference bot ships 300, and the gap shows
  * up as rows you simply never see. 300 is the default here for the same reason, and the
  * price of every depth is quoted before it is spent.
@@ -48,7 +48,7 @@ const clampLimit = (n: unknown) => Math.max(100, Math.min(10000, Number(n) || DE
  *
  * Shared by the quote and by the charge, because they used to resolve it separately:
  * the quote read only the query string, while the charge also consulted the browser's
- * config header and LEAKOSINT_LIMIT — a documented, compose-wired setting. On any
+ * config header and LEAKOSINT_LIMIT, a documented, compose-wired setting. On any
  * deployment that set it, every quote was priced at 300 and every search billed at the
  * configured depth. A price shown is a promise; two code paths deciding it is how the
  * promise gets broken without anybody writing a bug.
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   if (pivots.length) {
     const country = (req.nextUrl.searchParams.get("country") || "FR").toUpperCase();
     // `exact: false` to match what runPivot sends. buildSubject QUOTES by default, and
-    // quoting collapses a multi-word selector to one token — so the quote was pricing
+    // quoting collapses a multi-word selector to one token, so the quote was pricing
     // complexity 1 while the charge billed 5, 16 or 40. Up to six times the figure the
     // operator was shown, in the shipped interface, with nobody doing anything wrong.
     const subjects = pivots.slice(0, MAX_PIVOTS).map((p) => buildSubject(p, { defaultCountry: country, exact: false }));
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
     limit,
     metered: creditsEnabled,
     exact: { ...quote(exact.query), note: exact.note },
-    // only offered when quoting actually changes the query — on an address it does not
+    // only offered when quoting actually changes the query, on an address it does not
     permutations: sameQuery ? null : { ...quote(loose.query), note: loose.note },
     // which of the two a search will use if the operator changes nothing
     defaultMode: sameQuery ? "exact" : "permutations",
@@ -127,12 +127,12 @@ export async function GET(req: NextRequest) {
 // ---- POST: run it -----------------------------------------------------------------
 
 /**
- * Pivot — the step that turns a result into an investigation.
+ * Pivot, the step that turns a result into an investigation.
  *
  * A name search returns addresses, numbers and handles. Those DO identify somebody,
  * which the name never did, so searching them is where a list of leaks becomes a
  * person. The API takes an array of queries in one request, and it bills per query
- * either way, so the whole hop costs one round trip instead of N — and stays inside
+ * either way, so the whole hop costs one round trip instead of N, and stays inside
  * the three-requests-per-second limit that N separate calls would walk straight into.
  *
  * The batch comes back as ONE merged result with no indication of which query produced
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
   const raw = String(body?.subject || "").trim();
   // Judged on what SURVIVES filtering, not on what was sent. `pivots: ["  "]` passed
   // the old test, emptied on the way through, and fell into the single path with an
-  // empty selector — which estimateCost prices at zero, which debit waves through as a
+  // empty selector, which estimateCost prices at zero, which debit waves through as a
   // no-op. An unlimited free channel to a per-request paid API, and to the audit table.
   const pivotRaw: string[] = Array.isArray(body?.pivots)
     ? body.pivots.map((x: unknown) => String(x || "").trim()).filter(Boolean)
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
     // sends. Quoting collapses the query to a single exact phrase: a third of the price
     // and a fraction of the rows, so a name searched that way misses every record that
     // stores it in another order or alongside a middle name. Narrow is not the same as
-    // careful — the care belongs in attribution, which decides what a returned row is
+    // careful, the care belongs in attribution, which decides what a returned row is
     // allowed to mean, not in refusing to ask the question properly.
     exact: body?.exact === true,
   });
@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
 
   // Recorded once the charge has cleared, because only then will the query actually
   // reach the source. Writing it first meant an account with no balance could grow the
-  // trail without limit, for free, with an attacker-chosen case reference — and push
+  // trail without limit, for free, with an attacker-chosen case reference, and push
   // older entries out of the verification window on the way. A query that was refused
   // before it ran touched nobody, so there is nobody to record.
   //
@@ -244,11 +244,11 @@ export async function POST(req: NextRequest) {
 
   // Refunding is not idempotent and the ledger carries no "already refunded" marker, so
   // the money has to go back exactly once. The refusal path's refund used to sit INSIDE
-  // the try: anything that threw after it — the ledger insert, the balance read,
-  // building the response — fell into the catch and refunded a second time, creating a
+  // the try: anything that threw after it, the ledger insert, the balance read,
+  // building the response, fell into the catch and refunded a second time, creating a
   // full search price out of nothing on every flaky write.
   // Refunding is not idempotent and the ledger carries no "already refunded" marker,
-  // so the money goes back exactly once — and we SAY WHETHER IT LANDED. Every error
+  // so the money goes back exactly once, and we SAY WHETHER IT LANDED. Every error
   // response used to assert "you were not charged" while the refund swallowed its own
   // failures, which makes the one moment a customer most needs the truth the one
   // moment the answer was a constant.
@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
   /** What to tell them, truthfully, when something went wrong after the charge. */
   const settlement = () =>
     user && !refunded
-      ? { refunded: false, note: "You were charged for this query and the refund did not go through — contact the operator with the time of this request." }
+      ? { refunded: false, note: "You were charged for this query and the refund did not go through. Contact the operator with the time of this request." }
       : { refunded: true };
 
   try {
@@ -285,7 +285,7 @@ export async function POST(req: NextRequest) {
         : /timed out|unreachable/i.test(res.error) ? "unreachable"
         : "refused";
       const says: Record<string, string> = {
-        configuration: "The leak source rejected this deployment's credentials — an administrator needs to check the token in /admin.",
+        configuration: "The leak source rejected this deployment's credentials. An administrator needs to check the token in /admin.",
         "rate-limited": "The leak source is rate-limiting this deployment. Try again shortly.",
         unreachable: "The leak source did not answer in time.",
         refused: "The leak source refused the query.",
@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
 
     // A body the parser could not read is not a clean result. The report is built from
     // `databases`, so an unrecognised shape yields an empty list and would otherwise
-    // render as "nothing found about this person" — the single most damaging thing this
+    // render as "nothing found about this person", the single most damaging thing this
     // product could say off a response nobody understood. The money goes back, because
     // what came back cannot be used.
     if (res.unreadable) {
@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
       balance: user ? balanceCredits(await balanceOf(user.id)) : undefined,
     });
   } catch {
-    // Reached when our own code fails AFTER the source answered — building the report,
+    // Reached when our own code fails AFTER the source answered, building the report,
     // reading the balance. The query ran and the vendor was paid, so a review flagged
     // refunding here as giving away money we genuinely spent. It is deliberate: the
     // customer has nothing to show for the charge, and the failure is ours. We eat the
@@ -398,7 +398,7 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
   }
 
   // Refunding is not idempotent and the ledger carries no "already refunded" marker,
-  // so the money goes back exactly once — and we SAY WHETHER IT LANDED. Every error
+  // so the money goes back exactly once, and we SAY WHETHER IT LANDED. Every error
   // response used to assert "you were not charged" while the refund swallowed its own
   // failures, which makes the one moment a customer most needs the truth the one
   // moment the answer was a constant.
@@ -413,7 +413,7 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
   /** What to tell them, truthfully, when something went wrong after the charge. */
   const settlement = () =>
     user && !refunded
-      ? { refunded: false, note: "You were charged for this query and the refund did not go through — contact the operator with the time of this request." }
+      ? { refunded: false, note: "You were charged for this query and the refund did not go through. Contact the operator with the time of this request." }
       : { refunded: true };
 
   try {

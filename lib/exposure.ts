@@ -12,19 +12,19 @@
 // The harvester is deliberately SCHEMA-AGNOSTIC. It classifies by key name and value
 // shape rather than by a hard-coded field list, for two reasons. Breach sources change
 // their payloads without notice and a fixed list silently starts dropping data the day
-// they do — which is exactly how the original bug got in. And the fallback bucket is
+// they do, which is exactly how the original bug got in. And the fallback bucket is
 // `other`, never `discard`: an unrecognised field is still shown, labelled by its own
 // key, because an analyst can read a field this code has never heard of.
 
 export type ExposureKind =
-  | "credential"  // a password or hash — the thing an analyst is actually here for
+  | "credential"  // a password or hash, the thing an analyst is actually here for
   | "identifier"  // the login the credential belongs to (an address, a username)
   | "login"       // a service URL the victim was signed into
   | "email"
   | "phone"      // a number tied to the identity in a dump
   | "name"       // a real name, which most credential indexes never return
   | "address"    // postal / geographic
-  | "document"   // passport, national id, licence — identity-grade, handle accordingly
+  | "document"   // passport, national id, licence, identity-grade, handle accordingly
   | "ip"
   | "breach"      // a named dump this identity appears in
   | "field"       // a field CLASS a breach exposed ("passwords", "phone numbers")
@@ -39,13 +39,13 @@ export interface ExposureItem {
   kind: ExposureKind;
   /** what this is, in the analyst's words */
   label: string;
-  /** the datum itself — never summarised away */
+  /** the datum itself, never summarised away */
   value: string;
   /** somewhere to go and look */
   url?: string;
   /** true when the SOURCE delivered it masked. Octopus does not mask on top. */
   masked?: boolean;
-  /** which connector produced it — with several sources merged, per-row provenance is
+  /** which connector produced it, with several sources merged, per-row provenance is
    *  the difference between "this is usable" and "this came from the tier that masks" */
   source?: string;
 }
@@ -57,7 +57,7 @@ const MAX_VALUE = 400;
 /**
  * Key-name classifiers. ORDER IS THE CONTRACT, and it is subtle enough that the tests
  * pin it: `total_user_services` contains "service", so the count rule has to win before
- * the login rule ever sees it — otherwise a counter of 12 becomes a service named "12",
+ * the login rule ever sees it, otherwise a counter of 12 becomes a service named "12",
  * which is both wrong and unopenable.
  */
 const RULES: { re: RegExp; kind: ExposureKind; label?: string }[] = [
@@ -66,8 +66,8 @@ const RULES: { re: RegExp; kind: ExposureKind; label?: string }[] = [
   { re: /malware_?path|file_?path|^path$/i, kind: "malware", label: "Dropper path" },
   { re: /antivirus|(^|_)av(s)?$/i, kind: "malware", label: "Antivirus present" },
   { re: /stealer|malware|family/i, kind: "malware" },
-  // `top_logins` in a stealer record is the LOGIN the victim typed — an address or a
-  // username — not the site. Real payloads return "n****@gmail.com" here, and calling
+  // `top_logins` in a stealer record is the LOGIN the victim typed, an address or a
+  // username, not the site. Real payloads return "n****@gmail.com" here, and calling
   // that a "service signed into" mislabels it on every single row.
   { re: /login|user_?name|^user$|account/i, kind: "identifier" },
   { re: /url|service|site|domain|resource|effected|affected/i, kind: "login" },
@@ -100,7 +100,7 @@ export function looksMasked(v: string): boolean {
 }
 
 /**
- * Some masked values survive with NO information left in them at all — real Hudson Rock
+ * Some masked values survive with NO information left in them at all, real Hudson Rock
  * rows come back as `_|` and `\***********************_`. Showing those is worse than
  * showing nothing: they pad the panel out and make an empty result look like a full one.
  *
@@ -110,7 +110,7 @@ export function looksMasked(v: string): boolean {
  * but mask and punctuation is dropped.
  */
 export function isContentFree(v: string): boolean {
-  return v.replace(/[*•●\s\\/_|.,;:'"`~^\-–—+=()[\]{}<>!?@#$%&]/g, "").length < 1;
+  return v.replace(/[*•●\s\\/_|.,;:'"`~^\-–,+=()[\]{}<>!?@#$%&]/g, "").length < 1;
 }
 
 
@@ -130,7 +130,7 @@ export function usableCount(items: ExposureItem[], kind: ExposureKind = "credent
 function classify(key: string, value: string): { kind: ExposureKind; label: string } {
   // A URL is a service no matter which key carries it. `top_logins` holds masked
   // ADDRESSES in a real stealer record but full URLs in other feeds, so the key alone
-  // cannot decide — the value can, and unambiguously.
+  // cannot decide, the value can, and unambiguously.
   if (/^https?:\/\//i.test(value)) return { kind: "login", label: humanKey(key) };
   for (const r of RULES) {
     if (r.re.test(key)) return { kind: r.kind, label: r.label || humanKey(key) };
@@ -141,7 +141,7 @@ function classify(key: string, value: string): { kind: ExposureKind; label: stri
 
 /**
  * Walk an arbitrary payload and pull out every leaf worth showing. Nothing is dropped
- * for being unrecognised — an unknown field is emitted under its own key.
+ * for being unrecognised, an unknown field is emitted under its own key.
  */
 export function harvest(payload: unknown, opts: { skip?: RegExp } = {}): ExposureItem[] {
   const out: ExposureItem[] = [];
@@ -193,7 +193,7 @@ const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 
 /**
  * Pull the selectors out of raw lines. A corpus hit is a line of text, and the line
- * itself is the evidence — but the addresses, URLs and hosts inside it are what the
+ * itself is the evidence, but the addresses, URLs and hosts inside it are what the
  * analyst pivots on next, so they are lifted out as their own items rather than left
  * buried in a string nobody can click.
  */
@@ -239,7 +239,7 @@ export function exposureSummary(items: ExposureItem[]): string {
   const n = (k: ExposureKind) => items.filter((i) => i.kind === k).length;
   const cred = usableCount(items);
   const parts: string[] = [];
-  // the count that matters is the USABLE one — five masked passwords and five real ones
+  // the count that matters is the USABLE one, five masked passwords and five real ones
   // are the same number and completely different findings
   if (cred.total) parts.push(cred.clear ? `${cred.clear} credential${cred.clear > 1 ? "s" : ""} in clear` : `${cred.total} credential${cred.total > 1 ? "s" : ""} (masked)`);
   if (n("login")) parts.push(`${n("login")} service${n("login") > 1 ? "s" : ""}`);
@@ -266,7 +266,7 @@ export function exposureVerdict(items: ExposureItem[]): string {
   if (usable.length) return `${usable.length} credential(s) recovered in full`;
   if (cred.length) return `${cred.length} credential(s), masked at source`;
   const svc = items.filter((i) => i.kind === "login").length;
-  if (svc) return `no credentials returned — ${svc} exposed service(s) instead`;
+  if (svc) return `no credentials returned, ${svc} exposed service(s) instead`;
   return "confirmed exposure, but this source returned no content";
 }
 

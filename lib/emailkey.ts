@@ -7,7 +7,7 @@
 //
 // `victim@gmail.com`, `victim+1@gmail.com`, `vic.tim@gmail.com` and `VICTIM+2@Gmail.com`
 // are one inbox. Treating them as four accounts handed four trials to one person, in
-// about a tenth of a second, scripted — each one spending the operator's own upstream
+// about a tenth of a second, scripted, each one spending the operator's own upstream
 // balance.
 //
 // Two rules, and they are not the same rule:
@@ -17,7 +17,7 @@
 //
 //   A DOT is only insignificant at Google. Elsewhere `vic.tim@` and `victim@` can be
 //   two different people, and collapsing them would merge two real customers into one
-//   account — a worse failure than the one this prevents.
+//   account, a worse failure than the one this prevents.
 
 const DOTLESS_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 

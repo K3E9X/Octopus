@@ -1,4 +1,4 @@
-// Phone connector — deterministic, offline intel from a number (validity, country,
+// Phone connector, deterministic, offline intel from a number (validity, country,
 // line type, formats) via libphonenumber. Automated owner-identity lookup isn't free,
 // so the node points to the Epieos / Truecaller / PhoneInfoga pivots (pre-filled).
 
@@ -46,7 +46,7 @@ export function phoneIntel(input: string, defaultCountry = "FR"): PhoneIntel {
  *
  * This decides whether two rows are giving the SAME number, which is what turns into a
  * claim that two independent databases corroborate each other. Getting it wrong in the
- * generous direction does not merely lose a match — it fabricates the exact corroboration
+ * generous direction does not merely lose a match, it fabricates the exact corroboration
  * this product exists to be careful about.
  *
  * It used to reduce every number to its last nine digits. That handles the European
@@ -59,7 +59,7 @@ export function phoneIntel(input: string, defaultCountry = "FR"): PhoneIntel {
  * to "125551234", and two strangers in two different dumps were reported as one person
  * whose number both agreed on.
  *
- * So the number is parsed properly, and E.164 — which is unambiguous by construction — is
+ * So the number is parsed properly, and E.164, which is unambiguous by construction, is
  * the key whenever it can be had. The digit fallback is only for input no library can
  * make sense of, and there it keeps every digit rather than guessing which ones matter.
  *
@@ -67,7 +67,7 @@ export function phoneIntel(input: string, defaultCountry = "FR"): PhoneIntel {
  * E.164, and those are two different questions. isValid() asks whether the range is
  * assignable to a subscriber today; identity asks whether two strings denote the same
  * number. A range reserved for fiction, a block allocated after the library's metadata
- * was cut, an unusual MVNO — all parse to exactly the right E.164 and all answer false.
+ * was cut, an unusual MVNO, all parse to exactly the right E.164 and all answer false.
  * Each one fell through to the digit fallback, where a national number and the same
  * number written internationally share neither prefix nor suffix, so one subscriber was
  * reported as two numbers from two databases. The landing page's demo is what caught

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { serviceOf, serviceGrid, gridSummary } from "../lib/services.ts";
 
-// The grid every product in this category shows — built from the breaches already paid
+// The grid every product in this category shows, built from the breaches already paid
 // for rather than by probing sites. "Registered at Deezer" is a guess about today; "in
 // Deezer's 2019 breach" is a fact about a file somebody already has.
 
@@ -67,7 +67,7 @@ test("nothing found says so plainly", () => {
   assert.match(gridSummary([]), /No source named this subject/);
 });
 
-test("compound names are matched by prefix — a trailing boundary misses them", () => {
+test("compound names are matched by prefix, a trailing boundary misses them", () => {
   // "Combolist" has no word boundary after "combo", it has the letter l, and these
   // names are compounds far more often than they are standalone words
   for (const n of ["Combolist 2021", "Combolists", "StealerLogs", "Collections", "Cracked.io"]) {

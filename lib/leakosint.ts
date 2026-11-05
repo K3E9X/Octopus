@@ -1,8 +1,8 @@
-// LeakOSINT — the primary leak source.
+// LeakOSINT, the primary leak source.
 //
 // Everything else in this tool asks an index whether an identity APPEARS somewhere.
 // This one returns the records: which database, what that database was, and the rows
-// themselves — names, phones, addresses, documents, credentials. That is why it is the
+// themselves, names, phones, addresses, documents, credentials. That is why it is the
 // source the tool is now built around rather than one connector among several.
 //
 // Three things the raw API does not give you, and this module does:
@@ -19,10 +19,10 @@
 //
 //   PROVENANCE SURVIVES. The response is grouped BY DATABASE with an `InfoLeak`
 //   description of what that breach was. Flattening that into one list would throw away
-//   the single most useful thing it returns — which dump a fact came from.
+//   the single most useful thing it returns, which dump a fact came from.
 //
 //   AN ERROR IS NOT A RESULT. The endpoint answers HTTP 200 to everything, including a
-//   refusal, and signals it only in the body — under two different keys. The published
+//   refusal, and signals it only in the body, under two different keys. The published
 //   documentation says "Error code"; the live endpoint sends "error". Both are read
 //   here, before anything else touches the payload, because reading a refusal as data
 //   is the worst bug this module can have: "the API refused" and "this person is clean"
@@ -31,7 +31,7 @@
 //
 // The contract this implements is written down in docs/leakosint-api.md, including the
 // places the documentation and the live endpoint disagree. Everything above is checked
-// against it by tests/leakosint.test.ts — the price especially, because that number is
+// against it by tests/leakosint.test.ts, the price especially, because that number is
 // what the business resells and a drift in it is a drift in the margin.
 
 import { harvest, type ExposureItem, type ExposureKind } from "./exposure";
@@ -53,7 +53,7 @@ export interface LeakOsintOpts {
 export interface LeakDatabase {
   /** the dump's name, as the source gives it */
   name: string;
-  /** what that breach was — the provenance line the API ships per database */
+  /** what that breach was, the provenance line the API ships per database */
   info: string;
   /** the rows, column name → value, verbatim */
   rows: Record<string, string>[];
@@ -69,7 +69,7 @@ export interface LeakOsintResult {
   error?: string;
   /** what this call was quoted at before it ran */
   cost: number;
-  /** the API said the query ran and matched nothing — NOT the same as an error */
+  /** the API said the query ran and matched nothing: NOT the same as an error */
   empty: boolean;
   /** when unreadable: the payload's top-level key names, so a shape change is diagnosable */
   shape?: string;
@@ -79,7 +79,7 @@ export interface LeakOsintResult {
    * This is a THIRD state, and conflating it with either of the other two is how the
    * module's whole purpose fails. The caller builds its report from `databases`, so a
    * payload the parser does not recognise produced an empty database list and rendered
-   * as "nothing found" — a clean bill of health off a response nobody understood. The
+   * as "nothing found", a clean bill of health off a response nobody understood. The
    * salvage harvester was supposed to catch this, but its output lands in `items`,
    * which no caller reads. So the fact is reported instead of being papered over.
    */
@@ -93,7 +93,7 @@ const DATE_RE = /^\d{1,4}[./-]\d{1,2}[./-]\d{1,4}$/;
 /**
  * Split a query the way the biller does.
  *
- * Double-quoted spans are ONE token — that is the documented escape hatch for keeping
+ * Double-quoted spans are ONE token, that is the documented escape hatch for keeping
  * a phrase together, and it is also the cheapest way to query a full name, because it
  * drops complexity from 16 to 1.
  */
@@ -169,7 +169,7 @@ const COLUMN_RULES: { re: RegExp; kind: ExposureKind }[] = [
   // Activity timestamps, recognised BEFORE the identifier rule because "LastLogin"
   // contains "login" and would otherwise be read as the login itself. These are
   // metadata about an account, not data that leaked about a person, and the report
-  // drops them — so misreading one puts a date in front of the reader as a finding.
+  // drops them, so misreading one puts a date in front of the reader as a finding.
   { re: /last.?(active|seen|login|visit|update)|reg(istration)?.?date|sign.?up|joined|created.?at|updated.?at|modified/i, kind: "date" },
   // Platform IDs come BEFORE phone on purpose: "Telegram ID" contains "tel", so an
   // unanchored phone rule claimed every Telegram column as a phone number. Short
@@ -180,7 +180,7 @@ const COLUMN_RULES: { re: RegExp; kind: ExposureKind }[] = [
   // IP BEFORE ADDRESS, because "ip_address" contains "address" and was being filed as
   // somewhere the subject lives. And the last alternative is deliberately
   // case-SENSITIVE: "OrderIP" and "RegIP" end in it, "zip" and "zips" end in the same
-  // three letters and are postcodes. Nothing else tells those apart — there is no word
+  // three letters and are postcodes. Nothing else tells those apart, there is no word
   // boundary inside "zip", and a case-insensitive suffix match claims both.
   { re: /\b[Ii][Pp]s?\b|[Ii][Pp][-_. ]?[Aa]ddr|_[Ii][Pp]s?$|IPs?$/, kind: "ip" },
   { re: /address|street|city|region|country|postal|\bzip\b|geo/i, kind: "address" },
@@ -197,7 +197,7 @@ const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1
  * A LONG RUN OF DIGITS IS NOT A PHONE NUMBER, and the rule this replaces said it was:
  * anything starting with a digit and running eight or more characters of digits and
  * punctuation. On one demo report that claimed a Facebook UID, a payment card and an
- * IPv4 address as three of the subject's five phone numbers — the same failure as
+ * IPv4 address as three of the subject's five phone numbers, the same failure as
  * reading a card number out of a social network's user id, which is value shape
  * overruling the column that already told us what the field was.
  *
@@ -226,7 +226,7 @@ function classifyColumn(column: string, value: string): ExposureKind {
 }
 
 /** Values the dumps use to mean "this column is empty". */
-const NULLISH = new Set(["", "-", "—", "n/a", "na", "null", "none", "undefined", "0", "unknown"]);
+const NULLISH = new Set(["", "-", ",", "n/a", "na", "null", "none", "undefined", "0", "unknown"]);
 
 /**
  * One row → typed items, keeping the dump's own column name as the label.
@@ -244,7 +244,7 @@ export function itemsFromRow(db: { name: string }, row: Record<string, string>):
     out.push({ kind: classifyColumn(col, value), label: col, value, source });
   }
   // the whole row as one line, so credential reuse and the record view have something
-  // to pair a login with a secret inside — the association only exists within a row
+  // to pair a login with a secret inside, the association only exists within a row
   const login = out.find((i) => i.kind === "email" || i.kind === "identifier" || i.kind === "phone");
   const secret = out.find((i) => i.kind === "credential");
   if (login && secret) {
@@ -300,15 +300,14 @@ function databasesIn(list: any): LeakDatabase[] {
  * Find the results, wherever this response put them.
  *
  * A single query answers `{"List": {"<database>": {...}}}`, which is what the
- * documentation describes and all it describes — it shows how to SEND a batch and
+ * documentation describes and all it describes, it shows how to SEND a batch and
  * never shows what one comes BACK as. It does not come back as that: a batch nests a
  * `List` per query, so the top level is keyed by something other than a database and
  * the documented reader finds nothing at all. The pivot shipped broken for exactly
  * that reason, reporting a perfectly good answer as a shape it could not read.
  *
  * So: take the top-level `List` when there is one, and otherwise look one level down
- * for objects that carry their own. Databases are merged by name across queries —
- * two queries that both hit "Collection #1" are the same dump, and keeping two copies
+ * for objects that carry their own. Databases are merged by name across queries, * two queries that both hit "Collection #1" are the same dump, and keeping two copies
  * of it would double every row in the per-breach view. Attribution then decides which
  * rows belong to which subject, which is the step that makes merging safe.
  */
@@ -429,7 +428,7 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
     }
 
     // A clean miss arrives as a database literally named "No results found", which
-    // parseList skips — leaving `items` empty and sending the salvage harvester over the
+    // parseList skips, leaving `items` empty and sending the salvage harvester over the
     // payload, which faithfully turned "No results found. Try changing your request."
     // into a finding. That is the same mistake as reading a refusal as data, one layer
     // down. A recognised empty answer is an answer; it is never salvaged.

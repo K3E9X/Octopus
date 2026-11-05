@@ -1,9 +1,9 @@
 // The report the landing page shows, and the invented person it is about.
 //
 // THE DATA IS FAKE AND THE REPORT IS NOT. The dumps below are written by hand; every
-// number on the screen — which facets are corroborated and by how many databases, what
+// number on the screen, which facets are corroborated and by how many databases, what
 // counts as critical, which sources are services and which are aggregated lists, how
-// many rows were set aside as somebody else's — is computed by the same buildReport()
+// many rows were set aside as somebody else's, is computed by the same buildReport()
 // the product runs on a paid search. A mocked-up screenshot drifts from the product the
 // first time the product changes. This cannot: if the classifier stops calling a card
 // number critical, the landing page stops saying so too.
@@ -29,7 +29,7 @@ export const DEMO_SELECTOR = "l.marchetti@example.com";
  *
  * Two are services and one is a social network, so the grid can separate them. One is
  * an aggregated credential list, which is the distinction the probing products cannot
- * make — being in a combolist is not an account anywhere. The passwords across two
+ * make, being in a combolist is not an account anywhere. The passwords across two
  * dumps are one stem with a rotating year, which is the pattern the habits view exists
  * to name. And the last dump carries a row belonging to somebody else entirely, so the
  * count of what was set aside is a real number rather than a claim.

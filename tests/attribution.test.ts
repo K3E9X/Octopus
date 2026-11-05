@@ -17,7 +17,7 @@ test("each selector kind is recognised for what it is", () => {
 test("only a selector that designates one person is marked unique", () => {
   assert.equal(buildSubject("a@b.com").unique, true);
   assert.equal(buildSubject("+33612345678").unique, true);
-  // thousands of people share a name — a name search can never be one person's report
+  // thousands of people share a name, a name search can never be one person's report
   assert.equal(buildSubject("Elon Reeve Musk").unique, false);
 });
 
@@ -49,7 +49,7 @@ test("a value is found when the cell is it, or delimits it", () => {
   assert.equal(containsValue("JOHN@X.COM", "john@x.com"), true);
 });
 
-test("a handle is not found inside a longer word — the whole point of the boundary", () => {
+test("a handle is not found inside a longer word, the whole point of the boundary", () => {
   assert.equal(containsValue("thornbird", "thorn"), false);
   assert.equal(containsValue("thorn_bird", "thorn"), true, "an underscore is a boundary");
   assert.equal(containsValue("my thorn here", "thorn"), true);
@@ -111,7 +111,7 @@ test("a name split across first-name and surname columns is still direct", () =>
 
 test("a row matching only the surname is a DIFFERENT PERSON until proven otherwise", () => {
   const m = attributeRow(subjName, { FullName: "Kimbal Musk", Email: "k@x.com" });
-  assert.equal(m.attribution, "partial", "shares a surname — never merged into the subject");
+  assert.equal(m.attribution, "partial", "shares a surname, never merged into the subject");
   assert.deepEqual(m.words, ["musk"]);
 });
 
@@ -121,12 +121,12 @@ test("a row matching none of the name is not about anyone we asked for", () => {
 });
 
 // ======================================================================================
-// Regressions. Every test below reproduces a defect that shipped — each one a case where
+// Regressions. Every test below reproduces a defect that shipped, each one a case where
 // the tool stated something it could not support, which is the only kind of bug that
 // matters here.
 // ======================================================================================
 
-test("a bare word is not a unique identifier — a surname is not a handle", () => {
+test("a bare word is not a unique identifier, a surname is not a handle", () => {
   // "Martin" was read as a handle and marked unique, so every stranger sharing it was
   // merged into one fabricated person holding all their addresses and passwords.
   assert.equal(buildSubject("Martin").unique, false);
@@ -156,8 +156,8 @@ test("a name is only corroborated by columns that hold names", () => {
 });
 
 test("a number no library can parse is searched as typed, never invented", () => {
-  // "2125551234" read with a French default became "+332125551234" — a line nobody
-  // owns — and the operator was billed for searching it
+  // "2125551234" read with a French default became "+332125551234", a line nobody
+  // owns, and the operator was billed for searching it
   assert.equal(buildSubject("2125551234", { defaultCountry: "FR" }).query, "2125551234");
   assert.equal(buildSubject("1234567", { defaultCountry: "FR" }).query, "1234567");
   // a number that DOES parse is still normalised

@@ -6,7 +6,7 @@ const f = (category: string, value: string, severity = "medium") => ({ category,
 const src = (name: string, findings: ReturnType<typeof f>[], severity: OrbitSource["severity"] = "medium"): OrbitSource =>
   ({ name, severity, findings });
 
-// A chain: A—B share an email, B—C share a phone. Nothing joins A to C directly, so the
+// A chain: A,B share an email, B,C share a phone. Nothing joins A to C directly, so the
 // whole claim that these are one person rests on B.
 const CHAIN = [
   src("A", [f("email", "lena@example.com"), f("identity", "Lena Marchetti")]),
@@ -25,7 +25,7 @@ test("two databases sharing a value are joined; sharing nothing, they are not", 
   assert.equal(g.components.length, 2);
 });
 
-test("a value in one database only is not a thread — it joins nothing", () => {
+test("a value in one database only is not a thread, it joins nothing", () => {
   const g = buildGraph([src("A", [f("email", "lena@example.com")]), src("B", [f("phone", "+33639984102")])]);
   assert.deepEqual(g.threads, []);
   assert.equal(g.components.length, 2);
@@ -68,7 +68,7 @@ test("the spine is the thread touching the most databases, and it comes first", 
   assert.equal(g.threads[0].databases.length, 3);
 });
 
-test("a masked value joins nothing — it matches every address at that domain", () => {
+test("a masked value joins nothing, it matches every address at that domain", () => {
   const g = buildGraph([
     src("A", [f("email", "l***@example.com")]),
     src("B", [f("email", "l***@example.com")]),
@@ -128,7 +128,7 @@ test("every node stays inside the frame, with room for its label", () => {
   }
 });
 
-test("the layout is deterministic — a tab switch must not reshuffle it", () => {
+test("the layout is deterministic, a tab switch must not reshuffle it", () => {
   const g = buildGraph(many(14));
   const a = layoutGraph(g, { width: 1000, height: 640 });
   const b = layoutGraph(g, { width: 1000, height: 640 });
@@ -152,7 +152,7 @@ test("databases that share values end up closer than ones that do not", () => {
 // ---- the bipartite drawing ----------------------------------------------------------
 //
 // One value shared by n databases is one fact, not n(n-1)/2 of them. Drawn pairwise it
-// is a complete graph, and no layout makes K₂₂ readable — the picture is wrong before
+// is a complete graph, and no layout makes K₂₂ readable, the picture is wrong before
 // the layout runs. These assert the thing that replaces it.
 
 test("a thread shared by every database is drawn as ONE hub, not a complete graph", () => {
@@ -161,7 +161,7 @@ test("a thread shared by every database is drawn as ONE hub, not a complete grap
   assert.equal(g.edges.length, (22 * 21) / 2);
   const b = layoutBipartite(g, { width: 1000, height: 640 });
   assert.equal(b.dbs.length, 22);
-  // and the drawing has one hub per shared value — the email, the phone
+  // and the drawing has one hub per shared value, the email, the phone
   assert.ok(b.hubs.length <= 4, `${b.hubs.length} hubs`);
 });
 

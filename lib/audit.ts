@@ -1,4 +1,4 @@
-// Audit trail and authorization — the difference between a research toy and a tool
+// Audit trail and authorization, the difference between a research toy and a tool
 // whose output can be defended.
 //
 // Any system that queries selectors against real people must be able to answer, months
@@ -9,18 +9,18 @@
 // Design notes:
 //  - The log is APPEND-ONLY and each row carries a hash chained to the previous one,
 //    so a deletion or edit in the middle breaks the chain and is detectable. This is
-//    tamper-EVIDENT, not tamper-proof — an honest claim: it survives challenge, it does
+//    tamper-EVIDENT, not tamper-proof, an honest claim: it survives challenge, it does
 //    not survive an attacker with database write access and time.
 //  - Every query must carry a legal basis. It is a required field, not a comment.
 //  - Degrades to a no-op when no database is configured, so the open-source/solo use
-//    case still runs — but `auditEnabled` tells the UI whether the trail exists.
+//    case still runs, but `auditEnabled` tells the UI whether the trail exists.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { sql, dbEnabled } from "./db";
 
 export const auditEnabled = dbEnabled;
 
-// The product runs one kind of query — a subject lookup — plus the operations around it
+// The product runs one kind of query, a subject lookup, plus the operations around it
 // that also touch a subject. Keep this list closed: an open string here is how an
 // unaccounted-for query path gets into the trail without anyone noticing.
 export type QueryKind = "search" | "platforms" | "leaks" | "export";
@@ -29,7 +29,7 @@ export interface AuditEntry {
   /** analyst / operator identity (from the request, never guessed) */
   operator: string;
   kind: QueryKind;
-  /** the selector queried — the thing that touches a real person */
+  /** the selector queried, the thing that touches a real person */
   selector: string;
   /** why this query is lawful: warrant/tasking reference, consent, own-data, research… */
   legalBasis: string;
@@ -193,7 +193,7 @@ export interface ChainVerdict {
   brokenAt?: number;
   /** false when no signing secret is set: the chain is then editable by anyone who can write to it */
   keyed?: boolean;
-  /** why the verdict could not be reached — a verdict that cannot be reached is not "intact" */
+  /** why the verdict could not be reached, a verdict that cannot be reached is not "intact" */
   error?: string;
 }
 
@@ -207,7 +207,7 @@ export async function verifyAuditChain(limit = 5000): Promise<ChainVerdict> {
 
     // The NEWEST rows, not the oldest. Ordering ASC with a 5 000 cap meant that once a
     // deployment passed five thousand entries, everything recorded after that was never
-    // looked at — and the verdict still came back green. An attacker only had to grow
+    // looked at, and the verdict still came back green. An attacker only had to grow
     // the table past the window, which a zero-balance account could do for free, and
     // then edit anything newer undetected. One extra row is fetched so the first row in
     // the window can be chained to its real predecessor rather than assumed.

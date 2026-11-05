@@ -1,10 +1,10 @@
 "use client";
 
-// Octopus Leak — the search surface.
+// Octopus Leak, the search surface.
 //
 // One question: what does breach data hold about this subject? An operator enters an
 // email, a phone, a handle or a name, declares why they are allowed to look, sees the
-// price before spending it, and gets back everything the rows say — consolidated into
+// price before spending it, and gets back everything the rows say, consolidated into
 // a person, grouped by what it is, where it leaked and when.
 //
 // Two things in this interface exist to stop it lying, and they are not decoration:
@@ -103,7 +103,7 @@ const LEGAL_BASES: { id: string; label: string; detail: string }[] = [
   { id: "security-research", label: "Security research", detail: "Defensive research, with the findings not redistributed." },
 ];
 
-// Inline icons — a consistent 1.5px stroke set, never emoji.
+// Inline icons, a consistent 1.5px stroke set, never emoji.
 const IconWarn = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
@@ -238,7 +238,7 @@ function Enter({ subject, setSubject, quote, next, err }: any) {
     <section className="lk2-hero">
       <div className="lk2-eyebrow">breach data lookup</div>
       <h1>What has leaked<br />about <span>this subject</span>?</h1>
-      <p>Enter an email address, a phone number, a handle or a name. You get back every record breach data holds — names, addresses, passwords, bank details — consolidated into one subject, with the database each fact came from.</p>
+      <p>Enter an email address, a phone number, a handle or a name. You get back every record breach data holds, names, addresses, passwords, bank details, consolidated into one subject, with the database each fact came from.</p>
 
       <div className="lk2-box">
         <input value={subject} onChange={(e) => setSubject(e.target.value)} spellCheck={false} autoComplete="off"
@@ -247,7 +247,7 @@ function Enter({ subject, setSubject, quote, next, err }: any) {
       </div>
       {err && <p className="lk2-err">{err}</p>}
 
-      {/* What the tool thinks it was given, and what that buys — before any money moves. */}
+      {/* What the tool thinks it was given, and what that buys, before any money moves. */}
       {quote && (
         <div className={"lk2-read" + (quote.subject.unique ? "" : " ambiguous")}>
           <span className="lk2-read-k">read as</span>
@@ -255,7 +255,7 @@ function Enter({ subject, setSubject, quote, next, err }: any) {
           <code>{quote.subject.canonical}</code>
           <span className="lk2-read-p">{quote.exact.formatted}</span>
           {!quote.subject.unique && (
-            <em>a {KIND_LABEL[kind || "free"]} does not designate one person — results will be grouped by who they appear to be</em>
+            <em>a {KIND_LABEL[kind || "free"]} does not designate one person, results will be grouped by who they appear to be</em>
           )}
         </div>
       )}
@@ -268,7 +268,7 @@ function Enter({ subject, setSubject, quote, next, err }: any) {
         </div>
       </div>
 
-      <p className="lk2-fine">Every search is recorded against your account and the basis you declare, in a tamper-evident log. That record is what makes this defensible — use it accordingly.</p>
+      <p className="lk2-fine">Every search is recorded against your account and the basis you declare, in a tamper-evident log. That record is what makes this defensible, use it accordingly.</p>
     </section>
   );
 }
@@ -293,7 +293,7 @@ function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutati
       </div>
 
       {/* A case reference belongs to any search, not only the two bases that used to
-          reveal the field — an investigation groups its work whatever the basis was,
+          reveal the field, an investigation groups its work whatever the basis was,
           and a reference typed once should carry across the whole session. */}
       <div className="lk2-box lk2-box-sm">
         <input value={caseRef} onChange={(e) => setCaseRef(e.target.value)}
@@ -301,7 +301,7 @@ function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutati
       </div>
 
       {/* Both ways of searching a multi-word subject, priced. Quoting is not only
-          cheaper — it is narrower, and the interface has to say which it is buying. */}
+          cheaper, it is narrower, and the interface has to say which it is buying. */}
       {q?.permutations && (
         <div className="lk2-depth">
           <button className={permutations ? "" : "on"} onClick={() => setPermutations(false)}>
@@ -326,7 +326,7 @@ function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutati
 
       <div className="lk2-spend">
         <span>searching</span><code>{chosen?.query || subject}</code>
-        <span>for</span><b>{chosen?.formatted || "—"}</b>
+        <span>for</span><b>{chosen?.formatted || ","}</b>
       </div>
 
       <div className="lk2-box lk2-box-sm">
@@ -442,7 +442,7 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
       {report.others.length > 0 && <Others others={report.others} subject={report.subject} />}
 
       {report.verdict === "clear" && (
-        <p className="lk2-clear">Nothing surfaced at this search depth. A deeper search covers more of the index — raise the limit on a paid plan to widen it.</p>
+        <p className="lk2-clear">Nothing surfaced at this search depth. A deeper search covers more of the index, raise the limit on a paid plan to widen it.</p>
       )}
 
       {report.pivots?.length > 0 && <Pivot targets={report.pivots} onHop={onHop} onBalance={onBalance} caseRef={caseRef} />}
@@ -460,8 +460,7 @@ function ReportView({ report, headline, view, setView, reset, trail, onHop, onBa
  * The figure, stated.
  *
  * This used to count up from zero over 600ms. It was removed rather than repaired,
- * twice over. The animation showed a WRONG NUMBER on every frame before it finished —
- * a report with three categories rendered "0 CATEGORIES" — and anything that stopped
+ * twice over. The animation showed a WRONG NUMBER on every frame before it finished, * a report with three categories rendered "0 CATEGORIES", and anything that stopped
  * it reaching the end left that wrong number on screen for good: a print, a headless
  * screenshot, a paused tab, a device where requestAnimationFrame never got a frame.
  * Seeding the real value first and animating away from it only narrowed the window.
@@ -514,7 +513,7 @@ function CategoryCard({ c, i }: { c: CatReport; i: number }) {
       </div>
       <p className="lk2-meaning">{c.meaning}</p>
       {/* No silent cap. It used to stop at 40 and print "+N more" with no way to see
-          them — a tool that tells you it is withholding something, and then withholds
+          them, a tool that tells you it is withholding something, and then withholds
           it. Past forty it collapses, and the control opens the rest. */}
       <CategoryValues findings={c.findings} />
       <p className="lk2-action"><b>Do this:</b> {c.action}</p>
@@ -538,7 +537,7 @@ function SourceCard({ s, i }: { s: SrcReport; i: number }) {
             <RowValue f={f} />
           </div>
         ))}
-        {!s.findings.length && <div className="lk2-more">No field tied to you in this breach — listed for completeness.</div>}
+        {!s.findings.length && <div className="lk2-more">No field tied to you in this breach, listed for completeness.</div>}
       </div>
     </div>
   );
@@ -589,7 +588,7 @@ function RowValue({ f }: { f: Finding }) {
   );
 }
 
-// ---- plans (business layer — kept light; detailed pricing comes later) ----------------
+// ---- plans (business layer, kept light; detailed pricing comes later) ----------------
 
 const PLANS = [
   {
@@ -601,7 +600,7 @@ const PLANS = [
   {
     name: "Analyst",
     price: "monthly",
-    blurb: "A balance that renews, and deeper searches — the depth limit is what decides how much of the index a query actually reaches.",
+    blurb: "A balance that renews, and deeper searches, the depth limit is what decides how much of the index a query actually reaches.",
     lines: ["Everything in pay as you go", "Higher search depth", "Full query history and audit export"],
     featured: true,
   },
@@ -629,7 +628,7 @@ function Plans({ authed }: { authed: boolean }) {
           </div>
         ))}
       </div>
-      <p className="lk2-plans-fine">Credits are added by your deployment&rsquo;s administrator until self-serve billing is connected. A deployment with no database runs unmetered and unlogged — fine for one operator, never for anything public.</p>
+      <p className="lk2-plans-fine">Credits are added by your deployment&rsquo;s administrator until self-serve billing is connected. A deployment with no database runs unmetered and unlogged, fine for one operator, never for anything public.</p>
     </section>
   );
 }
@@ -650,7 +649,7 @@ function IdentityPanel({ report }: { report: Report }) {
     return (
       <p className="lk2-clear">
         No identifying field was recovered for {report.subject.raw}
-        {report.excluded.total > 0 && ` — the ${report.excluded.total} row${report.excluded.total === 1 ? "" : "s"} returned belonged to someone else`}.
+        {report.excluded.total > 0 && `, the ${report.excluded.total} row${report.excluded.total === 1 ? "" : "s"} returned belonged to someone else`}.
       </p>
     );
   }
@@ -762,7 +761,7 @@ function Habits({ habits }: { habits: PasswordHabit[] }) {
       </div>
       <p>
         They share a stem and differ only in what follows it. Changing the newest one to
-        the next variation leaves the account guessable from the old leak — the stem is
+        the next variation leaves the account guessable from the old leak, the stem is
         what has to change.
       </p>
       {habits.map((h) => (
@@ -780,7 +779,7 @@ function Habits({ habits }: { habits: PasswordHabit[] }) {
 //
 // Everything above this classifies, ranks and deduplicates, and all three involve a
 // judgement that can be wrong. This is the row as the source returned it, with the
-// dump's own column names and nothing removed — including the fields the categories
+// dump's own column names and nothing removed, including the fields the categories
 // drop as account metadata and the ones this code has never heard of. An analyst who
 // thinks something was mis-filed reads here instead of taking the classification's
 // word for it.
@@ -799,7 +798,7 @@ function Records({ groups }: { groups: RecordGroup[] }) {
           {g.rows.map((row, i) => (
             <div className="lk2-rec-row" key={i}>
               {g.attribution[i] !== "direct" && (
-                <span className="lk2-rec-tag">matched part of the query only — may be someone else</span>
+                <span className="lk2-rec-tag">matched part of the query only, may be someone else</span>
               )}
               {Object.entries(row).map(([k, v]) => (
                 <div className="lk2-row" key={k}>
@@ -831,7 +830,7 @@ function Candidates({ groups, subject }: { groups: OtherSubject[]; subject: Repo
       <p className="lk2-others-note">
         A {KIND_LABEL[subject.kind]} does not identify one person, so these are kept apart
         rather than merged into a single profile. Two of them may still be the same
-        person under two addresses — that call is yours, not the tool&rsquo;s.
+        person under two addresses, that call is yours, not the tool&rsquo;s.
       </p>
       <div className="lk2-others-grid">
         {groups.map((o) => (
@@ -878,7 +877,7 @@ function CategoryValues({ findings }: { findings: Finding[] }) {
 // inside those candidates are exactly the selectors that DO identify somebody, so
 // searching one of them turns the ambiguity into a person. The API takes several
 // queries in one request and bills per query either way, so the whole hop is one round
-// trip — and the total is shown before any of it is sent, like every other spend here.
+// trip, and the total is shown before any of it is sent, like every other spend here.
 
 function Pivot({ targets, onHop, onBalance, caseRef }: {
   targets: PivotTarget[];
@@ -932,7 +931,7 @@ function Pivot({ targets, onHop, onBalance, caseRef }: {
       </div>
       <p className="lk2-others-note">
         A name identifies nobody; an address or a number does. Searching one of these is
-        what turns this into a person — and they go out as a single request, billed per
+        what turns this into a person, and they go out as a single request, billed per
         selector.
       </p>
 
@@ -948,8 +947,8 @@ function Pivot({ targets, onHop, onBalance, caseRef }: {
       </div>
 
       <div className="lk2-spend">
-        <span>pivot on</span><b>{picked.length || "—"}</b>
-        <span>for</span><b>{quote?.total.formatted || "—"}</b>
+        <span>pivot on</span><b>{picked.length || ","}</b>
+        <span>for</span><b>{quote?.total.formatted || ","}</b>
         <button className="lk2-pivot-go" onClick={run} disabled={busy || !picked.length}>
           {busy ? "…" : "Run the pivot"}
         </button>
@@ -976,7 +975,7 @@ function Pivot({ targets, onHop, onBalance, caseRef }: {
 
 // ---- who holds this person's data ---------------------------------------------------
 //
-// The grid every product in this category shows — built from the breaches already paid
+// The grid every product in this category shows, built from the breaches already paid
 // for rather than by probing sites, which costs nothing extra and makes a claim that
 // can be checked: not "registered at Deezer", which is a guess about today, but "in
 // Deezer's 2019 breach", which is a fact about a file somebody already has.
@@ -1026,7 +1025,7 @@ function Services({ tiles, summary }: { tiles: ServiceTile[]; summary: string })
           <p className="lk2-svc-note">
             Credential files assembled from other breaches, often from sources nobody has
             identified. They are named because that is all anyone can honestly say about
-            them — being in one is not an account anywhere.
+            them, being in one is not an account anywhere.
           </p>
           <div className="lk2-svc-grid">{aggregates.map(Tile)}</div>
         </>
@@ -1038,7 +1037,7 @@ function Services({ tiles, summary }: { tiles: ServiceTile[]; summary: string })
 // ---- getting it out -----------------------------------------------------------------
 //
 // A report that can only be read in the tab that produced it is not a deliverable. The
-// files are built in the browser from the same object the screen renders — nothing is
+// files are built in the browser from the same object the screen renders, nothing is
 // sent anywhere to produce them, which for this product is the point.
 
 function Export({ report }: { report: Report }) {
@@ -1049,7 +1048,7 @@ function Export({ report }: { report: Report }) {
     setBusy(true);
     try {
       // The export lives server-side in lib/export so one implementation serves the
-      // browser and anything that comes later — a scheduled report, an API client.
+      // browser and anything that comes later, a scheduled report, an API client.
       const { toCSV, toJSON, exportName } = await import("@/lib/export");
       const r = report as any;
       const text = kind === "json" ? toJSON(r) : toCSV(r, { records: kind === "csv-raw" });
@@ -1084,7 +1083,7 @@ function Export({ report }: { report: Report }) {
 // The sign-in page has promised this since before it existed: "your balance and your
 // query history are where you left them". There was no way to read either.
 //
-// It is NOT the audit trail with a friendlier face. That is oversight — every operator,
+// It is NOT the audit trail with a friendlier face. That is oversight, every operator,
 // the whole deployment, administrator-only. This answers the operator's own question:
 // what did I search, and under which case. The server filters on the session's identity,
 // never on anything the page sends.
@@ -1148,7 +1147,7 @@ function QueryHistory({ onPick, caseRef }: { onPick: (v: string) => void; caseRe
       <div className="lk2-hist-rows">
         {entries.map((e, i) => (
           <button className="lk2-hist-row" key={i} onClick={() => onPick(e.selector)}
-            title="put this back in the search field — it is not re-run, and nothing is charged">
+            title="put this back in the search field, it is not re-run, and nothing is charged">
             <code>{e.selector}</code>
             <span className="lk2-hist-basis">{e.legalBasis}</span>
             {e.caseId && <span className="lk2-hist-tag">{e.caseId}</span>}

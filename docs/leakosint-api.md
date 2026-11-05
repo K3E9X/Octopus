@@ -1,4 +1,4 @@
-# LeakOSINT API — the contract
+# LeakOSINT API, the contract
 
 The source this product is built on. Transcribed from the official documentation and
 checked against the live endpoint, because the two do not agree everywhere and the
@@ -22,12 +22,12 @@ wrong first.
 
 | Parameter | Required | Default | Notes |
 |---|---|---|---|
-| `token` | yes | — | From the bot's `/api` command. A new token carries **100 free requests**; after that it draws on the account balance. |
-| `request` | yes | — | One query string, several separated by `\n`, or an array of strings. |
-| `limit` | no | `100` | 100–10 000. Raises both how many rows come back and **how far into the databases the search reaches** — it is a depth control, not just a page size. It is also a price multiplier. |
+| `token` | yes |, | From the bot's `/api` command. A new token carries **100 free requests**; after that it draws on the account balance. |
+| `request` | yes |, | One query string, several separated by `\n`, or an array of strings. |
+| `limit` | no | `100` | 100–10 000. Raises both how many rows come back and **how far into the databases the search reaches**, it is a depth control, not just a page size. It is also a price multiplier. |
 | `lang` | no | `en` | Language of the `InfoLeak` descriptions. |
 | `type` | no | `json` | `json`, `short`, `html`. We always send `json`. |
-| `bot_name` | no | — | `@name`, needed only when the token does not belong to the main mirror group. |
+| `bot_name` | no |, | `@name`, needed only when the token does not belong to the main mirror group. |
 
 ## Price
 
@@ -52,17 +52,17 @@ A token is **not** a billable word when it is:
 - a number shorter than 6 characters.
 
 A span inside `"double quotes"` counts as **one** word. That is the documented escape
-hatch and it is also the cheapest way to search a full name — it drops a three-word
+hatch and it is also the cheapest way to search a full name, it drops a three-word
 query from complexity 16 to 1, which at `limit=100` is $0.009 → $0.003.
 
 Worked examples at `limit=100`, verified against `estimateCost`:
 
 | Query | Complexity | Cost |
 |---|---|---|
-| `example@gmail.com` | 1 | **$0.0030** — the documentation's own headline figure |
+| `example@gmail.com` | 1 | **$0.0030**, the documentation's own headline figure |
 | `Petya Ivanov` | 5 | $0.0055 |
 | `Elon Reeve Musk` | 16 | $0.0090 |
-| `Jean Pierre De La Tour` | 16 | $0.0090 — `De` and `La` are under 4 characters, so 5 words bill as 3 |
+| `Jean Pierre De La Tour` | 16 | $0.0090, `De` and `La` are under 4 characters, so 5 words bill as 3 |
 | `"Elon Reeve Musk"` | 1 | $0.0030 |
 
 Raising the limit on a one-word query: 100 → $0.0030, 300 → $0.0045, 1 000 → $0.0073,
@@ -75,7 +75,7 @@ undercharge, and undercharging is the only error here that loses real money.
 ## Rate limit
 
 **3 requests per second per IP.** The documented ways past it are to combine queries
-into one request, or to create an additional key from the bot's `/app` tab — worth
+into one request, or to create an additional key from the bot's `/app` tab, worth
 knowing before scaling this to many concurrent users.
 
 `lib/leakosint.ts` spaces its own calls 350 ms apart rather than discovering the limit
@@ -108,7 +108,7 @@ Three properties that drive the whole design:
 3. **`"No results found"` arrives as a database name**, not as an error and not as an
    empty `List`. A clean search is a successful search.
 
-## Refusals — the part the documentation gets wrong
+## Refusals, the part the documentation gets wrong
 
 The endpoint answers **HTTP 200 to everything**, including refusals, and signals them
 only in the body. It uses **two different keys**:
@@ -136,7 +136,7 @@ are opposite findings and must never be able to render the same way.
 ## What can be searched
 
 The documentation's own examples are `google`, `Petya Ivanov`, `example@gmail.com` and
-`Elon Reeve Musk` — so the API takes **any string**, not just a verifiable identifier.
+`Elon Reeve Musk`, so the API takes **any string**, not just a verifiable identifier.
 That is broader than the identifier-only products in this category, and it is a product
 decision rather than a technical one:
 

@@ -3,7 +3,7 @@
 // It lives on its own because BOTH sides need it and they must not drift: the server
 // enforces it in lib/auth.ts, and the Access screen has to tell the operator the truth
 // while they type. A strength meter that says "descending" about a passphrase the
-// server is going to reject is worse than no meter — it invites someone to submit,
+// server is going to reject is worse than no meter, it invites someone to submit,
 // fail, and re-guess what the rule was.
 //
 // Pure: no node:crypto, no database, so the client can import it.
@@ -17,7 +17,7 @@ export function passwordProblem(pw: string): string | null {
 
 /**
  * Depth as the metaphor: length first, then variety. This is a QUALITY score and is
- * deliberately separate from the rule above — passing the rule is the floor, not the
+ * deliberately separate from the rule above, passing the rule is the floor, not the
  * goal, and the meter's job past that point is to encourage rather than to gate.
  */
 export function strength(pw: string): number {
@@ -31,8 +31,8 @@ export function strength(pw: string): number {
 
 export const STRENGTH_LABEL = [
   "too shallow to hold",
-  "surface — too shallow",
+  "surface, too shallow",
   "descending",
   "deep",
-  "abyssal — good",
+  "abyssal, good",
 ];

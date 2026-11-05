@@ -7,8 +7,8 @@
 //
 // Three rules this module exists to enforce.
 //
-//   THE TOKEN NEVER COMES BACK OUT. Read returns a fingerprint — the shape, the last
-//   few characters, when it was set and by whom — never the value. An admin screen that
+//   THE TOKEN NEVER COMES BACK OUT. Read returns a fingerprint, the shape, the last
+//   few characters, when it was set and by whom, never the value. An admin screen that
 //   re-displays a secret is a secret that leaks through a screenshot, a support ticket
 //   or a shoulder. Changing it means pasting a new one, which is the only operation
 //   anybody actually needs.
@@ -31,7 +31,7 @@ export interface KeyFingerprint {
   tail?: string;
   /** total length, which is enough to spot a truncated paste */
   length?: number;
-  /** when it was stored, and by whom — the environment answers neither */
+  /** when it was stored, and by whom, the environment answers neither */
   setAt?: number;
   setBy?: string;
 }
@@ -94,13 +94,13 @@ export async function sourceFingerprint(): Promise<KeyFingerprint> {
 /**
  * The documented token shape is `digits:alphanumerics`, as issued by the bot's /api
  * command. Checked before storing because the alternative is discovering the typo as a
- * failed search later — and because the endpoint penalises malformed requests with a
+ * failed search later, and because the endpoint penalises malformed requests with a
  * temporary block on the whole deployment's IP.
  */
 export function tokenProblem(token: string): string | null {
   const t = String(token || "").trim();
   if (!t) return "paste the token from the bot's /api command";
-  if (/\s/.test(t)) return "that contains whitespace — it looks like a partial paste";
+  if (/\s/.test(t)) return "that contains whitespace, it looks like a partial paste";
   if (!t.includes(":")) return 'that is not the expected shape: a token looks like "123456789:AbCdEf12"';
   const [id, secret] = [t.slice(0, t.indexOf(":")), t.slice(t.indexOf(":") + 1)];
   if (!/^\d+$/.test(id)) return "the part before the colon should be the numeric account id";
@@ -109,7 +109,7 @@ export function tokenProblem(token: string): string | null {
 }
 
 export async function setSourceToken(token: string, setBy: string): Promise<{ ok: boolean; error?: string }> {
-  if (!dbEnabled) return { ok: false, error: "no database — set LEAKOSINT_TOKEN in the environment instead" };
+  if (!dbEnabled) return { ok: false, error: "no database, set LEAKOSINT_TOKEN in the environment instead" };
   const problem = tokenProblem(token);
   if (problem) return { ok: false, error: problem };
   try {

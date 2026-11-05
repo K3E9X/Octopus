@@ -6,11 +6,11 @@ import "./globals.css";
 // next/font/google fetches font metadata from Google AT BUILD TIME, and that fetch fails
 // intermittently on CI ("Cannot read properties of null" in the font loader), breaking the
 // build for no reason in the code. Self-hosting the files removes the network from the
-// build entirely — and keeps page loads from calling a third party, which this app's
+// build entirely, and keeps page loads from calling a third party, which this app's
 // egress posture wants anyway. These are the variable woff2s (latin, which covers French),
 // one file per family spanning its whole weight axis.
 // A three-face system, each with one job: Space Grotesk is the DISPLAY face (headings +
-// the big numerals only — a display grotesque hurts readability below ~16px); Inter is
+// the big numerals only, a display grotesque hurts readability below ~16px); Inter is
 // the neutral workhorse for body and UI text; JetBrains Mono carries the data, where the
 // legibility of a raw value (an IBAN, a hash) and tabular figures are the whole job.
 const display = localFont({ src: "./fonts/SpaceGrotesk.woff2", weight: "500 700", variable: "--font-display", display: "swap" });
@@ -20,7 +20,7 @@ const mono = localFont({ src: "./fonts/JetBrainsMono.woff2", weight: "400 600", 
 export const metadata: Metadata = {
   title: "Octopus Leak",
   description:
-    "Octopus Leak — see exactly what has leaked about you across known breaches, and what to do about each exposure.",
+    "Octopus Leak: see exactly what has leaked about you across known breaches, and what to do about each exposure.",
 };
 
 export const viewport: Viewport = {
@@ -33,10 +33,10 @@ export const viewport: Viewport = {
 };
 
 // Resolve the theme BEFORE first paint. Reading localStorage from React would happen
-// after hydration and the page would show the wrong ground for a frame — on a
+// after hydration and the page would show the wrong ground for a frame, on a
 // void-black interface that is a white strobe, not a detail.
 // It also RESOLVES the system preference into the attribute, so the light palette can
-// be declared exactly once in CSS instead of a second time inside a media query — the
+// be declared exactly once in CSS instead of a second time inside a media query, the
 // duplicate had already drifted out of step with the original.
 const THEME_BOOT =
   '(function(){var t;try{t=localStorage.getItem("octopus:theme")}catch(e){}' +

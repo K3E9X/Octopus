@@ -1,12 +1,11 @@
 // An operator's own query history, and the cases they filed it under.
 //
-// The sign-in page has been promising this since before it existed — "your balance and
-// your query history are where you left them" — and there was no way to read either.
+// The sign-in page has been promising this since before it existed, "your balance and
+// your query history are where you left them", and there was no way to read either.
 //
 // It is NOT /api/audit with a looser gate. That endpoint is oversight: every operator,
 // every selector, the whole deployment, and it is administrator-only for good reason.
-// This one answers a different question — what did *I* search, and under which case —
-// and the operator it filters on is taken off the SESSION, never off the request, so
+// This one answers a different question, what did *I* search, and under which case, // and the operator it filters on is taken off the SESSION, never off the request, so
 // no caller can widen it by asking for somebody else's.
 
 import { NextRequest, NextResponse } from "next/server";

@@ -3,20 +3,19 @@
 // The report, on the front page, before anybody pays for anything.
 //
 // It replaces four paragraphs about what a report contains. Describing a report is a
-// weak form of showing one, and the thing this product is actually better at — rows
+// weak form of showing one, and the thing this product is actually better at, rows
 // from five dumps consolidated into one person, with the database behind every single
-// fact — is almost impossible to claim convincingly and trivial to demonstrate.
+// fact, is almost impossible to claim convincingly and trivial to demonstrate.
 //
 // THE DATA IS INVENTED AND THE REPORT IS NOT. lib/demo.ts holds five dumps written by
 // hand; every number here is computed from them by the same buildReport() a paid search
-// runs — which facets are corroborated and by how many databases, what counts as
+// runs, which facets are corroborated and by how many databases, what counts as
 // critical, which sources are services and which are aggregated lists, how many rows
 // were set aside as somebody else's. A screenshot would drift from the product the
 // first time the product changed. This cannot.
 //
-// It also proves itself. Building it was what surfaced four real misclassifications —
-// a card number, an IP and a platform user id all reported as the subject's phone
-// numbers, and one number listed twice because the spelling differed — on a page whose
+// It also proves itself. Building it was what surfaced four real misclassifications, // a card number, an IP and a platform user id all reported as the subject's phone
+// numbers, and one number listed twice because the spelling differed, on a page whose
 // copy promises precisely that none of that happens.
 
 import { useState } from "react";
@@ -40,7 +39,7 @@ type TabId = (typeof TABS)[number]["id"];
 const KIND_HEAD: Record<string, string> = {
   social: "Social networks",
   service: "Other services",
-  aggregate: "Aggregated lists — not accounts anywhere",
+  aggregate: "Aggregated lists, not accounts anywhere",
 };
 
 export default function Demo({ report }: { report: SearchReport }) {
@@ -149,7 +148,7 @@ export default function Demo({ report }: { report: SearchReport }) {
 
       <p className="lk2m-foot">
         Invented person. <code>example.com</code> is reserved by RFC&nbsp;2606 and the number is
-        in the range ARCEP keeps for fiction — neither can reach anybody. Every figure above is
+        in the range ARCEP keeps for fiction, neither can reach anybody. Every figure above is
         computed from five hand-written dumps by the same code a paid search runs.
         {" "}{VIEWS.length} views ship in the product; four of them are here.
       </p>

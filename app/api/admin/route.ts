@@ -75,8 +75,7 @@ export async function POST(req: NextRequest) {
    * There is no free way to do this. A malformed request would be free and is exactly
    * what must not be sent: the endpoint answers repeated invalid data by blocking the
    * caller's IP for ~30 seconds, which would take the whole deployment down rather than
-   * test anything. So the check is one real, well-formed query at the minimum limit —
-   * about $0.003 — and the UI says so before the button is pressed.
+   * test anything. So the check is one real, well-formed query at the minimum limit, * about $0.003, and the UI says so before the button is pressed.
    *
    * The term is a fixed, deliberately meaningless string: it has to be a valid query,
    * and it must not be anybody's identifier.
@@ -93,7 +92,7 @@ export async function POST(req: NextRequest) {
       if (res.error) {
         return NextResponse.json({ ok: false, from, spent: formatCost(0), reason: res.error });
       }
-      // The query ran. Whether it matched anything is irrelevant — reaching the index
+      // The query ran. Whether it matched anything is irrelevant, reaching the index
       // at all is the entire question a connectivity test asks.
       return NextResponse.json({
         ok: true, from, spent: formatCost(cost),
@@ -105,27 +104,27 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- balances --------------------------------------------------------------------
-  // Granted in CREDITS — one credit, one search. Dollars were never the unit anybody
+  // Granted in CREDITS, one credit, one search. Dollars were never the unit anybody
   // administering this thinks in: the question is "how many more searches should they
   // get", and the answer should be the number you type. Negative claws back.
   if (body?.action === "grant") {
-    if (!creditsEnabled) return NextResponse.json({ error: "no database — the tool runs unmetered" }, { status: 400 });
+    if (!creditsEnabled) return NextResponse.json({ error: "no database, the tool runs unmetered" }, { status: 400 });
     const n = Math.trunc(Number(body?.credits ?? body?.usd));
     if (!id || !Number.isFinite(n) || n === 0) {
       return NextResponse.json({ error: "a user and a non-zero whole number of credits are required" }, { status: 400 });
     }
 
     // Creating credit is spending the upstream balance, so it is the owner's power.
-    // An admin may pass some on — to SOMEBODY ELSE, and only up to a bound. An
+    // An admin may pass some on, to SOMEBODY ELSE, and only up to a bound. An
     // administrator who can top up their own account is an audit trail that proves
     // nothing, because the same hand signs the spending and the budget.
     if (admin.role !== "owner") {
       if (id === admin.id) {
-        return NextResponse.json({ error: "an administrator cannot credit their own account — ask an owner" }, { status: 403 });
+        return NextResponse.json({ error: "an administrator cannot credit their own account. Ask an owner." }, { status: 403 });
       }
       const cap = adminGrantCap();
       if (Math.abs(n) > cap) {
-        return NextResponse.json({ error: `an administrator may move at most ${cap} credits at a time — ask an owner`, cap }, { status: 403 });
+        return NextResponse.json({ error: `an administrator may move at most ${cap} credits at a time. Ask an owner.`, cap }, { status: 403 });
       }
     }
 
@@ -143,7 +142,7 @@ export async function POST(req: NextRequest) {
   if (!id || !["owner", "admin", "analyst", "tester", "disabled"].includes(role)) {
     return NextResponse.json({ error: "id and a valid role are required" }, { status: 400 });
   }
-  // Seniority is enforced in setRole, which knows who is asking — nobody may act on a
+  // Seniority is enforced in setRole, which knows who is asking, nobody may act on a
   // role at or above their own, in either direction.
   const r = await setRole(id, role, admin);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });

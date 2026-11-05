@@ -2,7 +2,7 @@
 //
 // The product's whole argument is a sentence that sounds like pedantry until you see
 // it: a result set is not a report. The index searches every word order, so what comes
-// back is rows that matched SOMETHING — and a tool that renders all of them as one
+// back is rows that matched SOMETHING, and a tool that renders all of them as one
 // person's file produces a detailed, confident, wrong document.
 //
 // So the illustration is the mechanism, not a mood: rows arrive undifferentiated, then
@@ -10,7 +10,7 @@
 // word drift aside and go quiet.
 //
 // NO JAVASCRIPT. The first version waited for an IntersectionObserver to decide it was
-// visible, which meant the sorted state — the half that carries the meaning — existed
+// visible, which meant the sorted state, the half that carries the meaning, existed
 // only if a client event arrived. It froze at seven identical rows in a headless
 // renderer, and would do the same in a throttled tab or a browser without the API,
 // showing the exact opposite of what the paragraph beside it claims. The sorted state
@@ -23,7 +23,7 @@
  *
  * EVERY VALUE HERE IS FICTIONAL, and deliberately unusable. This is a public page
  * about leaked personal data, so a label that looks like somebody's address is a
- * label that IS somebody's address — surnames belong to real people whether or not
+ * label that IS somebody's address, surnames belong to real people whether or not
  * one was in mind. So: the reserved `example.com` domain, "Doe" as the universal
  * placeholder for a person who does not exist, a number from the range regulators
  * reserve for fiction, and an IBAN whose country code is not a country. Each is also

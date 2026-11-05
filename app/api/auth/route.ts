@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This deployment has no database, so it has no accounts. It runs in single-operator mode and the tool is open." }, { status: 501 });
   }
   if (!sessionsUsable()) {
-    return NextResponse.json({ error: "Set OCTOPUS_SESSION_SECRET (16+ characters) — without it sessions cannot be signed, and a shared fallback secret would let any deployment forge another's." }, { status: 501 });
+    return NextResponse.json({ error: "Set OCTOPUS_SESSION_SECRET (16+ characters). Without it sessions cannot be signed, and a shared fallback secret would let any deployment forge another's." }, { status: 501 });
   }
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "bad request" }, { status: 400 }); }

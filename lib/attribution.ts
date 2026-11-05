@@ -4,17 +4,17 @@
 // rows that matched SOMETHING, not rows that are about the person asked for. Three
 // examples of what that means in practice:
 //
-//   A three-word name returns rows that carry only the surname — different people.
+//   A three-word name returns rows that carry only the surname, different people.
 //   A phone number stored nationally does not look like the one typed internationally,
 //   so the single most relevant row can fail a naive string compare.
 //   A short handle appears inside longer strings it has nothing to do with.
 //
 // Every row therefore gets judged before it is allowed to become a fact about anyone:
 //
-//   DIRECT   — a cell holds the subject itself. This row is about the subject.
-//   PARTIAL  — the row matched part of a multi-word query. It may be a different person
+//   DIRECT, a cell holds the subject itself. This row is about the subject.
+//   PARTIAL, the row matched part of a multi-word query. It may be a different person
 //              who shares a surname. It is shown, never merged.
-//   NONE     — nothing in the row carries the subject. Kept and counted, because the
+//   NONE, nothing in the row carries the subject. Kept and counted, because the
 //              operator paid for it and silently dropping paid-for rows is its own
 //              kind of lie, but it is not evidence about the subject.
 //
@@ -28,7 +28,7 @@ export type Attribution = "direct" | "partial" | "none";
 
 export interface RowMatch {
   attribution: Attribution;
-  /** the column whose value carried the subject — so a report can point at it */
+  /** the column whose value carried the subject, so a report can point at it */
   column?: string;
   /** the spelling the dump actually held, which is often not the one that was typed */
   matched?: string;
@@ -83,7 +83,7 @@ export function containsValue(cell: string, value: string): boolean {
  * most useful row in a result set.
  *
  * The country code may be absent: a dump holding "0612345678" and a search for
- * "+33612345678" are the same subscriber. A suffix comparison finds that — but only
+ * "+33612345678" are the same subscriber. A suffix comparison finds that, but only
  * after the NATIONAL TRUNK PREFIX is dealt with. In most of Europe the leading "0" of
  * the national form is not part of the number at all; it is replaced by the country
  * code, not appended to it. So "33612345678" does not end with "0612345678", and a
@@ -106,7 +106,7 @@ const MIN_SIGNIFICANT = 9;
 export function samePhone(cell: string, variantDigits: string[]): string | null {
   // Dumps store a number behind a label ("Tel: 0612345678") and with separators nobody
   // anticipated ("06/12/34/56/78"). Requiring the WHOLE cell to be number-shaped threw
-  // both away. Pull the digit runs out instead and test each one — a run of 7 to 17
+  // both away. Pull the digit runs out instead and test each one, a run of 7 to 17
   // digits is a candidate number wherever it sits in the cell.
   const runs = String(cell ?? "").match(/\d[\d\s().+\/.-]*\d/g) || [];
   const candidates = [digitsOf(cell), ...runs.map(digitsOf)]
@@ -174,7 +174,7 @@ export function attributeRow(subject: Subject, row: Record<string, string>): Row
   }
 
   // A name. The full phrase present in one cell is direct; otherwise count how many of
-  // its words appear anywhere in the row — that is a different person until proven not.
+  // its words appear anywhere in the row, that is a different person until proven not.
   const words = subject.canonical.split(/\s+/).filter((w) => w.length >= 2);
   for (const [col, raw] of entries) {
     if (containsValue(String(raw), subject.canonical)) {
@@ -198,7 +198,7 @@ export function attributeRow(subject: Subject, row: Record<string, string>): Row
     }
   }
   if (!found.size) return { attribution: "none" };
-  // Every word of the name, each one in a column that holds names — the ordinary case
+  // Every word of the name, each one in a column that holds names, the ordinary case
   // of a dump with separate first-name and surname fields.
   const all = inNameColumn.size === words.length;
   return { attribution: all ? "direct" : "partial", column, words: [...found] };

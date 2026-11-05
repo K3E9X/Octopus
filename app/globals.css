@@ -1,5 +1,5 @@
 /* ============================================================================
-   OCTOPUS — "ABYSS" art direction.
+   OCTOPUS, "ABYSS" art direction.
    Every component reads these variables, so re-pointing them re-skins the whole
    app with no component edits. The handoff's token block omitted --type-phone,
    --type-location and --type-leak, which are used 2/5/2 times by the graph and
@@ -7,11 +7,11 @@
    carried forward unchanged rather than deleted.
    ========================================================================== */
 :root {
-  /* ground — the Check surface's calmer teal water, now the whole product's ground.
+  /* ground, the Check surface's calmer teal water, now the whole product's ground.
      A touch lighter than the old near-black void so the warm/cool glows below read. */
   --void: #0B1519;
   --void-2: #122630;
-  /* the two signature glows from /check — warm top-right, cool bottom-left — lifted
+  /* the two signature glows from /check, warm top-right, cool bottom-left, lifted
      to tokens so light mode can tone them down without a second body rule */
   /* Both washes cut by more than half. Three overlapping gradients were what made the
      ground read brown rather than black, and a muddy ground makes every colour on top
@@ -21,11 +21,11 @@
   --line: rgba(230, 242, 240, .10);        /* clean cool-white hairlines, as on /check */
   --line-soft: rgba(230, 242, 240, .05);
 
-  /* ink — warm-neutral, so text sits on the blue ground without a colour clash */
+  /* ink, warm-neutral, so text sits on the blue ground without a colour clash */
   --ink: #E9F4F3;
   --ink-2: #93A8AA;
   --ink-3: #5F7476;
-  --ink-4: #4C6367;        /* 3.15:1 — #41565A measured 2.59 on this deeper ground */
+  --ink-4: #4C6367;        /* 3.15:1, #41565A measured 2.59 on this deeper ground */
 
   /* the single hero accent */
   --accent: #FF8A3D;
@@ -33,15 +33,15 @@
 
   /* Verdict semantics. Reject is a COOL violet on purpose: against the warm
      accent it reads as "pushed away", which is what contradicting means in the
-     scoring model. It is never red — red here would collide with the accent and
+     scoring model. It is never red, red here would collide with the accent and
      with the type hues both. */
   /* The handoff put confirm ON the accent. In the graph that made a CONFIRMED node
-     and a SELECTED one the same colour — two different states, one hue. A warm gold
+     and a SELECTED one the same colour, two different states, one hue. A warm gold
      keeps confirm on the accent's side of the wheel while staying tellable apart. */
   --confirm: #FFC94D;
   --reject: #B9A8FF;
 
-  /* evidence-type hues — what a node IS, never brand. Deliberately stable so a
+  /* evidence-type hues, what a node IS, never brand. Deliberately stable so a
      saved case and the graph legend still read the same after the reskin. */
   --type-email: #D6B98F;
   --type-alias: #B3A6D6;
@@ -53,17 +53,17 @@
   --panel: rgba(14, 26, 30, .76);
 
   /* Controls get their own tokens. Everything clickable used --ink-3, which
-     measured 2.89:1 on the old void — a button the eye has to hunt for. */
+     measured 2.89:1 on the old void, a button the eye has to hunt for. */
   --ctl: #C9D8D6;
   --ctl-bd: rgba(230, 242, 240, .2);
   --ctl-bg: rgba(230, 242, 240, .045);
 
-  /* type — a display face for headings; mono stays everywhere data is shown */
+  /* type, a display face for headings; mono stays everywhere data is shown */
   --mono: var(--font-mono), ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --display: var(--font-display), var(--mono);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-/* Sunlit shallows. Declared ONCE — the boot script in the layout resolves the
+/* Sunlit shallows. Declared ONCE, the boot script in the layout resolves the
    system preference into data-theme before first paint, so there is no second
    copy inside a media query to drift out of step with this one. */
 :root[data-theme="light"] {
@@ -77,7 +77,7 @@
   --confirm: #7A6410; --reject: #5B4CB0; --panel: rgba(255, 252, 248, .84);
   --ctl: #2E2822; --ctl-bd: rgba(40, 24, 12, .26); --ctl-bg: rgba(40, 24, 12, .05);
 
-  /* The type hues were never redefined for light — they are pastels built for a dark
+  /* The type hues were never redefined for light, they are pastels built for a dark
      ground and measured 1.28–2.39:1 here, i.e. the graph legend was unreadable in
      light long before this reskin. Same hue families, taken deep enough to read
      (5.8–8.0:1), so a saved case still looks like itself. */
@@ -100,8 +100,7 @@ body {
   color: var(--ink);
   font-family: var(--mono); overflow: hidden; -webkit-font-smoothing: antialiased;
 }
-/* The product surfaces scroll and paint their own ground across the whole viewport —
-   `.adm` and `.lk2` are width-constrained, so without this the body's gradient showed
+/* The product surfaces scroll and paint their own ground across the whole viewport, `.adm` and `.lk2` are width-constrained, so without this the body's gradient showed
    down both margins of the admin screen as a band of a different colour. */
 body:has(.lk2), body:has(.adm) { overflow: auto; background: #080E11; }
 
@@ -143,7 +142,7 @@ body:has(.lk2), body:has(.adm) { overflow: auto; background: #080E11; }
 /* ============================================================================
    INTERFACE SYSTEM
    The art direction does not change: void ground, one hairline, one accent, mono
-   type, no fills. What changes is the structure — the twelve buttons that used to
+   type, no fills. What changes is the structure, the twelve buttons that used to
    compete in the top bar are grouped into a rail and a command palette, so the
    graph gets the screen and the tools get a place to live.
    ========================================================================== */
@@ -244,7 +243,7 @@ body::after {
    WEIGHT
    The report: buttons hard to see, everything drawn in one-pixel strokes.
    Measured, the interface had 59 rules at 9.5px or below and hairlines at 12%
-   alpha — elegant at 200% zoom on a retina panel, and genuinely thin anywhere
+   alpha, elegant at 200% zoom on a retina panel, and genuinely thin anywhere
    else. Contrast was fixed earlier; this is SIZE and STROKE, which is a
    different problem and needed a different pass.
 
@@ -286,7 +285,7 @@ body::after {
 /* ---- stroke ------------------------------------------------------------------
    WHOLE pixels only. Measured in the browser at both scale factors: a 1.5px
    border is floored to 1px and renders exactly like the hairline it was meant to
-   replace — the first version of this pass changed nothing at all. Controls get a
+   replace, the first version of this pass changed nothing at all. Controls get a
    real 2px edge; panels keep 1px, where the raised alpha is enough and 2px would
    read as a box. */
 .btn, .kbd, .ot-act, .api-nav button, .app-add, .bc-status, .rel-chip,
@@ -316,9 +315,9 @@ body::after {
 @keyframes ping { to { transform: scale(9); opacity: 0; } }
 .rise.in { opacity: 1; transform: none; }
 
-/* ---- ACCESS (sign-in / create-access) — the Abyss reference -------------------- */
+/* ---- ACCESS (sign-in / create-access), the Abyss reference -------------------- */
 /* ======================================================================
-   ACCESS — the first screen anyone sees.
+   ACCESS, the first screen anyone sees.
 
    It carries the product's own tokens rather than the deprecated ones it
    was written against, so the two surfaces cannot drift apart again. The
@@ -350,7 +349,7 @@ body::after {
 .ax-vignette {
   position: absolute; inset: 0; pointer-events: none;
   /* Only deep enough to clear the ground under the copy. It used to fade from solid at
-     4% to transparent at 62%, which erased most of the panel — including the half the
+     4% to transparent at 62%, which erased most of the panel, including the half the
      creature lives in. */
   background: linear-gradient(to top, var(--bg-0) 2%, rgba(8,14,17,.82) 20%, transparent 42%);
 }
@@ -369,7 +368,7 @@ body::after {
 .ax-brand small { font-size: 9px; letter-spacing: .34em; color: var(--accent); }
 
 /* Width in px, not ch: `ch` resolves against the ELEMENT's own font size, and this
-   container inherits 15px while the heading inside it renders near 46px — so "20ch"
+   container inherits 15px while the heading inside it renders near 46px, so "20ch"
    meant 160 pixels and broke the headline across six lines. */
 .ax-pitch { position: relative; z-index: 2; max-width: 480px; }
 .ax-pitch h1 {
@@ -389,7 +388,7 @@ body::after {
   padding: 30px 32px 28px;
 }
 
-/* segmented control, the same one the report uses — quiet fill, accent underline */
+/* segmented control, the same one the report uses, quiet fill, accent underline */
 .ax-tabs { display: flex; gap: 3px; background: var(--bg-2); border: 1px solid var(--bd); border-radius: var(--r-md); padding: 4px; margin-bottom: 26px; }
 .ax-tabs button {
   flex: 1; background: transparent; border: 0; cursor: pointer; border-radius: var(--r-sm);
@@ -472,7 +471,7 @@ body::after {
 
 
 /* =====================================================================================
-   OCTOPUS LEAK — the self-exposure product (/check)
+   OCTOPUS LEAK, the self-exposure product (/check)
    A token-driven design pass to studio standard. Depth comes from a 4-step teal surface
    ladder + hairline borders + a 1px inset highlight (not drop shadows). The brand orange
    is identity + interaction ONLY; risk is a separate severity ramp that never touches the
@@ -489,10 +488,10 @@ body::after {
   --shadow-float: 0 1px 2px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.35);
   /* text ladder */
   --ink: #E9F1F1; --ink-2: #9DB2B4; --ink-3: #6D8385; --ink-4: #4F6568;
-  /* brand accent — interaction + identity only */
+  /* brand accent, interaction + identity only */
   --accent: #FF7A33; --accent-hover: #FF8F52; --accent-tint: rgba(255,122,51,.10);
   --ring: 0 0 0 2px var(--bg-0), 0 0 0 4px rgba(255,122,51,.55);
-  /* severity ramp — deliberately OFF the brand orange */
+  /* severity ramp, deliberately OFF the brand orange */
   --sev-crit: hsl(352 82% 60%); --sev-crit-bg: hsl(352 82% 60% / .12); --sev-crit-bd: hsl(352 82% 60% / .32);
   --sev-high: hsl(14 86% 58%);  --sev-high-bg: hsl(14 86% 58% / .12);  --sev-high-bd: hsl(14 86% 58% / .3);
   --sev-med: hsl(40 90% 56%);   --sev-med-bg: hsl(40 90% 56% / .12);   --sev-med-bd: hsl(40 90% 56% / .3);
@@ -540,7 +539,7 @@ body::after {
 /* ---- hero ---- */
 /* ---- the hero, in the format the page is actually in ----
    It was a centred 960px column that did not change when the page column went to 1240:
-   the window got wider and the first screen did not. It is a full-bleed band now — the
+   the window got wider and the first screen did not. It is a full-bleed band now, the
    field spans the viewport, the type is sized off the viewport rather than off a
    container, and it is tall enough to be the whole first screen instead of a header
    with a lot of air under it. */
@@ -602,7 +601,7 @@ body::after {
 /* ---- report shell ---- */
 .lk2-report { padding: 48px 0 10px; max-width: 840px; margin: 0 auto; animation: lk2-rise .45s var(--ease) both; }
 
-/* verdict tile — verdict first */
+/* verdict tile, verdict first */
 .lk2-verdict { text-align: center; padding: 40px 32px; border-radius: var(--r-xl); margin-bottom: 16px; border: 1px solid var(--bd); background: var(--bg-1); box-shadow: var(--inset); }
 .lk2-verdict.v-critical { border-color: var(--sev-crit-bd); }
 .lk2-verdict.v-exposed { border-color: var(--sev-high-bd); }
@@ -624,7 +623,7 @@ body::after {
 .lk2-crit-h { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--sev-crit); margin-bottom: 14px; }
 .lk2-crit-grid { display: flex; flex-direction: column; gap: 7px; }
 
-/* tabs — segmented control */
+/* tabs, segmented control */
 .lk2-tabs { display: flex; gap: 3px; margin-bottom: 18px; background: var(--bg-1); border: 1px solid var(--bd); border-radius: var(--r-md); padding: 4px; }
 .lk2-tabs button { flex: 1; background: transparent; border: 0; cursor: pointer; color: var(--ink-3); font-size: 13px; font-weight: 500; padding: 9px 10px; border-radius: var(--r-sm); transition: background .14s, color .14s; }
 .lk2-tabs button:hover:not(:disabled):not(.on) { color: var(--ink); background: var(--bg-2); }
@@ -779,7 +778,7 @@ body::after {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lk2-threads button.load code { color: var(--ink); }
-/* the count of databases it joins — the reason it is in the list at all */
+/* the count of databases it joins, the reason it is in the list at all */
 .lk2-threads span { font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); }
 /* on its own row, so it never squeezes the value it describes */
 .lk2-threads button.load::after {
@@ -840,8 +839,8 @@ body::after {
 @keyframes lk2-draw { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .lk2 *, .lk2 *::before, .lk2 *::after { animation: none !important; }
-  /* The orbit has no entrance animation any more — it is a diagram somebody reads, not
-     a thing that performs — so there is nothing here to stop. Only the dimming, which
+  /* The orbit has no entrance animation any more, it is a diagram somebody reads, not
+     a thing that performs, so there is nothing here to stop. Only the dimming, which
      is a response to the pointer and stays. */
   .lk2-node { opacity: 1 !important; }}
 @media print {
@@ -866,7 +865,7 @@ body::after {
   .lk2-orbit-side { position: static; }
   .lk2-row { flex-direction: column; gap: 3px; } .lk2-row-k { width: auto; }}
 
-/* ---- Octopus Leak landing (/) — same system as the product ---- */
+/* ---- Octopus Leak landing (/), same system as the product ---- */
 .lk2-home .lk2-hero { padding-bottom: 8px; }
 .lk2-hero-cta { display: inline-block; background: var(--accent); color: #140a04; font-weight: 600; font-size: 15px; padding: 13px 24px; border-radius: var(--r-sm); text-decoration: none; transition: background .14s, transform .14s; }
 .lk2-hero-cta:active { transform: translateY(1px); }
@@ -906,7 +905,7 @@ body::after {
    section a visitor has to see and the rest of the page is already quiet. Emphasis is
    relative: make everything a card and nothing is emphasised.
 
-   The accent is not spent here at rest — it arrives on hover, on the rule and the
+   The accent is not spent here at rest, it arrives on hover, on the rule and the
    numeral together, so the page still has exactly one orange thing standing still (the
    button the reader is meant to press). */
 .lk2-feat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -915,7 +914,7 @@ body::after {
   border-radius: var(--r-md); background: var(--bg-1);
   transition: border-color .18s, background .18s, transform .18s;
 }
-/* the rule that lights up — a pseudo-element so it cannot inherit a border shorthand
+/* the rule that lights up, a pseudo-element so it cannot inherit a border shorthand
    from anything later in the cascade, which is how a previous accent went grey */
 .lk2-feat::before {
   content: ""; position: absolute; left: -1px; top: 14px; bottom: 14px; width: 2px;
@@ -943,7 +942,7 @@ body::after {
 
 
 /* ======================================================================
-   THE DEMO — a real report on the front page.
+   THE DEMO, a real report on the front page.
 
    Styled apart from the search surface on purpose. The product's report is
    laid out for someone reading one subject for ten minutes; this is laid
@@ -994,7 +993,7 @@ body::after {
   letter-spacing: .16em; text-transform: uppercase; color: var(--ink-4);
 }
 .lk2m-val { padding: 5px 0 5px 10px; border-left: 1px solid var(--bd-subtle); }
-/* corroborated by more than one database — a count, never a percentage */
+/* corroborated by more than one database, a count, never a percentage */
 .lk2m-val.corr { border-left-color: var(--accent); }
 .lk2m-val code { display: block; font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
 .lk2m-val.corr code { color: var(--ink); }
@@ -1060,7 +1059,7 @@ body::after {
   .lk2-steps, .lk2-views { grid-template-columns: 1fr; }}
 
 /* ======================================================================
-   SEARCH SURFACE — what the previous self-check did not need.
+   SEARCH SURFACE, what the previous self-check did not need.
 
    Three additions, and each exists to keep a claim honest rather than to
    decorate: the READING of the input (what we think you gave us, and what
@@ -1143,7 +1142,7 @@ body::after {
 .lk2-fval:first-of-type { border-top: 0; padding-top: 0; }
 .lk2-fval > code, .lk2-fval .lk2-reveal-btn code { font-size: 14px; overflow-wrap: anywhere; word-break: normal; line-height: 1.5; }
 .lk2-fval code.masked { color: var(--ink-3); }
-/* Agreed on by two or more independent dumps — a different kind of fact from one
+/* Agreed on by two or more independent dumps, a different kind of fact from one
    dump saying it once, and the only visual weight in this panel. */
 .lk2-fval > code, .lk2-fval .lk2-reveal-btn code { color: var(--ink-2); }
 .lk2-fval.corroborated > code, .lk2-fval.corroborated .lk2-reveal-btn code { color: var(--ink); font-weight: 500; }
@@ -1175,7 +1174,7 @@ body::after {
   .lk2-read-p { margin-left: 0; }}
 
 /* In print every view is shown, so the PDF is the whole report whichever tab was
-   open — and the other-people section is expanded, because a reader of the paper
+   open, and the other-people section is expanded, because a reader of the paper
    copy cannot click to find out it existed. */
 @media print {
   .lk2-tabs, .lk2-actions, .lk2-plans, .lk2-top { display: none !important; }
@@ -1185,7 +1184,7 @@ body::after {
 }
 
 /* ---- admin: the source token ---- */
-/* The value is never rendered — only a fingerprint — so this block styles a masked
+/* The value is never rendered, only a fingerprint, so this block styles a masked
    string and a state line, never an input holding a readable secret. */
 .adm-src { border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 18px 20px; background: var(--bg-1); display: flex; flex-direction: column; gap: 14px; }
 .adm-src-state { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
@@ -1204,7 +1203,7 @@ body::after {
 .adm-src-test.bad { color: var(--sev-crit); border-color: var(--sev-crit); }
 .adm-note code { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); }
 
-/* A fade in place — used where a rise would move text the reader is already looking at. */
+/* A fade in place, used where a rise would move text the reader is already looking at. */
 @keyframes lk2-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (max-width: 860px) {
@@ -1215,13 +1214,12 @@ body::after {
   .lk2-vcard:nth-child(2) { border-top: 1px solid var(--bd-subtle); padding-top: 22px; }}
 
 /* ======================================================================
-   ADMIN — the screen that had no stylesheet at all.
+   ADMIN, the screen that had no stylesheet at all.
 
    Every class Admin.tsx renders (.adm, .adm-top, .adm-me, .adm-msg,
    .adm-chain, .adm-empty, .adm-role, .auth-brand) was undefined, so the
-   whole surface — including the audit-chain status badge, which is the
-   one thing on it an operator needs to be able to read at a glance —
-   rendered as unstyled browser defaults.
+   whole surface, including the audit-chain status badge, which is the
+   one thing on it an operator needs to be able to read at a glance, rendered as unstyled browser defaults.
    ====================================================================== */
 
 .adm {
@@ -1316,7 +1314,7 @@ body::after {
   .adm-chain { margin-left: 0; }}
 
 /* ---- password habits ---- */
-/* Severity-coloured because it IS the finding, not a note about one — but a single
+/* Severity-coloured because it IS the finding, not a note about one, but a single
    bordered block, since the page already has a critical pull-out above it. */
 .lk2-habit { border: 1px solid var(--sev-high-bd); background: var(--sev-high-bg); border-radius: var(--r-lg); padding: 16px 20px; margin-bottom: 16px; }
 .lk2-habit-h { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
@@ -1333,7 +1331,7 @@ body::after {
   font-family: var(--font-mono); font-size: 13px; color: var(--ink);
   background: var(--bg-2); border-radius: var(--r-xs); padding: 5px 10px; overflow-wrap: anywhere;
 }
-/* depth selector — four buttons, same shape as the exact/permutations pair above it */
+/* depth selector, four buttons, same shape as the exact/permutations pair above it */
 .lk2-depths { grid-template-columns: repeat(4, 1fr); }
 .lk2-depths button { align-items: center; text-align: center; gap: 3px; padding: 11px 8px; }
 .lk2-depths b { font-family: var(--font-mono); font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -1386,7 +1384,7 @@ body::after {
 .lk2-pivot-card p { margin: 0 0 9px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 .lk2-pivot-card em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
 
-/* the hops taken so far — an investigation you can walk back */
+/* the hops taken so far, an investigation you can walk back */
 .lk2-trail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 14px; }
 .lk2-trail button {
   background: none; border: 0; cursor: pointer; font-family: var(--font-mono); font-size: 12px;
@@ -1400,12 +1398,12 @@ body::after {
 .adm-grantbox input:focus { border-color: var(--accent); }
 
 /* ======================================================================
-   SIFT — the product's argument, drawn.
+   SIFT, the product's argument, drawn.
 
    The SORTED state is the base state, written in the markup. The animation
    runs backwards from the undifferentiated look and lands on it, so with
-   every animation stripped — reduced motion, an old engine, a renderer that
-   never paints a second frame — the picture still says what it means.
+   every animation stripped, reduced motion, an old engine, a renderer that
+   never paints a second frame, the picture still says what it means.
    Hairlines and one accent, like everything else. It plays once; a loop in
    the corner of a page is a distraction the third time past it.
    ====================================================================== */
@@ -1462,7 +1460,7 @@ body::after {
 }
 
 /* ======================================================================
-   DEEP FIELD — the mass a search reaches into.
+   DEEP FIELD, the mass a search reaches into.
 
    Records drift as hairlines in the dark; a sweep passes and ignites the
    few it catches. Two colours, the same two the interface uses. It sits
@@ -1475,13 +1473,13 @@ body::after {
 .lk2-hero-field {
   z-index: -1;
   /* FULL BLEED. The creature lived inside the page column, so it only ever occupied the
-     left margin of a centred block — stray curves beside the type rather than an animal
+     left margin of a centred block, stray curves beside the type rather than an animal
      the page sits inside. It spans the window now. */
   left: 50%; width: 100vw; margin-left: -50vw;
   /* One radial, and the hole is in the MIDDLE: the field is at full strength at the
      edges, where the arms arrive from, and fades out under the headline, which is the
      one place it must not compete. The old mask was centred at 32%/46% and faded the
-     far side instead — the opposite of what the composition needed.
+     far side instead, the opposite of what the composition needed.
 
      The hole is shallow rather than empty: cut to nothing, the middle third of a
      full-bleed band is dead space and the arms appear to stop at an invisible wall. A
@@ -1512,7 +1510,7 @@ body::after {
 /* The severity accent, repeated here on purpose. `.s-critical` sets border-left-COLOR
    and lives earlier in the file; the `border-left` shorthand above resets it, so at
    equal specificity the later rule won and every tile came out grey. The worst thing a
-   source gave up is the one piece of ranking on this grid — losing it silently is
+   source gave up is the one piece of ranking on this grid, losing it silently is
    exactly the kind of cascade bug that survives a screenshot. */
 .lk2-svc.s-critical { border-left-color: var(--sev-crit); }
 .lk2-svc.s-high     { border-left-color: var(--sev-high); }

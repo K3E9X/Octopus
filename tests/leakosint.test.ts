@@ -8,7 +8,7 @@ import type { LeakOsintResult } from "../lib/leakosint.ts";
  * Run leakOsint against a canned payload by standing in for fetch.
  *
  * The endpoint bills per request, so the parser is exercised against fixtures rather
- * than against the live API — the shapes below are the ones observed from it.
+ * than against the live API, the shapes below are the ones observed from it.
  */
 async function parseFixture(payload: unknown) {
   const real = globalThis.fetch;
@@ -27,7 +27,7 @@ async function parseFixture(payload: unknown) {
 // one-word query and a four-word one is 40x, so miscounting words overcharges the
 // operator silently.
 
-test("a double-quoted phrase is ONE word — the documented way to stay cheap", () => {
+test("a double-quoted phrase is ONE word, the documented way to stay cheap", () => {
   assert.deepEqual(tokenize('"Elon Reeve Musk"'), ["Elon Reeve Musk"]);
   assert.equal(complexityOf('"Elon Reeve Musk"'), 1);
   // the same name unquoted is three words, which is sixteen times the complexity
@@ -116,7 +116,7 @@ test("the documented response shape parses into databases, rows and provenance",
   assert.deepEqual(kind("phone"), ["+33612345678"]);
   assert.deepEqual(kind("address"), ["Lyon"]);
   assert.ok(kind("identifier").includes("mdub_92"));
-  // "Telegram ID" contains "tel" — it must not be claimed by the phone rule
+  // "Telegram ID" contains "tel", it must not be claimed by the phone rule
   assert.ok(kind("identifier").includes("123456789"), "a platform ID is not a phone number");
   // the row is paired so credential reuse has a login:secret to work on
   assert.ok(kind("record").includes("marie@acme.fr:Kerguelen#88z"));
@@ -198,8 +198,8 @@ test("an empty or absent error string is not a refusal", () => {
 
 // ---- the price, pinned to the published formula ----------------------------------
 // This is what the business resells, so a drift here is a drift in the margin. The
-// documentation states one figure outright — "with the default limit of 100, most
-// requests cost $0.003" — and that is the anchor every other case is derived from.
+// documentation states one figure outright, "with the default limit of 100, most
+// requests cost $0.003", and that is the anchor every other case is derived from.
 
 test("the documentation's own headline price is reproduced exactly", () => {
   assert.equal(estimateCost("example@gmail.com", 100), 0.003);
@@ -210,7 +210,7 @@ test("the complexity ladder prices each word count as published", () => {
   assert.equal(complexityOf("google"), 1);
   assert.equal(complexityOf("Petya Ivanov"), 5);
   assert.equal(complexityOf("Elon Reeve Musk"), 16);
-  // every word here is four characters or longer — "one"/"two" would be free
+  // every word here is four characters or longer, "one"/"two" would be free
   assert.equal(complexityOf("alpha bravo charlie delta"), 40);
 });
 
@@ -233,7 +233,7 @@ test("a number under six digits is free; six digits is a word", () => {
   assert.equal(isBillableWord("01.01.1990"), false, "a date is never a word");
 });
 
-test("the live invalid-token shape is a refusal — keys and Status alike", () => {
+test("the live invalid-token shape is a refusal, keys and Status alike", () => {
   // verbatim from the endpoint: an invalid token with a well-formed request
   assert.match(refusalIn({ "Error code": "Invalid token. Get the correct token in the bot.", Status: "Error" }) || "", /Invalid token/);
   // and a Status:Error whose message field we do not recognise is still never a result
@@ -303,8 +303,8 @@ test("a payload with no List anywhere is unreadable, and says what it saw", asyn
 // ---- every shape this endpoint has been seen to answer in -------------------------
 // The documentation describes exactly one, and the endpoint produces several. Two
 // attempts to fix the pivot by naming the keys both shipped broken, because naming
-// keys is guessing. A database entry is recognisable by its SHAPE — rows under `Data`,
-// a provenance line under `InfoLeak` — and that is what the parser looks for now.
+// keys is guessing. A database entry is recognisable by its SHAPE, rows under `Data`,
+// a provenance line under `InfoLeak`, and that is what the parser looks for now.
 
 const ONE_DB = { "Dump A": { InfoLeak: "In 2019 a dump appeared.", Data: [{ Email: "a@b.c" }] } };
 
@@ -344,7 +344,7 @@ test("several queries, each with its own databases", async () => {
   assert.equal(r.rowCount, 2);
 });
 
-test("a nested empty answer is empty, not unreadable — it must not be refunded", async () => {
+test("a nested empty answer is empty, not unreadable, it must not be refunded", async () => {
   const r = await parseFixture({ q1: { List: { "No results found": { InfoLeak: "nothing", Data: [] } } } });
   assert.equal(r.rowCount, 0);
   assert.notEqual(r.unreadable, true);
@@ -401,7 +401,7 @@ test("a dotted quad in an unnamed column is an IP, not a phone", () => {
   assert.equal(itemsFromRow({ name: "d" }, { Value: "92.184.104.57" })[0].kind, "ip");
 });
 
-test("but 999.1.1.1 is not an IP — the octets have to be octets", () => {
+test("but 999.1.1.1 is not an IP, the octets have to be octets", () => {
   assert.notEqual(itemsFromRow({ name: "d" }, { Value: "999.1.1.1" })[0].kind, "ip");
 });
 

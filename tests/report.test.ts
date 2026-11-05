@@ -5,8 +5,8 @@ import { buildSubject } from "../lib/subject.ts";
 import type { LeakDatabase } from "../lib/leakosint.ts";
 
 // These tests feed the report RAW ROWS with the dump's own column names, exactly as the
-// API returns them, so the whole path is exercised — attribution, column classification,
-// consolidation — rather than a convenient fiction half way down it.
+// API returns them, so the whole path is exercised, attribution, column classification,
+// consolidation, rather than a convenient fiction half way down it.
 const db = (name: string, info: string, ...rows: Record<string, string>[]): LeakDatabase =>
   ({ name, info, rows });
 
@@ -53,11 +53,11 @@ test("a registration date is metadata and never a finding; a birthday is identit
     db("X", "", { Email: "jane.doe@example.com", RegDate: "2014-01-23", LastActive: "2015-01-01", BDay: "1990-01-01" }),
   ]);
   assert.deepEqual(cat(r, "identity")!.findings.map((f) => f.value), ["1990-01-01"]);
-  // the address is itself a finding, plus the birthday — the two activity dates are not
+  // the address is itself a finding, plus the birthday, the two activity dates are not
   assert.equal(r.dataPoints, 2);
 });
 
-test("a RIB, an IBAN and a card are all financial — the thing people most need told", () => {
+test("a RIB, an IBAN and a card are all financial, the thing people most need told", () => {
   assert.equal(looksFinancial("RIB", "30004000031234567890143"), true);   // 23-digit French RIB
   assert.equal(looksFinancial("iban", "FR7630006000011234567890189"), true);
   assert.equal(looksFinancial("CardNumber", "4111111111111111"), true);   // passes Luhn
@@ -166,7 +166,7 @@ const MUSK = buildSubject("Elon Reeve Musk");
 test("a name search groups into candidates and never merges them into one person", () => {
   // A name matched three rows and the report rendered them as one man holding three
   // mailboxes. A name identifies nobody, so a full hit on it is one CANDIDATE among the
-  // people who share it — kept apart, but kept.
+  // people who share it, kept apart, but kept.
   const r = buildReport(MUSK, [
     db("Dump A", "", { FullName: "Elon Reeve Musk", Email: "elon@example.com" }),
     db("Dump B", "", { FullName: "Kimbal Musk", Email: "kimbal@example.com" }),
@@ -179,7 +179,7 @@ test("a name search groups into candidates and never merges them into one person
   assert.match(r.summary, /does not identify one person/);
 });
 
-test("a name search still reports WHAT LEAKED — the bank details are not hidden", () => {
+test("a name search still reports WHAT LEAKED, the bank details are not hidden", () => {
   // The over-correction this pins: refusing to merge a name was implemented by filing
   // every row away behind a collapsed panel, so a search returning an IBAN and a RIB
   // rendered as "clear · 0 data points". Hiding what was found is not more careful than
@@ -197,7 +197,7 @@ test("a name search still reports WHAT LEAKED — the bank details are not hidde
   assert.equal(r.breachCount, 1);
 });
 
-test("an email search DOES consolidate — it designates somebody", () => {
+test("an email search DOES consolidate, it designates somebody", () => {
   const r = buildReport(JANE, [
     db("Dump A", "", { Email: "jane.doe@example.com", FullName: "Jane Doe" }),
     db("Dump B", "", { Email: "jane.doe@example.com", FullName: "Jane Doe" }),
@@ -218,7 +218,7 @@ test("the headline states what leaked AND that it is not one person", () => {
   assert.match(h, /a name does not identify one person/);
 });
 
-test("nothing attributable is dropped — the raw rows are kept verbatim", () => {
+test("nothing attributable is dropped, the raw rows are kept verbatim", () => {
   const row = { FullName: "Elon Reeve Musk", LastLogin: "2021-09-30", InternalFlag: "A7" };
   const r = buildReport(MUSK, [db("X", "", row)]);
   assert.equal(r.records.length, 1);
@@ -250,7 +250,7 @@ test("activity timestamps are metadata, whatever the dump calls them", () => {
   assert.equal(cat(r, "other"), undefined, "no timestamp lands in Other details");
 });
 
-test("a birthday survives the timestamp rule — it is identity, not metadata", () => {
+test("a birthday survives the timestamp rule, it is identity, not metadata", () => {
   for (const col of ["BDay", "DateOfBirth", "birth_date", "dob"]) {
     const r = buildReport(JANE, [db("X", "", { Email: "jane.doe@example.com", [col]: "1990-01-01" })]);
     assert.ok(cat(r, "identity"), `${col} must still read as identity`);
@@ -259,7 +259,7 @@ test("a birthday survives the timestamp rule — it is identity, not metadata", 
 
 test("an empty answer from the index is empty, not a finding", () => {
   // "No results found" arrives as a database NAME. parseList skips it, which left the
-  // item list empty, which sent the salvage harvester over the payload — and it
+  // item list empty, which sent the salvage harvester over the payload, and it
   // faithfully turned "No results found. Try changing your request." into a finding.
   const r = buildReport(JANE, []);
   assert.equal(r.dataPoints, 0);
@@ -286,7 +286,7 @@ test("one mailbox written two ways is one corroborated address", () => {
 
 test("a non-Latin name survives consolidation", () => {
   // Reducing a name key to [a-z0-9] deleted every Cyrillic, Arabic and CJK name
-  // outright — on a source whose strength is Russian-language dumps.
+  // outright, on a source whose strength is Russian-language dumps.
   const r = buildReport(buildSubject("ivan@mail.ru"), [
     db("DumpRU", "", { Email: "ivan@mail.ru", FullName: "Иван Иванов" }),
     db("DumpRU2", "", { Email: "ivan@mail.ru", FullName: "Иван Иванов" }),
@@ -318,18 +318,18 @@ test("unrelated passwords are not a habit", () => {
 // ---- a social network's user ids are not bank cards ---------------------------------
 // Reported from a real report: fourteen values from a Facebook dump filed under
 // "Bank & financial", at critical severity, under the words "this is what enables
-// direct-debit fraud". Two mistakes stacked — Luhn treated as an identity rather than
+// direct-debit fraud". Two mistakes stacked: Luhn treated as an identity rather than
 // a checksum, and a value shape allowed to overrule a column that had already said
 // what it was.
 
 test("a column naming a platform is an identifier, whatever its digits look like", () => {
-  // this IS a valid test card number — and in a column called Facebook it is an id
+  // this IS a valid test card number, and in a column called Facebook it is an id
   assert.equal(looksFinancial("Facebook", "4111111111111111"), false);
   assert.equal(looksFinancial("uid", "5500005555555559"), false);
   assert.equal(looksFinancial("profile_id", "4111111111111111"), false);
 });
 
-test("passing Luhn is not being a card — it is a checksum one number in ten passes", () => {
+test("passing Luhn is not being a card, it is a checksum one number in ten passes", () => {
   let hits = 0;
   for (let i = 0; i < 2000; i++) {
     const id = "1000" + String(Math.floor(Math.random() * 1e11)).padStart(11, "0");
@@ -376,7 +376,7 @@ test("end to end: a Facebook dump produces no bank findings", () => {
 // THE PRECEDENCE ITSELF.
 //
 // The order these rules run in is load-bearing, and while it was implicit it was wrong
-// three times in one session — each time producing a confident, alarming, false
+// three times in one session, each time producing a confident, alarming, false
 // statement. These tests assert the ORDER, not only the outcome, so moving a rule is a
 // decision somebody has to make on purpose rather than an accident of editing.
 // ======================================================================================
@@ -389,7 +389,7 @@ test("the precedence is what it is, and changing it has to be deliberate", () =>
     "financial",       // what a person most needs told
     "document",        // the raw material of identity theft
     "identity",        // above the date rule, so a birthday is identity
-    "activity-date",   // above every label rule below it — see "LastLogin"
+    "activity-date",   // above every label rule below it, see "LastLogin"
     "location",
     "email",
     "phone",
@@ -426,7 +426,7 @@ test("a password outranks everything, including a card-shaped value", () => {
   assert.equal(ruleFor(item("credential", "Password", "4111111111111111"))?.id, "password");
 });
 
-test("JobTitle is work, not a profile — the catch-all must not reach it first", () => {
+test("JobTitle is work, not a profile, the catch-all must not reach it first", () => {
   assert.equal(ruleFor(item("other", "JobTitle", "Data Engineer"))?.id, "professional");
 });
 

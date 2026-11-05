@@ -2,7 +2,7 @@
 //
 // Accounts, credits, the audit trail and the stored source token all need somewhere
 // durable. Absent a connection string there is no database, and every module that
-// depends on one degrades explicitly and says so — that is the one thing this file
+// depends on one degrades explicitly and says so, that is the one thing this file
 // guarantees to callers.
 //
 // TWO DRIVERS, ONE INTERFACE. The original client was Neon's serverless driver, which
@@ -32,7 +32,7 @@ export const dbEnabled = URL.length > 0;
  */
 export type SqlFn = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>;
 
-/** Neon's HTTP driver — used only for Neon's own hosts, which is all it can reach. */
+/** Neon's HTTP driver, used only for Neon's own hosts, which is all it can reach. */
 const isNeonHost = (url: string) => /\.neon\.tech(?::|\/|$)/i.test(url) || /\bneon\.build\b/i.test(url);
 
 let _sql: SqlFn | null = null;
@@ -56,7 +56,7 @@ function tcpDriver(url: string): SqlFn {
   }
   const pool = _pool;
   return async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    // "SELECT … $1 … $2" — the values never touch the SQL text
+    // "SELECT … $1 … $2", the values never touch the SQL text
     const text = strings.reduce((acc, part, i) => acc + part + (i < values.length ? `$${i + 1}` : ""), "");
     const res = await pool.query(text, values as any[]);
     return res.rows;
@@ -69,7 +69,7 @@ export function sql(): SqlFn | null {
   return _sql;
 }
 
-/** Which driver is in use — for the admin screen, so "it is not connecting" is diagnosable. */
+/** Which driver is in use, for the admin screen, so "it is not connecting" is diagnosable. */
 export const driverName = (): "neon-http" | "postgres-tcp" | "none" =>
   !dbEnabled ? "none" : isNeonHost(URL) ? "neon-http" : "postgres-tcp";
 

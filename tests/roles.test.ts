@@ -14,7 +14,7 @@ test("the ladder runs owner → admin → analyst → tester → disabled", () =
   assert.equal(outranks("tester", "disabled"), true);
 });
 
-test("nobody outranks their own level — which is what stops self-promotion", () => {
+test("nobody outranks their own level, which is what stops self-promotion", () => {
   assert.equal(outranks("admin", "admin"), false);
   assert.equal(outranks("admin", "owner"), false);
   assert.equal(outranks("owner", "owner"), false);

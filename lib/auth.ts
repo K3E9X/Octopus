@@ -1,12 +1,12 @@
 // Accounts, sessions and roles.
 //
 // Deliberately small and dependency-free: scrypt from node:crypto for passwords, an
-// HMAC-signed cookie for sessions. No JWT library, no auth framework — this guards one
+// HMAC-signed cookie for sessions. No JWT library, no auth framework, this guards one
 // application with one table, and every extra dependency here is extra surface.
 //
 // Degradation is explicit, because getting it wrong silently would be the worst
 // outcome: without POSTGRES_URL there is nowhere to keep accounts, so the deployment
-// runs in SINGLE-OPERATOR mode — the tool is open, and `authEnabled` is false so the
+// runs in SINGLE-OPERATOR mode, the tool is open, and `authEnabled` is false so the
 // interface says so instead of implying a protection that does not exist. Anyone
 // exposing an instance publicly needs the database.
 
@@ -34,7 +34,7 @@ const SESSION_DAYS = 14;
  *            This is the account that pays the upstream bill, so it is the only one
  *            that may decide how much of it gets spent.
  *   admin    runs the day to day: users, roles below owner, the audit trail. May
- *            grant credit TO OTHERS, bounded — and never to itself, which is the
+ *            grant credit TO OTHERS, bounded, and never to itself, which is the
  *            whole reason the role exists separately.
  *   analyst  searches.
  *   tester   searches, on a trial allowance. Where every new account starts, because
@@ -94,7 +94,7 @@ async function ensureSchema(): Promise<void> {
       )`;
       await q`CREATE INDEX IF NOT EXISTS octopus_users_email ON octopus_users (email)`;
 
-      // The address as typed is kept — mail has to reach it — but UNIQUENESS is on the
+      // The address as typed is kept, mail has to reach it, but UNIQUENESS is on the
       // canonical form, so one mailbox is one account however it is spelled.
       await q`ALTER TABLE octopus_users ADD COLUMN IF NOT EXISTS email_key text`;
       const unkeyed = await q`SELECT id, email FROM octopus_users WHERE email_key IS NULL`;
@@ -105,7 +105,7 @@ async function ensureSchema(): Promise<void> {
       // until they are merged, and the check in createUser still blocks new ones.
       try {
         await q`CREATE UNIQUE INDEX IF NOT EXISTS octopus_users_email_key ON octopus_users (email_key)`;
-      } catch { /* pre-existing duplicates — see createUser */ }
+      } catch { /* pre-existing duplicates, see createUser */ }
 
       // WHO GOT THE ADMIN SEAT. One row, claimed once, by whoever actually got there
       // first. "Is the table empty" read and then acted on is a race, and six
@@ -158,7 +158,7 @@ export async function countUsers(): Promise<number> {
 export interface CreateResult { user?: User; error?: string }
 
 /**
- * Register. The FIRST account is the administrator — a fresh deployment with no way
+ * Register. The FIRST account is the administrator, a fresh deployment with no way
  * to reach the admin panel would be a deployment nobody can administer.
  */
 export async function createUser(email: string, password: string, name?: string): Promise<CreateResult> {
@@ -227,7 +227,7 @@ export async function bootstrapClaimed(): Promise<boolean> {
  *
  * verifyUser used to return the moment no row matched, which meant scrypt only ran for
  * accounts that exist. Measured on a live instance: 27.9 ms for a real address against
- * 1.4 ms for an unknown one — a twentyfold gap that machine-reads perfectly and undoes
+ * 1.4 ms for an unknown one, a twentyfold gap that machine-reads perfectly and undoes
  * the route's careful single error message. For a breach-data product the customer list
  * is itself sensitive, and it was readable by anyone who could time a login.
  */
@@ -239,7 +239,7 @@ export async function verifyUser(email: string, password: string): Promise<User 
   const q = sql();
   if (!q) return null;
   // Found by canonical key as well, so whoever registered as "vic.tim@gmail.com" can
-  // sign in as "victim@gmail.com" — it is the same mailbox and the same account.
+  // sign in as "victim@gmail.com", it is the same mailbox and the same account.
   const typed = String(email || "").trim().toLowerCase();
   const rows = await q`SELECT * FROM octopus_users WHERE email = ${typed} OR email_key = ${canonicalEmail(typed)} LIMIT 1`;
   const r = (rows as any[])[0];
@@ -272,7 +272,7 @@ export async function listUsers(limit = 200): Promise<User[]> {
 }
 
 /**
- * Change a role. The last administrator cannot be demoted or disabled — locking
+ * Change a role. The last administrator cannot be demoted or disabled, locking
  * everyone out of the admin panel is not a state the UI should be able to reach.
  */
 export async function setRole(id: string, role: Role, actor: User): Promise<{ ok: boolean; error?: string }> {
