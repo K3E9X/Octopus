@@ -267,6 +267,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: "The leak source answered in a shape this version cannot read. Nothing is claimed about this subject either way.",
         reason: "unreadable",
+        // The payload's top-level KEY NAMES, never its values. Diagnosing a shape
+        // change by guessing has now cost two shipped fixes; this is what makes the
+        // third unnecessary, and key names cannot carry somebody's record.
+        shape: res.shape,
         refunded: true, balance: user ? balanceCredits(await balanceOf(user.id).catch(() => NaN)) : undefined,
       }, { status: 502 });
     }
@@ -363,7 +367,10 @@ async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
     }
     if (res.unreadable) {
       await giveBack("refund: unreadable response");
-      return NextResponse.json({ error: "The leak source answered in a shape this version cannot read.", reason: "unreadable", refunded: true }, { status: 502 });
+      return NextResponse.json({
+        error: "The leak source answered in a shape this version cannot read.",
+        reason: "unreadable", shape: res.shape, refunded: true,
+      }, { status: 502 });
     }
 
     // One merged response, judged separately per selector. A row only reaches a report

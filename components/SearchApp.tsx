@@ -889,7 +889,12 @@ function Pivot({ targets, onHop, onBalance }: {
       body: JSON.stringify({ pivots: picked, legalBasis: "investigation" }),
     }).then(async (r) => ({ ok: r.ok, d: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, d: {} as any }));
     setBusy(false);
-    if (!res.ok) { setErr(res.d.error || "The pivot could not run."); return; }
+    if (!res.ok) {
+      // When the source answers in a shape this build cannot read, say which keys it
+      // used. It is the difference between "it broke" and something actionable.
+      setErr(res.d.shape ? `${res.d.error} (keys returned: ${res.d.shape})` : (res.d.error || "The pivot could not run."));
+      return;
+    }
     setResults(res.d.reports || []);
     if (typeof res.d.balance === "number") onBalance(res.d.balance);
   };

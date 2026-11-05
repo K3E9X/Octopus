@@ -279,12 +279,39 @@ function databasesIn(list: any): LeakDatabase[] {
  * of it would double every row in the per-breach view. Attribution then decides which
  * rows belong to which subject, which is the step that makes merging safe.
  */
-function listsIn(payload: any): any[] {
-  if (!payload || typeof payload !== "object") return [];
-  if (payload.List) return [payload.List];
+/**
+ * Does this object look like a map of DATABASES?
+ *
+ * Structural, not by key name, and that is the whole point. The documentation shows
+ * one response shape and describes exactly one of the several this endpoint actually
+ * produces: a single query answers under a top-level `List`, a batch nests per query,
+ * and at least one of those nestings carries no `List` key at all. Two attempts to fix
+ * the pivot by naming the keys both shipped broken, because naming keys is guessing.
+ *
+ * What never changes is what a database entry looks like: it has rows under `Data`, or
+ * a provenance line under `InfoLeak`, or both. So that is what is looked for.
+ */
+function isDatabaseMap(o: any): boolean {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+  const vals = Object.values<any>(o);
+  if (!vals.length) return false;
+  return vals.some((v) => v && typeof v === "object" && !Array.isArray(v) && (Array.isArray(v.Data) || typeof v.InfoLeak === "string"));
+}
+
+/**
+ * Every database map in the payload, however deep the response chose to put them.
+ *
+ * Three levels is enough for every shape observed and shallow enough that it cannot
+ * wander into row data and mistake a record for a database.
+ */
+function listsIn(payload: any, depth = 0): any[] {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || depth > 2) return [];
+  if (isDatabaseMap(payload)) return [payload];
   const out: any[] = [];
-  for (const value of Object.values<any>(payload)) {
-    if (value && typeof value === "object" && value.List) out.push(value.List);
+  if (payload.List) out.push(...listsIn(payload.List, depth + 1));
+  for (const [k, v] of Object.entries<any>(payload)) {
+    if (k === "List") continue;
+    out.push(...listsIn(v, depth + 1));
   }
   return out;
 }
@@ -292,16 +319,16 @@ function listsIn(payload: any): any[] {
 /**
  * Did the endpoint run the query and match nothing?
  *
- * "No results found" arrives as a database NAME, in every List the response carries.
- * Checking only the top-level one meant a BATCH that matched nothing had no readable
- * database, fell through to the salvage path, and was reported as a payload we could
- * not understand — turning a clean, correct, cheap answer into an error and a refund.
+ * "No results found" arrives as a database NAME, in whichever List the response put it.
+ * A batch that matched nothing has no readable database either, so without this it
+ * takes the salvage path and a clean, correct, cheap answer is reported as an error
+ * and refunded.
  */
 function matchedNothing(payload: any): boolean {
   const lists = listsIn(payload);
   if (!lists.length) return false;
   return lists.every(
-    (l) => l && typeof l === "object" && Object.keys(l).length > 0 && Object.keys(l).every((k) => k === NO_RESULTS),
+    (l) => Object.keys(l).length > 0 && Object.keys(l).every((k) => k === NO_RESULTS),
   );
 }
 

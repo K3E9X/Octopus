@@ -299,3 +299,67 @@ test("a payload with no List anywhere is unreadable, and says what it saw", asyn
   // the SHAPE, never the content
   assert.ok(!(res.shape || "").includes("x"));
 });
+
+// ---- every shape this endpoint has been seen to answer in -------------------------
+// The documentation describes exactly one, and the endpoint produces several. Two
+// attempts to fix the pivot by naming the keys both shipped broken, because naming
+// keys is guessing. A database entry is recognisable by its SHAPE — rows under `Data`,
+// a provenance line under `InfoLeak` — and that is what the parser looks for now.
+
+const ONE_DB = { "Dump A": { InfoLeak: "In 2019 a dump appeared.", Data: [{ Email: "a@b.c" }] } };
+
+test("the documented shape: a top-level List", async () => {
+  const r = await parseFixture({ List: ONE_DB });
+  assert.equal(r.databases.length, 1);
+  assert.notEqual(r.unreadable, true);
+});
+
+test("a batch nesting a List per query", async () => {
+  const r = await parseFixture({ "a@b.c": { List: ONE_DB } });
+  assert.equal(r.databases.length, 1);
+  assert.equal(r.rowCount, 1);
+  assert.notEqual(r.unreadable, true);
+});
+
+test("a batch nesting the databases directly, with no List key at all", async () => {
+  // this is the one that kept the pivot broken: there is no `List` anywhere to find
+  const r = await parseFixture({ "a@b.c": ONE_DB });
+  assert.equal(r.databases.length, 1);
+  assert.equal(r.rowCount, 1);
+  assert.notEqual(r.unreadable, true);
+});
+
+test("databases at the root, with no wrapper", async () => {
+  const r = await parseFixture(ONE_DB);
+  assert.equal(r.databases.length, 1);
+  assert.notEqual(r.unreadable, true);
+});
+
+test("several queries, each with its own databases", async () => {
+  const r = await parseFixture({
+    q1: ONE_DB,
+    q2: { "Dump B": { InfoLeak: "another", Data: [{ Phone: "+33612345678" }] } },
+  });
+  assert.deepEqual(r.databases.map((d) => d.name).sort(), ["Dump A", "Dump B"]);
+  assert.equal(r.rowCount, 2);
+});
+
+test("a nested empty answer is empty, not unreadable — it must not be refunded", async () => {
+  const r = await parseFixture({ q1: { List: { "No results found": { InfoLeak: "nothing", Data: [] } } } });
+  assert.equal(r.rowCount, 0);
+  assert.notEqual(r.unreadable, true);
+});
+
+test("a genuinely unknown payload is flagged, and reports its keys and not its values", async () => {
+  const r = await parseFixture({ somethingNew: "sensitive-value-here", alsoThis: 1 });
+  assert.equal(r.unreadable, true);
+  assert.match(r.shape || "", /somethingNew/);
+  assert.ok(!(r.shape || "").includes("sensitive-value-here"), "key names only");
+});
+
+test("a row is never mistaken for a database, however deep it sits", async () => {
+  // a record with an InfoLeak-ish column must not be read as a database map
+  const r = await parseFixture({ List: { "Dump A": { InfoLeak: "x", Data: [{ Email: "a@b.c", Notes: "InfoLeak" }] } } });
+  assert.equal(r.databases.length, 1);
+  assert.equal(r.databases[0].rows.length, 1);
+});
