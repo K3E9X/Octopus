@@ -61,7 +61,7 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
         <section className="lk2-hero lk2-hero-deep">
           {/* The mass you cannot see into, and the few things a search pulls out of it.
               The background says what the page says. */}
-          <DeepField className="lk2-hero-field" />
+          <DeepField className="lk2-hero-field" anchor={{ x: 0.1, y: 0.3 }} />
           <div className="lk2-eyebrow">breach data lookup</div>
           <h1>What has leaked<br />about <span>this person</span>?</h1>
           <p>Search an email, a phone, a handle or a name across breach data, and get back more than a list of hits: the records assembled into one subject, with the dump every single fact came from.</p>

@@ -349,7 +349,10 @@ body::after {
 /* clears the ground under the copy without flattening the field above it */
 .ax-vignette {
   position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(to top, var(--bg-0) 4%, rgba(8,14,17,.72) 34%, transparent 62%);
+  /* Only deep enough to clear the ground under the copy. It used to fade from solid at
+     4% to transparent at 62%, which erased most of the panel — including the half the
+     creature lives in. */
+  background: linear-gradient(to top, var(--bg-0) 2%, rgba(8,14,17,.82) 20%, transparent 42%);
 }
 .ax-brand { position: relative; z-index: 2; display: flex; align-items: center; gap: 11px; text-decoration: none; }
 .ax-brand span { display: flex; align-items: baseline; gap: 9px; }
