@@ -18,7 +18,29 @@
 // exist. They are counted, named and kept, under their own heading, saying what they
 // are.
 
-export type SourceKind = "service" | "aggregate";
+export type SourceKind = "social" | "service" | "aggregate";
+
+/**
+ * The social networks, named.
+ *
+ * They get their own heading because they are what somebody actually scans for — a
+ * breach at a bank and a breach at a forum are both "a service", but only one of them
+ * is the question being asked when a person looks at this grid. Matching is on the
+ * reduced name, so "Facebook 2021" and "facebook" land together.
+ *
+ * A closed list rather than a guess: a network wrongly filed as an ordinary service is
+ * a cosmetic miss, while an ordinary service filed as a social network is a claim
+ * about where somebody spends their time.
+ */
+const SOCIAL = new Set([
+  "facebook", "instagram", "twitter", "x", "tiktok", "snapchat", "linkedin", "pinterest",
+  "reddit", "tumblr", "vk", "vkontakte", "odnoklassniki", "ok.ru", "weibo", "qq", "wechat",
+  "telegram", "whatsapp", "discord", "skype", "viber", "line", "kakaotalk", "signal",
+  "myspace", "badoo", "tinder", "grindr", "bumble", "meetic", "okcupid", "plentyoffish", "pof",
+  "youtube", "twitch", "flickr", "deviantart", "behance", "dribbble", "soundcloud",
+  "last.fm", "lastfm", "mixcloud", "bandcamp", "goodreads", "wattpad", "quora", "medium",
+  "nextdoor", "mastodon", "clubhouse", "foursquare", "swarm", "strava", "untappd",
+]);
 
 export interface ServiceTile {
   /** the service as a person would name it — "Deezer", not "Deezer 2019" */
@@ -76,7 +98,8 @@ export function serviceOf(dumpName: string, info = ""): { name: string; kind: So
   const trimmed = raw.replace(EDITION, " ").replace(/[\s_.-]+$/g, "").replace(/\s+/g, " ").trim();
   // a name reduced to nothing, or to a bare number, was never a service name
   if (!trimmed || /^\d+$/.test(trimmed)) return { name: raw, kind: "aggregate", year };
-  return { name: trimmed, kind: "service", year };
+  const key = trimmed.toLowerCase().replace(/\s+/g, "");
+  return { name: trimmed, kind: SOCIAL.has(key) ? "social" : "service", year };
 }
 
 const RANK = { critical: 3, high: 2, medium: 1, low: 0 } as const;
@@ -121,11 +144,13 @@ export function serviceGrid(sources: SourceLike[]): ServiceTile[] {
     }
   }
 
-  // services first — they are the answer to "who holds my data" — then by how much
-  // each gave up, so the worst offender is read first
+  // Social networks first — they are what somebody scans this grid for — then other
+  // services, then the aggregated lists, which are not places anybody has an account.
+  // Within each, the source that gave up the most is read first.
+  const ORDER: Record<SourceKind, number> = { social: 0, service: 1, aggregate: 2 };
   return [...by.values()].sort(
     (a, b) =>
-      (a.kind === b.kind ? 0 : a.kind === "service" ? -1 : 1) ||
+      ORDER[a.kind] - ORDER[b.kind] ||
       RANK[b.severity] - RANK[a.severity] ||
       b.fields - a.fields ||
       a.name.localeCompare(b.name),
@@ -134,13 +159,15 @@ export function serviceGrid(sources: SourceLike[]): ServiceTile[] {
 
 /** One line a reader can take away without opening a tile. */
 export function gridSummary(tiles: ServiceTile[]): string {
-  const services = tiles.filter((t) => t.kind === "service").length;
-  const aggregates = tiles.length - services;
   if (!tiles.length) return "No source named this subject.";
+  const n = (k: SourceKind) => tiles.filter((t) => t.kind === k).length;
+  const social = n("social"), services = n("service"), aggregates = n("aggregate");
   const parts: string[] = [];
-  if (services) parts.push(`${services} service${services === 1 ? "" : "s"}`);
+  if (social) parts.push(`${social} social network${social === 1 ? "" : "s"}`);
+  if (services) parts.push(`${services} other service${services === 1 ? "" : "s"}`);
   if (aggregates) parts.push(`${aggregates} aggregated list${aggregates === 1 ? "" : "s"}`);
   const years = tiles.flatMap((t) => [t.firstYear, t.lastYear]).filter(Boolean) as number[];
   const span = years.length ? `, ${Math.min(...years)}–${Math.max(...years)}` : "";
-  return `${parts.join(" and ")} hold data about this subject${span}.`;
+  const list = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+  return `${list} hold data about this subject${span}.`;
 }

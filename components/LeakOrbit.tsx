@@ -30,7 +30,10 @@ const CAT_COLOR: Record<string, string> = {
 };
 const catColor = (c: string) => CAT_COLOR[c] || "#93A8AA";
 
-const W = 1000, H = 560, CX = 500, CY = 288;
+// A taller grid than the original 560. The view now gets the full window width, and a
+// 16:9-ish canvas pushed every ring into the same horizontal band; the extra height is
+// where the outer orbits actually fit.
+const W = 1000, H = 660, CX = 500, CY = 336;
 
 export default function LeakOrbit({ report }: { report: Report }) {
   const [focus, setFocus] = useState<string | null>(null);

@@ -667,7 +667,17 @@ body::after {
 .lk2-again:hover { border-color: var(--bd-strong); color: var(--ink); }
 
 /* ---- orbit ---- */
-.lk2-orbit { display: grid; grid-template-columns: 1fr 258px; gap: 16px; align-items: start; }
+/* The constellation BREAKS OUT of the report's measure.
+   840px is the right width for reading prose and the wrong one for a diagram: minus a
+   258px sidebar it left about 560 pixels for a drawing laid out on a 1000-unit grid,
+   so every node sat on top of its neighbour. Text stays at its measure; the picture
+   takes the window. */
+.lk2-orbit {
+  display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start;
+  width: min(1340px, 94vw);
+  margin-left: 50%; transform: translateX(-50%);
+}
+.lk2-orbit-svg { min-height: min(62vh, 620px); }
 .lk2-orbit-svg { width: 100%; height: auto; border: 1px solid var(--bd); border-radius: var(--r-xl); background: radial-gradient(130% 120% at 50% 42%, rgba(255,122,51,.04), transparent 62%), var(--bg-1); box-shadow: var(--inset); }
 .lk2-orbit-ring { fill: none; stroke: var(--bd); stroke-dasharray: 2 7; }
 .lk2-link { stroke: var(--bd); stroke-width: 1; opacity: .55; stroke-dasharray: 320; stroke-dashoffset: 320; animation: lk2-draw .7s var(--ease) forwards; animation-delay: calc(var(--i) * 60ms + .15s); transition: opacity .2s; }
@@ -756,7 +766,8 @@ body::after {
   .lk2-box { flex-direction: column; } .lk2-box button { padding: 12px; }
   .lk2-hero { padding: 48px 0 30px; }
   .lk2-vstats { flex-direction: row; }
-  .lk2-orbit { grid-template-columns: 1fr; } .lk2-orbit-side { position: static; }
+  .lk2-orbit { grid-template-columns: 1fr; width: 100%; margin-left: 0; transform: none; }
+  .lk2-orbit-side { position: static; }
   .lk2-row { flex-direction: column; gap: 3px; } .lk2-row-k { width: auto; }}
 
 /* ---- Octopus Leak landing (/) — same system as the product ---- */

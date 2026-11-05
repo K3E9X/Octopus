@@ -199,12 +199,62 @@ export interface OtherSubject {
 const IBAN_RE = /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/;
 const FIN_LABEL = /\b(rib|iban|bic|swift|bank|banque|compte|card|carte|cc_?num|pan|cvv|ccv|paypal|crypto|wallet|btc|eth|routing|account.?number)\b/i;
 
+/**
+ * Columns that hold an identifier, never money.
+ *
+ * A platform's user id is a long number, and this is the column that says so. It is
+ * checked FIRST and it is absolute: no value shape may overrule a field whose name
+ * already told us what it is.
+ */
+const ID_LABEL = /\b(id|uid|guid|user.?id|profile|account.?id|facebook|fb|instagram|twitter|telegram|tiktok|snapchat|discord|steam|\bvk\b|\bok\b|member|customer.?no)\b/i;
+
+/**
+ * Card issuer prefixes, with the lengths each actually issues.
+ *
+ * This is the half that was missing, and the reason a social network's user ids were
+ * reported as leaked bank cards. Luhn is a CHECKSUM, not an identity: roughly one
+ * random number in ten passes it. A dump of a hundred-odd Facebook rows therefore
+ * produced about fourteen "credit cards", each rendered as critical, under the words
+ * "this is what enables direct-debit fraud".
+ *
+ * Luhn is still required — it rules out typos — but it is now the last test rather
+ * than the only one. A number must also start like a card somebody could actually
+ * have been issued, and be a length that issuer uses.
+ */
+const CARD_ISSUERS: { re: RegExp; lengths: number[] }[] = [
+  { re: /^4/, lengths: [13, 16, 19] },                        // Visa
+  { re: /^5[1-5]/, lengths: [16] },                           // Mastercard
+  { re: /^2(2[2-9]|[3-6]\d|7[01]|720)/, lengths: [16] },      // Mastercard, 2-series
+  { re: /^3[47]/, lengths: [15] },                            // American Express
+  { re: /^3(0[0-5]|095|6|8|9)/, lengths: [14, 16, 19] },      // Diners
+  { re: /^35(2[89]|[3-8]\d)/, lengths: [16, 17, 18, 19] },    // JCB
+  { re: /^(6011|64[4-9]|65)/, lengths: [16, 17, 18, 19] },    // Discover
+];
+
+function looksLikeCard(digits: string): boolean {
+  if (!/^\d+$/.test(digits)) return false;
+  return CARD_ISSUERS.some((i) => i.re.test(digits) && i.lengths.includes(digits.length)) && luhn(digits);
+}
+
 export function looksFinancial(label: string, value: string): boolean {
-  if (FIN_LABEL.test(label)) return true;
+  // The label is normalised FIRST. These patterns are \b-bounded, and an underscore is
+  // a word character — so "profile_id" never matched \bprofile\b, and "BankAccount"
+  // never matched \baccount.?number\b either. Both arrive from dumps in exactly those
+  // shapes, and categorize() was already humanising for its own rules while passing the
+  // raw string here.
+  const L = humanLabel(label).toLowerCase();
+
+  // A field whose NAME says identifier is an identifier, whatever its digits look like
+  // — unless the same name also says money, which is how "BankAccount" stays financial
+  // despite containing "account".
+  if (ID_LABEL.test(L) && !FIN_LABEL.test(L)) return false;
+  if (FIN_LABEL.test(L)) return true;
   const v = value.replace(/[\s-]/g, "");
-  if (IBAN_RE.test(v)) return true;                  // an IBAN
-  if (/^\d{13,19}$/.test(v) && luhn(v)) return true; // a plausible card number
-  if (/^\d{23}$/.test(v)) return true;               // a French RIB is 23 digits
+  if (IBAN_RE.test(v)) return true;
+  if (looksLikeCard(v)) return true;
+  // A French RIB is 23 digits and nothing else of that length is common — but it is
+  // still only read as one when no column name has claimed the field already.
+  if (/^\d{23}$/.test(v)) return true;
   return false;
 }
 
@@ -296,6 +346,11 @@ function categorize(it: ExposureItem): Category | null {
   const v = it.value;
 
   if (it.kind === "credential" || /\b(pass(word|wd)?|pwd|hash|secret|otp|pin)\b/.test(L)) return "password";
+  // No kind guard here, deliberately. The first attempt at this fix refused anything
+  // typed `identifier` — which also refused "BankAccount", because the upstream
+  // classifier types that as an identifier for containing the word "account". The
+  // discrimination belongs inside looksFinancial, which weighs the column name against
+  // the value shape, rather than out here where only one of the two is visible.
   if (looksFinancial(it.label, v)) return "financial";
   if (it.kind === "document" || /\b(passport|national.?id|\bssn\b|\binn\b|snils|licen[cs]e|id.?card|driver|tax.?id|nino)\b/.test(L)) return "document";
   if (it.kind === "name" || /\b(full.?name|^name$|first.?name|last.?name|surname|patronym|\bfio\b|gender|\bsex\b)\b/.test(L) || BIRTHISH.test(L)) return "identity";

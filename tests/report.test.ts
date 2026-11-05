@@ -314,3 +314,60 @@ test("unrelated passwords are not a habit", () => {
   ]);
   assert.deepEqual(r.passwordHabits, []);
 });
+
+// ---- a social network's user ids are not bank cards ---------------------------------
+// Reported from a real report: fourteen values from a Facebook dump filed under
+// "Bank & financial", at critical severity, under the words "this is what enables
+// direct-debit fraud". Two mistakes stacked — Luhn treated as an identity rather than
+// a checksum, and a value shape allowed to overrule a column that had already said
+// what it was.
+
+test("a column naming a platform is an identifier, whatever its digits look like", () => {
+  // this IS a valid test card number — and in a column called Facebook it is an id
+  assert.equal(looksFinancial("Facebook", "4111111111111111"), false);
+  assert.equal(looksFinancial("uid", "5500005555555559"), false);
+  assert.equal(looksFinancial("profile_id", "4111111111111111"), false);
+});
+
+test("passing Luhn is not being a card — it is a checksum one number in ten passes", () => {
+  let hits = 0;
+  for (let i = 0; i < 2000; i++) {
+    const id = "1000" + String(Math.floor(Math.random() * 1e11)).padStart(11, "0");
+    if (looksFinancial("SomeColumn", id)) hits++;
+  }
+  assert.equal(hits, 0, "Facebook-shaped ids must never read as cards");
+});
+
+test("a number must start like a card somebody could have been issued", () => {
+  // correct length, passes Luhn, no issuer on earth starts 9999
+  assert.equal(looksFinancial("value", "9999999999999995"), false);
+  // right issuer, wrong length for it
+  assert.equal(looksFinancial("value", "411111111111111111"), false);
+});
+
+test("real cards are still caught, across the issuers", () => {
+  for (const [label, card] of [
+    ["CardNumber", "4111111111111111"],   // Visa
+    ["cc", "5500005555555559"],           // Mastercard
+    ["card", "371449635398431"],          // Amex
+    ["pan", "6011111111111117"],          // Discover
+  ] as const) {
+    assert.equal(looksFinancial(label, card), true, `${label} ${card}`);
+  }
+});
+
+test("an IBAN and a RIB are still financial", () => {
+  assert.equal(looksFinancial("IBAN", "FR7630006000011234567890189"), true);
+  assert.equal(looksFinancial("RIB", "30004000031234567890143"), true);
+});
+
+test("end to end: a Facebook dump produces no bank findings", () => {
+  const rows = Array.from({ length: 60 }, (_, i) => ({
+    Email: "jane.doe@example.com",
+    Facebook: "1000" + String(10000000000 + i * 7919),
+  }));
+  const r = buildReport(JANE, [db("Facebook 2021", "A scraped Facebook set.", ...rows)]);
+  assert.equal(cat(r, "financial"), undefined, "not one of them is a bank detail");
+  assert.equal(r.highlights.financial.length, 0);
+  assert.ok(cat(r, "online"), "they are online identifiers, which is what they are");
+});

@@ -42,23 +42,23 @@ test("several dumps of one company are one tile spanning the years", () => {
   assert.equal(tiles[0].severity, "high", "the worst thing it gave up wins");
 });
 
-test("services are listed before aggregates — they answer the question being asked", () => {
+test("a real source is listed before an aggregate, even when the aggregate is worse", () => {
   const tiles = serviceGrid([
     { name: "Collection #1", info: "", severity: "critical", findings: [f("pw", "critical")] },
-    { name: "LinkedIn 2021", info: "", severity: "medium", findings: [f("Jane", "medium")] },
+    { name: "Deezer 2019", info: "", severity: "medium", findings: [f("Jane", "medium")] },
   ]);
-  assert.equal(tiles[0].kind, "service", "even though the aggregate is more severe");
-  assert.equal(tiles[1].kind, "aggregate");
+  assert.equal(tiles[0].kind, "service");
+  assert.equal(tiles[1].kind, "aggregate", "a combolist is not a place anybody has an account");
 });
 
-test("the summary counts the two kinds separately and spans the years", () => {
+test("the summary counts each kind separately and spans the years", () => {
   const tiles = serviceGrid([
     { name: "Deezer 2019", info: "", severity: "high", findings: [f("a", "high")] },
-    { name: "LinkedIn 2021", info: "", severity: "low", findings: [f("b", "low")] },
+    { name: "Carrefour 2021", info: "", severity: "low", findings: [f("b", "low")] },
     { name: "Collection #1", info: "published in 2019", severity: "critical", findings: [f("c", "critical")] },
   ]);
   const line = gridSummary(tiles);
-  assert.match(line, /2 services/);
+  assert.match(line, /2 other services/);
   assert.match(line, /1 aggregated list/);
   assert.match(line, /2019–2021/);
 });
@@ -77,4 +77,43 @@ test("compound names are matched by prefix — a trailing boundary misses them",
 
 test("a real company whose name merely starts like one of them is still a service", () => {
   assert.equal(serviceOf("Combine Harvester Co").kind, "service");
+});
+
+// ---- social networks are their own question ----------------------------------------
+
+test("a known network is filed as social, not as a generic service", () => {
+  for (const n of ["Facebook 2021", "LinkedIn 2021", "Instagram", "TikTok 2022", "VK", "Twitch"]) {
+    assert.equal(serviceOf(n).kind, "social", n);
+  }
+});
+
+test("an ordinary company stays an ordinary service", () => {
+  // a network wrongly filed as a service is a cosmetic miss; a service wrongly filed as
+  // a network is a claim about where somebody spends their time
+  for (const n of ["Deezer 2019", "Carrefour 2020", "Dropbox 2012", "Adobe 2013"]) {
+    assert.equal(serviceOf(n).kind, "service", n);
+  }
+});
+
+test("the grid reads social first, then services, then aggregates", () => {
+  const f = (v: string, s: any) => ({ value: v, severity: s });
+  const tiles = serviceGrid([
+    { name: "Collection #1", info: "", severity: "critical", findings: [f("a", "critical")] },
+    { name: "Deezer 2019", info: "", severity: "low", findings: [f("b", "low")] },
+    { name: "Facebook 2021", info: "", severity: "low", findings: [f("c", "low")] },
+  ]);
+  assert.deepEqual(tiles.map((t) => t.kind), ["social", "service", "aggregate"],
+    "even though the aggregate is the most severe");
+});
+
+test("the summary counts all three kinds", () => {
+  const f = (v: string, s: any) => ({ value: v, severity: s });
+  const line = gridSummary(serviceGrid([
+    { name: "Facebook 2021", info: "", severity: "high", findings: [f("a", "high")] },
+    { name: "Deezer 2019", info: "", severity: "low", findings: [f("b", "low")] },
+    { name: "COMB", info: "", severity: "critical", findings: [f("c", "critical")] },
+  ]));
+  assert.match(line, /1 social network/);
+  assert.match(line, /1 other service/);
+  assert.match(line, /1 aggregated list/);
 });

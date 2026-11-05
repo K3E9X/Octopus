@@ -42,7 +42,7 @@ interface PasswordHabit { stem: string; values: string[] }
 interface RecordGroup { database: string; info: string; rows: Record<string, string>[]; attribution: string[] }
 interface PivotTarget { value: string; kind: "email" | "phone" | "username"; sources: string[] }
 interface ServiceTile {
-  name: string; dumps: string[]; kind: "service" | "aggregate";
+  name: string; dumps: string[]; kind: "social" | "service" | "aggregate";
   firstYear?: number; lastYear?: number; fields: number; severity: Sev;
 }
 
@@ -984,6 +984,7 @@ function Pivot({ targets, onHop, onBalance, caseRef }: {
 
 function Services({ tiles, summary }: { tiles: ServiceTile[]; summary: string }) {
   if (!tiles.length) return <p className="lk2-clear">No source named this subject.</p>;
+  const social = tiles.filter((t) => t.kind === "social");
   const services = tiles.filter((t) => t.kind === "service");
   const aggregates = tiles.filter((t) => t.kind === "aggregate");
 
@@ -1002,9 +1003,16 @@ function Services({ tiles, summary }: { tiles: ServiceTile[]; summary: string })
     <div className="lk2-svcs">
       <p className="lk2-svc-sum">{summary}</p>
 
+      {social.length > 0 && (
+        <>
+          <h5>Social networks</h5>
+          <div className="lk2-svc-grid">{social.map(Tile)}</div>
+        </>
+      )}
+
       {services.length > 0 && (
         <>
-          <h5>Services</h5>
+          <h5>Other services</h5>
           <div className="lk2-svc-grid">{services.map(Tile)}</div>
         </>
       )}
