@@ -6,10 +6,25 @@ import { SESSION_COOKIE, readSession, getUser, authEnabled, sessionsUsable, type
 
 export { authEnabled, sessionsUsable };
 
+/**
+ * Who is this?
+ *
+ * The role is re-read from the database on every request and a disabled account
+ * resolves to nobody. lib/auth justifies its stateless cookie by saying "revocation is
+ * handled by the role check that follows it" — there was no such check anywhere, so a
+ * disabled or fired analyst kept working, and kept spending the operator's upstream
+ * balance, for the full fourteen days of their cookie. Signing out and changing a
+ * password were equally cosmetic.
+ *
+ * This is where that check lives, so no route can forget it.
+ */
 export async function currentUser(): Promise<User | null> {
   if (!authEnabled) return null;
   const id = readSession(cookies().get(SESSION_COOKIE)?.value);
-  return id ? getUser(id) : null;
+  if (!id) return null;
+  const user = await getUser(id);
+  if (!user || user.role === "disabled") return null;
+  return user;
 }
 
 /** For routes that must be an administrator. Returns null when the caller is not. */

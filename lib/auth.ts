@@ -128,6 +128,17 @@ export async function createUser(email: string, password: string, name?: string)
   return { user: { id, email: mail, name: name || undefined, role, createdAt: now } };
 }
 
+/**
+ * A dummy salt, so an unknown address costs the same as a known one.
+ *
+ * verifyUser used to return the moment no row matched, which meant scrypt only ran for
+ * accounts that exist. Measured on a live instance: 27.9 ms for a real address against
+ * 1.4 ms for an unknown one — a twentyfold gap that machine-reads perfectly and undoes
+ * the route's careful single error message. For a breach-data product the customer list
+ * is itself sensitive, and it was readable by anyone who could time a login.
+ */
+const DECOY_SALT = "0".repeat(32);
+
 export async function verifyUser(email: string, password: string): Promise<User | null> {
   if (!authEnabled) return null;
   await ensureSchema();
@@ -135,8 +146,9 @@ export async function verifyUser(email: string, password: string): Promise<User 
   if (!q) return null;
   const rows = await q`SELECT * FROM octopus_users WHERE email = ${String(email || "").trim().toLowerCase()} LIMIT 1`;
   const r = (rows as any[])[0];
+  // The work happens either way; only the comparison's outcome differs.
+  const candidate = await hash(password, r?.pw_salt || DECOY_SALT);
   if (!r) return null;
-  const candidate = await hash(password, r.pw_salt);
   if (!sameHash(candidate, r.pw_hash)) return null;
   if (r.role === "disabled") return null;
   await q`UPDATE octopus_users SET last_seen = ${Date.now()} WHERE id = ${r.id}`;

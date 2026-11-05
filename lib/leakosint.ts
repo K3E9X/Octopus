@@ -21,10 +21,18 @@
 //   description of what that breach was. Flattening that into one list would throw away
 //   the single most useful thing it returns — which dump a fact came from.
 //
-// Not verified against the live endpoint from this environment: the proxy here refuses
-// CONNECT to leakosintapi.com. The parser is therefore written to survive a shape that
-// differs from the documentation rather than to assume it, and anything it does not
-// recognise is surfaced under its own key instead of dropped.
+//   AN ERROR IS NOT A RESULT. The endpoint answers HTTP 200 to everything, including a
+//   refusal, and signals it only in the body — under two different keys. The published
+//   documentation says "Error code"; the live endpoint sends "error". Both are read
+//   here, before anything else touches the payload, because reading a refusal as data
+//   is the worst bug this module can have: "the API refused" and "this person is clean"
+//   are opposite findings that look identical from the outside. The vendor's own Python
+//   sample checks only "Error code" and raises a KeyError on the live shape.
+//
+// The contract this implements is written down in docs/leakosint-api.md, including the
+// places the documentation and the live endpoint disagree. Everything above is checked
+// against it by tests/leakosint.test.ts — the price especially, because that number is
+// what the business resells and a drift in it is a drift in the margin.
 
 import { harvest, type ExposureItem, type ExposureKind } from "./exposure";
 
@@ -63,6 +71,17 @@ export interface LeakOsintResult {
   cost: number;
   /** the API said the query ran and matched nothing — NOT the same as an error */
   empty: boolean;
+  /**
+   * The endpoint answered with a body we could not read.
+   *
+   * This is a THIRD state, and conflating it with either of the other two is how the
+   * module's whole purpose fails. The caller builds its report from `databases`, so a
+   * payload the parser does not recognise produced an empty database list and rendered
+   * as "nothing found" — a clean bill of health off a response nobody understood. The
+   * salvage harvester was supposed to catch this, but its output lands in `items`,
+   * which no caller reads. So the fact is reported instead of being papered over.
+   */
+  unreadable?: boolean;
 }
 
 // ---- cost ----------------------------------------------------------------------
@@ -102,7 +121,13 @@ export function complexityOf(query: string): number {
 
 /** The published formula: 0.0002 * (5 + sqrt(limit * complexity)), in dollars. */
 export function estimateCost(request: string | string[], limit = 100): number {
-  const queries = Array.isArray(request) ? request : String(request).split("\n");
+  // A newline separates queries whether it arrives inside the string form or inside an
+  // element of the array form; only the string form was being split, so a batch like
+  // ["a@b.com\nc@d.com"] was quoted as one query and billed us for two. Undercharging is
+  // the only error here that loses real money, and the array form is the documented way
+  // to send a batch.
+  const queries = (Array.isArray(request) ? request : [request])
+    .flatMap((q) => String(q ?? "").split("\n"));
   // a batch is billed per query; the caller sees the total it is about to spend
   return queries
     .map((q) => q.trim())
@@ -139,6 +164,11 @@ function spaced<T>(fn: () => Promise<T>): Promise<T> {
 const COLUMN_RULES: { re: RegExp; kind: ExposureKind }[] = [
   { re: /pass(word|wd)?|pwd|hash|secret/i, kind: "credential" },
   { re: /e-?mail/i, kind: "email" },
+  // Activity timestamps, recognised BEFORE the identifier rule because "LastLogin"
+  // contains "login" and would otherwise be read as the login itself. These are
+  // metadata about an account, not data that leaked about a person, and the report
+  // drops them — so misreading one puts a date in front of the reader as a finding.
+  { re: /last.?(active|seen|login|visit|update)|reg(istration)?.?date|sign.?up|joined|created.?at|updated.?at|modified/i, kind: "date" },
   // Platform IDs come BEFORE phone on purpose: "Telegram ID" contains "tel", so an
   // unanchored phone rule claimed every Telegram column as a phone number. Short
   // tokens here are word-bounded for the same reason.
@@ -163,7 +193,14 @@ function classifyColumn(column: string, value: string): ExposureKind {
 /** Values the dumps use to mean "this column is empty". */
 const NULLISH = new Set(["", "-", "—", "n/a", "na", "null", "none", "undefined", "0", "unknown"]);
 
-function rowItems(db: LeakDatabase, row: Record<string, string>): ExposureItem[] {
+/**
+ * One row → typed items, keeping the dump's own column name as the label.
+ *
+ * Exported because the report builder works from ROWS, not from the flattened item
+ * list: attribution is a per-row judgement, and a row is the only place where the
+ * association between a login and a secret actually exists.
+ */
+export function itemsFromRow(db: { name: string }, row: Record<string, string>): ExposureItem[] {
   const out: ExposureItem[] = [];
   const source = `leakosint · ${db.name}`;
   for (const [col, raw] of Object.entries(row)) {
@@ -182,6 +219,30 @@ function rowItems(db: LeakDatabase, row: Record<string, string>): ExposureItem[]
 }
 
 // ---- the call -----------------------------------------------------------------------
+
+/**
+ * Did the endpoint refuse?
+ *
+ * It answers 200 with the reason in the body, and it has used more than one key for it:
+ * "error" is what the live API sends for an invalid token and for the rate limit,
+ * "Error code" is what the documentation describes. Both are read, plus the capitalised
+ * variants, because the cost of missing one is reporting a refusal as a clean result.
+ */
+const ERROR_KEYS = ["error", "Error", "Error code", "error_code", "errorCode", "ErrorCode"];
+
+export function refusalIn(payload: any): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  for (const k of ERROR_KEYS) {
+    const v = (payload as Record<string, unknown>)[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number") return String(v);
+  }
+  // Observed alongside "Error code": a sibling {"Status":"Error"}. Read as a backstop so
+  // a refusal that renames its message field still cannot come back as a result.
+  const status = (payload as Record<string, unknown>).Status;
+  if (typeof status === "string" && status.toLowerCase() === "error") return "the source reported an error";
+  return null;
+}
 
 /** The key the API uses to say "ran fine, matched nothing". */
 const NO_RESULTS = "No results found";
@@ -231,23 +292,33 @@ export async function leakOsint(opts: LeakOsintOpts): Promise<LeakOsintResult> {
     );
     if (!res.ok) return { ...empty, error: `HTTP ${res.status}` };
     const data = await res.json();
-    if (data && typeof data === "object" && "Error code" in data) {
-      return { ...empty, error: String((data as any)["Error code"]) };
-    }
+    const refusal = refusalIn(data);
+    if (refusal) return { ...empty, error: refusal };
 
     const databases = parseList(data);
     const items: ExposureItem[] = [];
     for (const db of databases) {
       if (db.info) items.push({ kind: "breach", label: db.name, value: db.info, source: `leakosint · ${db.name}` });
       else items.push({ kind: "breach", label: "Database", value: db.name, source: "leakosint" });
-      for (const row of db.rows) items.push(...rowItems(db, row));
+      for (const row of db.rows) items.push(...itemsFromRow(db, row));
     }
+
+    // A clean miss arrives as a database literally named "No results found", which
+    // parseList skips — leaving `items` empty and sending the salvage harvester over the
+    // payload, which faithfully turned "No results found. Try changing your request."
+    // into a finding. That is the same mistake as reading a refusal as data, one layer
+    // down. A recognised empty answer is an answer; it is never salvaged.
+    const list = (data as any)?.List;
+    const onlyEmpty = list && typeof list === "object" && Object.keys(list).every((k) => k === NO_RESULTS);
+    if (onlyEmpty) return { databases: [], items: [], rowCount: 0, cost, empty: true };
 
     // The documented shape yielded nothing but the endpoint answered: harvest the raw
     // payload rather than report a clean result off a response we simply failed to read.
     if (!items.length && data && Object.keys(data).length) {
       const salvaged = harvest(data).map((i) => ({ ...i, source: "leakosint · unparsed" }));
-      if (salvaged.length) return { databases: [], items: salvaged, rowCount: 0, cost, empty: false };
+      if (salvaged.length) {
+        return { databases: [], items: salvaged, rowCount: 0, cost, empty: false, unreadable: true };
+      }
     }
 
     const rowCount = databases.reduce((n, d) => n + d.rows.length, 0);

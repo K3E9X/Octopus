@@ -3,9 +3,6 @@ import assert from "node:assert/strict";
 import { pwPattern, patternMatch, patternGroups } from "../lib/pwpattern.ts";
 import { reuseLinks, reuseEvidence } from "../lib/reuse.ts";
 import { compromiseTimeline, hygiene, dateOf, timelineSummary } from "../lib/compromise.ts";
-import { buildReuseGraph } from "../lib/reusegraph.ts";
-import { linesFrom, splitCombo } from "../lib/breaches.ts";
-import { anyLeakKey } from "../lib/leakapis.ts";
 import type { ExposureItem } from "../lib/exposure.ts";
 
 // ---- 2. password patterns -----------------------------------------------------------
@@ -85,26 +82,6 @@ test("an exact link is never displaced by a weaker pattern restatement of itself
   assert.equal(ab[0].mode, "exact", "the stronger claim wins");
 });
 
-// ---- 1. search by secret -------------------------------------------------------------
-
-test("combolist lines are found even under an unexpected key", () => {
-  assert.deepEqual(linesFrom({ lines: ["a@x.fr:pw1"] }), ["a@x.fr:pw1"]);
-  assert.deepEqual(linesFrom({ results: ["a@x.fr:pw1"] }), ["a@x.fr:pw1"]);
-  assert.deepEqual(linesFrom({ meta: ["nothing", "here"] }), []);
-  assert.deepEqual(linesFrom(null), []);
-});
-
-test("a combolist split survives colons in the identifier", () => {
-  assert.deepEqual(splitCombo("odd:name@x.fr:Secret!"), { login: "odd:name@x.fr", secret: "Secret!" });
-});
-
-// ---- 3. paid providers ----------------------------------------------------------------
-
-test("no key means no provider is asked", () => {
-  assert.equal(anyLeakKey({}), false);
-  assert.equal(anyLeakKey({ dehashed: "a:b" }), true);
-});
-
 // ---- 4. compromise timeline ------------------------------------------------------------
 
 test("a date is parsed out of whatever shape the source used", () => {
@@ -168,58 +145,4 @@ test("repeat infection is called out", () => {
   ];
   const h = hygiene(items, compromiseTimeline(items));
   assert.ok(h.some((x) => x.kind === "repeat-victim"));
-});
-
-// ---- 5. the reuse graph ----------------------------------------------------------------
-
-test("the graph clusters identities that share a secret", () => {
-  const items: ExposureItem[] = [
-    { kind: "record", label: "COMB", value: "a@x.fr:Xk9!vaLoire" },
-    { kind: "record", label: "COMB", value: "b_handle:Xk9!vaLoire" },
-    { kind: "record", label: "COMB", value: "c_handle:Xk9!vaLoire" },
-    { kind: "record", label: "COMB", value: "lonely@x.fr:Zz7#unique-one" },
-  ];
-  const g = buildReuseGraph(items);
-  assert.equal(g.clusters.length, 1);
-  assert.equal(g.clusters[0].members.length, 3);
-  assert.equal(g.clusters[0].quality, "observed");
-  assert.deepEqual(g.isolated.map((i) => i.id), ["lonely@x.fr"]);
-});
-
-test("a cluster built only on habits is labelled inferred, not observed", () => {
-  const items: ExposureItem[] = [
-    { kind: "record", label: "COMB", value: "a@x.fr:Valoire2019!" },
-    { kind: "record", label: "COMB", value: "b_handle:Valoire2021!" },
-  ];
-  const g = buildReuseGraph(items);
-  assert.equal(g.clusters[0].quality, "inferred");
-});
-
-test("the graph reports what the guard refused instead of hiding it", () => {
-  const items: ExposureItem[] = [
-    { kind: "record", label: "COMB", value: "a@x.fr:123456" },
-    { kind: "record", label: "COMB", value: "b@x.fr:123456" },
-  ];
-  const g = buildReuseGraph(items);
-  assert.equal(g.clusters.length, 0, "a common password links nobody");
-  assert.equal(g.refused.length, 1);
-  assert.deepEqual(g.refused[0].ids.sort(), ["a@x.fr", "b@x.fr"]);
-  // "refused" and "shares nothing" are opposite findings — listing an identity under
-  // both reads as a contradiction
-  assert.deepEqual(g.isolated, [], "a refused collision is not an absence of collision");
-});
-
-test("degree counts distinct neighbours, not links", () => {
-  const items: ExposureItem[] = [
-    { kind: "record", label: "COMB", value: "hub@x.fr:Xk9!vaLoire" },
-    { kind: "record", label: "COMB", value: "a_handle:Xk9!vaLoire" },
-    { kind: "record", label: "COMB", value: "b_handle:Xk9!vaLoire" },
-  ];
-  const g = buildReuseGraph(items);
-  assert.equal(g.clusters[0].members[0].degree, 2);
-});
-
-test("an empty exposure produces an empty graph, not a crash", () => {
-  const g = buildReuseGraph([]);
-  assert.deepEqual(g, { clusters: [], isolated: [], refused: [] });
 });

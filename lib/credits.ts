@@ -147,8 +147,16 @@ export async function ledgerOf(userId: string, limit = 40): Promise<LedgerRow[]>
   return (rows as any[]).map((r) => ({ id: r.id, delta: Number(r.delta), balance: Number(r.balance), kind: r.kind, note: r.note || undefined, at: Number(r.at) }));
 }
 
-/** A new account's welcome balance, so the first query needs no admin round-trip. */
-export const STARTER_CREDITS = fromUSD(Number(process.env.OCTOPUS_STARTER_USD) || 0.5);
+/**
+ * A new account's welcome balance.
+ *
+ * DEFAULT ZERO, deliberately. It used to hand every new account $0.50 of the operator's
+ * own upstream balance, and registration is open: scripting sign-ups against a
+ * throwaway domain drained real money at roughly thirty cents of API cost per account,
+ * indefinitely. A welcome credit is a business decision with a bill attached, so it is
+ * opt-in — set OCTOPUS_STARTER_USD, and only behind registration you control.
+ */
+export const STARTER_CREDITS = fromUSD(Number(process.env.OCTOPUS_STARTER_USD) || 0);
 
 export async function seedStarter(userId: string): Promise<void> {
   if (!creditsEnabled || STARTER_CREDITS <= 0) return;

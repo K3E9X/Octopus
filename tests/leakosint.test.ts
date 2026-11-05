@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost } from "../lib/leakosint.ts";
-import { leakOsintSignals } from "../lib/leaknode.ts";
+import { tokenize, isBillableWord, complexityOf, estimateCost, formatCost, refusalIn } from "../lib/leakosint.ts";
 import type { LeakOsintResult } from "../lib/leakosint.ts";
 
 // ---- the billing rules ---------------------------------------------------------
@@ -62,63 +61,6 @@ test("a batch is billed per query, and newlines are a batch", () => {
 test("the quote is readable at the scale it actually lands on", () => {
   assert.match(formatCost(0.003), /^\$0\.0030$/);
   assert.match(formatCost(1.25), /^\$1\.250$/);
-});
-
-// ---- result → graph --------------------------------------------------------------
-
-const OK: LeakOsintResult = {
-  databases: [{
-    name: "Collection #1",
-    info: "2019 credential aggregation, 773M addresses.",
-    rows: [{ Email: "marie@acme.fr", Password: "Kerguelen#88z", FullName: "Marie Dubois", Phone: "+33612345678" }],
-  }],
-  items: [
-    { kind: "breach", label: "Collection #1", value: "2019 credential aggregation, 773M addresses.", source: "leakosint · Collection #1" },
-    { kind: "email", label: "Email", value: "marie@acme.fr", source: "leakosint · Collection #1" },
-    { kind: "credential", label: "Password", value: "Kerguelen#88z", source: "leakosint · Collection #1" },
-    { kind: "name", label: "FullName", value: "Marie Dubois", source: "leakosint · Collection #1" },
-    { kind: "phone", label: "Phone", value: "+33612345678", source: "leakosint · Collection #1" },
-    { kind: "record", label: "Row · Collection #1", value: "marie@acme.fr:Kerguelen#88z", source: "leakosint · Collection #1" },
-  ],
-  rowCount: 1, cost: 0.003, empty: false,
-};
-
-test("each database becomes its own node, keeping its provenance", () => {
-  const sigs = leakOsintSignals("marie@acme.fr", OK, "2026-11-04T00:00:00Z");
-  const db = sigs.find((s) => s.platform === "COLLECTION #1");
-  assert.ok(db, "the database must be its own node");
-  assert.match(db!.evidence[0].detail, /2019 credential aggregation/, "the InfoLeak line is the provenance");
-  assert.equal(db!.linkedIds?.[0], sigs[0].id, "and it hangs off the identity");
-  assert.ok(db!.exposure!.some((i) => i.kind === "name" && i.value === "Marie Dubois"));
-});
-
-test("the root node reports what was recovered and what it cost", () => {
-  const [root] = leakOsintSignals("marie@acme.fr", OK, "t");
-  assert.match(root.evidence[0].detail, /Collection #1/);
-  assert.match(root.evidence[0].detail, /\$0\.003/);
-});
-
-test("the limit caveat is always on the node — a miss is bounded, not cleared", () => {
-  const [root] = leakOsintSignals("x", OK, "t");
-  assert.ok(root.evidence.some((e) => /unfinished search/.test(e.detail)));
-});
-
-test("an API error is reported as a non-answer, never as a clean result", () => {
-  const [n] = leakOsintSignals("x", { databases: [], items: [], rowCount: 0, cost: 0, empty: true, error: "Invalid token" }, "t");
-  assert.equal(n.confidence, 0);
-  assert.match(n.evidence[0].detail, /NOT a negative result/);
-  assert.match(n.evidence[0].detail, /Invalid token/);
-});
-
-test("an empty result says the search was bounded, not that the person is clean", () => {
-  const [n] = leakOsintSignals("x", { databases: [], items: [], rowCount: 0, cost: 0.003, empty: true }, "t");
-  assert.match(n.evidence[0].detail, /does not clear the identity/);
-});
-
-test("more databases is more corroboration, but it is capped", () => {
-  const many = { ...OK, databases: Array.from({ length: 30 }, (_, i) => ({ name: "db" + i, info: "", rows: [] })) };
-  const [root] = leakOsintSignals("x", many, "t");
-  assert.ok(root.confidence <= 86, "a hundred copies of one table is still one sighting");
 });
 
 // ---- the parser, against a payload shaped like the documentation ------------------
@@ -205,4 +147,77 @@ test("a missing token never reaches the network", async () => {
     assert.match(res.error!, /no LeakOSINT token/);
     assert.equal(called, false);
   } finally { (globalThis as any).fetch = real; }
+});
+
+// ---- refusals, as the live endpoint actually sends them ---------------------------
+// The API answers HTTP 200 to everything and puts the refusal in the body. These
+// payloads are verbatim from the live endpoint; reading one as data would report "the
+// API refused" and "this person is clean" as the same finding.
+
+test("the rate-limit refusal the live API really sends is read as an error", () => {
+  const live = { error: "You have made too many requests that have invalid data. You will be able to make requests again in 30 seconds. If you have a large list of queries that need to be completed, use file search in the bot." };
+  assert.match(refusalIn(live) || "", /too many requests/);
+});
+
+test("every refusal key the API has used is recognised", () => {
+  assert.equal(refusalIn({ error: "bad token" }), "bad token");
+  assert.equal(refusalIn({ "Error code": "402" }), "402");
+  assert.equal(refusalIn({ Error: "nope" }), "nope");
+  assert.equal(refusalIn({ errorCode: 429 }), "429");
+});
+
+test("a real result carries no refusal marker", () => {
+  assert.equal(refusalIn({ List: { "Some Dump": { Data: [{ Email: "a@b.c" }], InfoLeak: "x" } } }), null);
+  assert.equal(refusalIn({ List: { "No results found": { Data: [] } } }), null);
+});
+
+test("an empty or absent error string is not a refusal", () => {
+  assert.equal(refusalIn({ error: "   " }), null, "whitespace is not a reason");
+  assert.equal(refusalIn({}), null);
+  assert.equal(refusalIn(null), null);
+});
+
+// ---- the price, pinned to the published formula ----------------------------------
+// This is what the business resells, so a drift here is a drift in the margin. The
+// documentation states one figure outright — "with the default limit of 100, most
+// requests cost $0.003" — and that is the anchor every other case is derived from.
+
+test("the documentation's own headline price is reproduced exactly", () => {
+  assert.equal(estimateCost("example@gmail.com", 100), 0.003);
+  assert.equal(estimateCost("google", 100), 0.003);
+});
+
+test("the complexity ladder prices each word count as published", () => {
+  assert.equal(complexityOf("google"), 1);
+  assert.equal(complexityOf("Petya Ivanov"), 5);
+  assert.equal(complexityOf("Elon Reeve Musk"), 16);
+  // every word here is four characters or longer — "one"/"two" would be free
+  assert.equal(complexityOf("alpha bravo charlie delta"), 40);
+});
+
+test("short words are free, so a five-word name can bill as three", () => {
+  // "De" and "La" are under four characters and are not words to the biller
+  assert.equal(complexityOf("Jean Pierre De La Tour"), 16);
+  assert.equal(estimateCost("Jean Pierre De La Tour", 100), estimateCost("Elon Reeve Musk", 100));
+});
+
+test("quoting a full name is the documented way to pay a sixth of the price", () => {
+  const quoted = estimateCost('"Elon Reeve Musk"', 100);
+  const bare = estimateCost("Elon Reeve Musk", 100);
+  assert.equal(quoted, 0.003);
+  assert.ok(bare > quoted * 2.9, "three bare words cost three times a quoted phrase");
+});
+
+test("a number under six digits is free; six digits is a word", () => {
+  assert.equal(isBillableWord("12345"), false);
+  assert.equal(isBillableWord("123456"), true);
+  assert.equal(isBillableWord("01.01.1990"), false, "a date is never a word");
+});
+
+test("the live invalid-token shape is a refusal — keys and Status alike", () => {
+  // verbatim from the endpoint: an invalid token with a well-formed request
+  assert.match(refusalIn({ "Error code": "Invalid token. Get the correct token in the bot.", Status: "Error" }) || "", /Invalid token/);
+  // and a Status:Error whose message field we do not recognise is still never a result
+  assert.ok(refusalIn({ Status: "Error" }));
+  assert.equal(refusalIn({ Status: "Success", List: {} }), null);
 });

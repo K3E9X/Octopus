@@ -1,54 +1,41 @@
-# Octopus — full local stack in one command. Works on Windows (Docker Desktop / WSL2)
-# and Linux the same way.
+# Octopus Leak — the whole product in one command.
 #
-#   docker compose up --build            # app + deep-scan collector
-#   docker compose --profile db up --build   # + a local Postgres for durable cases
-#   docker compose --profile tor up --build  # + a Tor daemon, so .onion actually works
+#   docker compose up --build                 # the app, unmetered, no accounts
+#   POSTGRES_URL=postgres://octopus:octopus@db:5432/octopus \
+#     docker compose --profile db up --build  # + Postgres: accounts, credits, audit trail
 #
 # Then open http://localhost:3000
 #
-# The app auto-detects what's available: with the collector running, the "Maigret
-# (deep)" / Holehe / SpiderFoot apps light up; with Postgres, cases persist server-side.
-# Nothing here is mandatory — remove a service and the app still runs, degrading cleanly.
+# The app detects what is available and says so rather than pretending. Without a
+# database there are no accounts, so there is no metering and no audit trail — which is
+# fine for a single operator and NOT fine for anything exposed publicly. Without a
+# LeakOSINT token there is no leak data, and the app says that too instead of returning
+# a clean report nobody should trust.
 
 services:
   app:
     build: .
-    image: octopus:local
+    image: octopus-leak:local
     ports:
       - "3000:3000"
     environment:
-      # point the app at the collector service on the compose network
-      COLLECTOR_URL: "http://collector:8000"
-      COLLECTOR_TOKEN: "${COLLECTOR_TOKEN:-}"
-      # durable storage (only used if the db profile is up, or set your own URL)
+      # the one credential the product needs
+      LEAKOSINT_TOKEN: "${LEAKOSINT_TOKEN:-}"
+      LEAKOSINT_LIMIT: "${LEAKOSINT_LIMIT:-}"
+      # Accounts, credits and the audit trail. NO DEFAULT on purpose: a default applies
+      # even without --profile db, so `docker compose up` — the line this file opens
+      # with, documented as "unmetered, no accounts" — started with authentication,
+      # metering and logging all switched on, pointing at a `db` host that was never
+      # started. Every search then demanded a sign-in that could not be completed.
+      # With the db profile, set POSTGRES_URL in your .env or on the command line.
       POSTGRES_URL: "${POSTGRES_URL:-}"
-      # optional bonus sources — leave empty to keep them off
-      INTELX_API_KEY: "${INTELX_API_KEY:-}"
-      RECORDED_FUTURE_API_KEY: "${RECORDED_FUTURE_API_KEY:-}"
-      LLM_API_URL: "${LLM_API_URL:-}"
-      LLM_MODEL: "${LLM_MODEL:-}"
-      LLM_API_KEY: "${LLM_API_KEY:-}"
-      # OPSEC egress. With the tor profile up, this reaches the tor service below and
-      # hidden services become reachable; leave empty for direct egress. It can also be
-      # set per-case in the API panel, which overrides this.
-      OCTOPUS_PROXY: "${OCTOPUS_PROXY:-}"
-      OCTOPUS_POSTURE: "${OCTOPUS_POSTURE:-}"
-    depends_on:
-      - collector
+      OCTOPUS_SESSION_SECRET: "${OCTOPUS_SESSION_SECRET:-}"
+      # the resale margin over the raw API cost
+      OCTOPUS_MARKUP: "${OCTOPUS_MARKUP:-}"
     restart: unless-stopped
 
-  collector:
-    build: ./collector
-    image: octopus-collector:local
-    ports:
-      - "8000:8000"
-    environment:
-      COLLECTOR_TOKEN: "${COLLECTOR_TOKEN:-}"
-    restart: unless-stopped
-
-  # optional: a local Postgres so cases + snapshot history persist across restarts.
-  # enable with:  docker compose --profile db up
+  # Accounts, credits and the tamper-evident query log all live here. Enable with:
+  #   docker compose --profile db up
   db:
     profiles: ["db"]
     image: postgres:16-alpine
@@ -60,17 +47,6 @@ services:
       - "5432:5432"
     volumes:
       - octopus_pg:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  # optional: a Tor daemon exposing a SOCKS5 port, which is what makes .onion
-  # reachable at all. Enable with:  docker compose --profile tor up
-  # then set the proxy to socks5://tor:9050 (in-compose) or socks5://127.0.0.1:9050
-  # (from the host) — env var above, or the API panel, where Test proves the circuit.
-  tor:
-    profiles: ["tor"]
-    image: dperson/torproxy:latest
-    ports:
-      - "9050:9050"
     restart: unless-stopped
 
 volumes:

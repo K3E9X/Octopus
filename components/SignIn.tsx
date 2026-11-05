@@ -30,7 +30,9 @@ const STR_TOKEN = ["--reject", "--reject", "--type-email", "--type-location", "-
 export default function SignIn() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/app";
+  // "/app" was the old console. It no longer exists, so every sign-in that did not
+  // arrive carrying a ?next= landed on a 404 — which is most of them.
+  const next = params.get("next") || "/search";
   const [mode, setMode] = useState<"signin" | "register">(params.get("mode") === "register" ? "register" : "signin");
   const [state, setState] = useState<{ authEnabled: boolean; sessionsUsable: boolean; firstAccount: boolean } | null>(null);
   const [email, setEmail] = useState("");
@@ -76,13 +78,13 @@ export default function SignIn() {
 
         <Link className="ax-brand" href="/">
           <OctoMark size={34} float glow />
-          <span><b>OCTOPUS</b><small>OSINT</small></span>
+          <span><b>OCTOPUS</b><small>LEAK</small></span>
         </Link>
 
         <div className="ax-pitch">
           <h1>Eight arms.<br />One <span>verdict</span>.</h1>
           <p>
-            Delegate collection. Own the correlation. The engine runs on your deployment —
+            One source, searched carefully. Every query is billed to you and recorded under your name —
             access is only how the arms know it&rsquo;s you.
           </p>
         </div>
@@ -99,7 +101,7 @@ export default function SignIn() {
                   ? "There is no database, so there is nowhere to keep them. The instance runs in single-operator mode and the tool is open — set POSTGRES_URL to put it behind accounts."
                   : "Set OCTOPUS_SESSION_SECRET to 16 characters or more. Without it sessions cannot be signed, and a shared fallback secret would let any deployment forge another's."}
               </p>
-              <Link className="ax-submit" href="/app">Open the tool</Link>
+              <Link className="ax-submit" href="/search">Open the search</Link>
             </div>
           ) : (
             <>
@@ -114,8 +116,8 @@ export default function SignIn() {
               <h2>{isSignup ? "Create access" : "Re-enter the deep"}</h2>
               <p className="ax-sub">
                 {isSignup
-                  ? "One operator, one console. The engine runs local; this only proves it's you."
-                  : "Your graphs and dossiers are where you left them."}
+                  ? "One operator, one deployment. Your searches are billed to this account and logged under it."
+                  : "Your balance and your query history are where you left them."}
               </p>
 
               {state?.firstAccount && isSignup && (
@@ -127,7 +129,7 @@ export default function SignIn() {
                   <div className="ax-fld">
                     <label htmlFor="ax-name">operator handle</label>
                     <input id="ax-name" value={name} onChange={(e) => setName(e.target.value)}
-                      spellCheck={false} autoComplete="name" placeholder="how the console addresses you" />
+                      spellCheck={false} autoComplete="name" placeholder="how the tool addresses you" />
                   </div>
                 )}
 
