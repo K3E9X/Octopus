@@ -1016,3 +1016,27 @@ body::after {
   font-family: var(--font-mono); font-size: 13px; color: var(--ink);
   background: var(--bg-2); border-radius: var(--r-xs); padding: 5px 10px; overflow-wrap: anywhere;
 }
+/* depth selector — four buttons, same shape as the exact/permutations pair above it */
+.lk2-depths { grid-template-columns: repeat(4, 1fr); }
+.lk2-depths button { align-items: center; text-align: center; gap: 3px; padding: 11px 8px; }
+.lk2-depths b { font-family: var(--font-mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.lk2-depths em { font-size: 11px; }
+@media (max-width: 720px) { .lk2-depths { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---- raw records ---- */
+.lk2-recs { display: flex; flex-direction: column; gap: 12px; }
+.lk2-rec { border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 18px 20px; background: var(--bg-1); }
+.lk2-rec-h { display: flex; align-items: center; gap: 11px; margin-bottom: 8px; }
+.lk2-rec-h h3 { flex: 1; margin: 0; font-weight: 600; font-size: 16px; letter-spacing: -.01em; }
+.lk2-rec-row { border: 1px solid var(--bd-subtle); border-radius: var(--r-sm); padding: 4px 14px; margin-top: 10px; background: var(--bg-2); }
+.lk2-rec-tag {
+  display: block; margin: 9px 0 2px; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--sev-med);
+}
+.lk2-rec-row .lk2-row > code { font-size: 12.5px; }
+
+/* ---- candidate records: open, because they are the answer ---- */
+.lk2-cands { border: 1px solid var(--bd-strong); border-radius: var(--r-lg); background: var(--bg-1); padding: 16px 20px; margin-top: 16px; }
+.lk2-cands-h b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.lk2-more-btn { background: none; border: 0; cursor: pointer; text-align: left; color: var(--accent); font-family: var(--font-mono); font-size: 12px; padding: 7px 2px; }
+.lk2-more-btn:hover { text-decoration: underline; }

@@ -39,6 +39,7 @@ interface Identity {
 }
 interface OtherSubject { anchor: string; matched: string[]; sources: string[]; findings: Finding[] }
 interface PasswordHabit { stem: string; values: string[] }
+interface RecordGroup { database: string; info: string; rows: Record<string, string>[]; attribution: string[] }
 
 interface Report {
   subject: { raw: string; kind: Kind; canonical: string; unique: boolean; note?: string };
@@ -54,6 +55,8 @@ interface Report {
   excluded: { partial: number; unrelated: number; total: number };
   others: OtherSubject[];
   passwordHabits: PasswordHabit[];
+  candidates: OtherSubject[];
+  records: RecordGroup[];
 }
 
 interface Quote {
@@ -65,7 +68,7 @@ interface Quote {
 }
 
 type Step = "enter" | "basis" | "loading" | "report";
-type View = "identity" | "orbit" | "category" | "source" | "timeline";
+type View = "identity" | "orbit" | "category" | "source" | "timeline" | "records";
 
 const SEV_LABEL: Record<Sev, string> = { critical: "critical", high: "high", medium: "notable", low: "minor" };
 const SENSITIVE = new Set(["password", "financial", "document"]);
@@ -112,7 +115,10 @@ export default function SearchApp() {
   const [subject, setSubject] = useState("");
   const [basis, setBasis] = useState("");
   const [caseRef, setCaseRef] = useState("");
-  const [permutations, setPermutations] = useState(false);
+  // matches the route: a multi-word subject searches every word order unless the
+  // operator chooses the cheaper exact phrase
+  const [permutations, setPermutations] = useState(true);
+  const [limit, setLimit] = useState(300);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -132,11 +138,11 @@ export default function SearchApp() {
     const q = subject.trim();
     if (!q) { setQuote(null); return; }
     const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      fetch(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`)
         .then((r) => (r.ok ? r.json() : null)).then((d) => d && setQuote(d)).catch(() => {});
     }, 220);
     return () => clearTimeout(t);
-  }, [subject]);
+  }, [subject, limit]);
 
   const run = useCallback(async () => {
     if (!basis) return;
@@ -144,7 +150,7 @@ export default function SearchApp() {
     const started = Date.now();
     const res = await fetch("/api/search", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ subject: subject.trim(), legalBasis: basis, caseRef: caseRef.trim() || undefined, permutations }),
+      body: JSON.stringify({ subject: subject.trim(), legalBasis: basis, caseRef: caseRef.trim() || undefined, exact: !permutations, limit }),
     }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => ({})) })).catch(() => ({ status: 0, data: {} as any }));
 
     // let the scan animation breathe for a beat so it never flickers
@@ -161,7 +167,7 @@ export default function SearchApp() {
     setBusy(false);
     setStep("basis");
     setErr(res.data.error || "The search could not run.");
-  }, [subject, basis, caseRef, permutations]);
+  }, [subject, basis, caseRef, permutations, limit]);
 
   const reset = useCallback(() => {
     setStep("enter"); setReport(null); setErr(""); setBasis(""); setCaseRef(""); setPermutations(false);
@@ -185,7 +191,7 @@ export default function SearchApp() {
             next={() => { setErr(""); setStep("basis"); }} />
         )}
         {step === "basis" && (
-          <Basis {...{ subject, quote, basis, setBasis, caseRef, setCaseRef, permutations, setPermutations, run, busy, err, reset }} />
+          <Basis {...{ subject, quote, basis, setBasis, caseRef, setCaseRef, permutations, setPermutations, limit, setLimit, run, busy, err, reset }} />
         )}
         {step === "loading" && <Scanning subject={subject} />}
         {step === "report" && report && <ReportView {...{ report, headline, view, setView, reset }} />}
@@ -241,7 +247,7 @@ function Enter({ subject, setSubject, quote, next, err }: any) {
 
 // ---- step: declare a basis, see the price ---------------------------------------------
 
-function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutations, setPermutations, run, busy, err, reset }: any) {
+function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutations, setPermutations, limit, setLimit, run, busy, err, reset }: any) {
   const q: Quote | null = quote;
   const chosen = permutations && q?.permutations ? q.permutations : q?.exact;
   return (
@@ -276,6 +282,17 @@ function Basis({ subject, quote, basis, setBasis, caseRef, setCaseRef, permutati
           </button>
         </div>
       )}
+
+      {/* Depth is not a page size: it decides how far into the dumps the query reaches,
+          so it is the dial between "the cheapest answer" and "everything there is". */}
+      <div className="lk2-depth lk2-depths">
+        {[100, 300, 1000, 10000].map((n) => (
+          <button key={n} className={limit === n ? "on" : ""} onClick={() => setLimit(n)}>
+            <b>{n.toLocaleString("en-US")}</b>
+            <em>{n === 100 ? "cheapest" : n === 300 ? "default" : n === 1000 ? "deeper" : "everything"}</em>
+          </button>
+        ))}
+      </div>
 
       <div className="lk2-spend">
         <span>searching</span><code>{chosen?.query || subject}</code>
@@ -327,9 +344,11 @@ function ReportView({ report, headline, view, setView, reset }: {
           ["category", `By type · ${report.categories.length}`],
           ["source", `By breach · ${report.breachCount}`],
           ["timeline", "Timeline"],
+          ["records", `Records · ${report.records?.reduce((n, g) => n + g.rows.length, 0) ?? 0}`],
         ] as [View, string][]).map(([v, lbl]) => (
           <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}
-            disabled={(v === "timeline" && report.timeline.length === 0) || (v === "orbit" && report.verdict === "clear")}>{lbl}</button>
+            disabled={(v === "timeline" && report.timeline.length === 0) || (v === "orbit" && report.verdict === "clear")
+              || (v === "records" && !report.records?.length)}>{lbl}</button>
         ))}
       </div>
 
@@ -358,6 +377,12 @@ function ReportView({ report, headline, view, setView, reset }: {
         <h4 className="lk2-print-h">Timeline</h4>
         <Timeline sources={report.sources} />
       </div>
+      <div className={"lk2-view" + (view === "records" ? "" : " lk2-off")}>
+        <h4 className="lk2-print-h">Records</h4>
+        <Records groups={report.records || []} />
+      </div>
+
+      {report.candidates?.length > 0 && <Candidates groups={report.candidates} subject={report.subject} />}
 
       {report.others.length > 0 && <Others others={report.others} subject={report.subject} />}
 
@@ -430,10 +455,10 @@ function CategoryCard({ c, i }: { c: CatReport; i: number }) {
         <span className="lk2-count">{c.distinct}</span>
       </div>
       <p className="lk2-meaning">{c.meaning}</p>
-      <div className="lk2-vals">
-        {c.findings.slice(0, 40).map((f, j) => <Value key={j} f={f} showSource />)}
-        {c.findings.length > 40 && <div className="lk2-more">+{c.findings.length - 40} more</div>}
-      </div>
+      {/* No silent cap. It used to stop at 40 and print "+N more" with no way to see
+          them — a tool that tells you it is withholding something, and then withholds
+          it. Past forty it collapses, and the control opens the rest. */}
+      <CategoryValues findings={c.findings} />
       <p className="lk2-action"><b>Do this:</b> {c.action}</p>
     </div>
   );
@@ -648,10 +673,9 @@ function Others({ others, subject }: { others: OtherSubject[]; subject: Report["
               </div>
               <div className="lk2-other-m">matched on {o.matched.map((w) => <em key={w}>{w}</em>)}</div>
               <div className="lk2-rows">
-                {o.findings.slice(0, 8).map((f, j) => (
+                {o.findings.map((f, j) => (
                   <div className="lk2-row" key={j}><span className="lk2-row-k">{f.label}</span><RowValue f={f} /></div>
                 ))}
-                {o.findings.length > 8 && <div className="lk2-more">+{o.findings.length - 8} more</div>}
               </div>
               <div className="lk2-fsrc">{o.sources.map((s) => <span key={s}>{s}</span>)}</div>
             </div>
@@ -690,6 +714,100 @@ function Habits({ habits }: { habits: PasswordHabit[] }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---- the rows, exactly as they came back ------------------------------------------
+//
+// Everything above this classifies, ranks and deduplicates, and all three involve a
+// judgement that can be wrong. This is the row as the source returned it, with the
+// dump's own column names and nothing removed — including the fields the categories
+// drop as account metadata and the ones this code has never heard of. An analyst who
+// thinks something was mis-filed reads here instead of taking the classification's
+// word for it.
+
+function Records({ groups }: { groups: RecordGroup[] }) {
+  if (!groups.length) return <p className="lk2-clear">No record to show.</p>;
+  return (
+    <div className="lk2-recs">
+      {groups.map((g) => (
+        <div className="lk2-rec" key={g.database}>
+          <div className="lk2-rec-h">
+            <h3>{g.database}</h3>
+            <span className="lk2-count">{g.rows.length} row{g.rows.length === 1 ? "" : "s"}</span>
+          </div>
+          {g.info && <p className="lk2-src-info">{g.info}</p>}
+          {g.rows.map((row, i) => (
+            <div className="lk2-rec-row" key={i}>
+              {g.attribution[i] !== "direct" && (
+                <span className="lk2-rec-tag">matched part of the query only — may be someone else</span>
+              )}
+              {Object.entries(row).map(([k, v]) => (
+                <div className="lk2-row" key={k}>
+                  <span className="lk2-row-k">{k}</span>
+                  <code>{String(v)}</code>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- candidate records -------------------------------------------------------------
+//
+// What a name search actually returns. Every one of these matched the whole selector;
+// they are grouped by the identifier that holds them together and shown open, because
+// they ARE the answer. Grouped, not merged: two groups may still be one person under
+// two addresses, and nothing here knows which.
+
+function Candidates({ groups, subject }: { groups: OtherSubject[]; subject: Report["subject"] }) {
+  return (
+    <div className="lk2-cands">
+      <div className="lk2-cands-h">
+        <b>{groups.length} candidate record{groups.length === 1 ? "" : "s"} for &ldquo;{subject.raw}&rdquo;</b>
+      </div>
+      <p className="lk2-others-note">
+        A {KIND_LABEL[subject.kind]} does not identify one person, so these are kept apart
+        rather than merged into a single profile. Two of them may still be the same
+        person under two addresses — that call is yours, not the tool&rsquo;s.
+      </p>
+      <div className="lk2-others-grid">
+        {groups.map((o) => (
+          <div className="lk2-other" key={o.anchor}>
+            <div className="lk2-other-h">
+              <code>{o.anchor}</code>
+              <span className="lk2-count">{o.findings.length}</span>
+            </div>
+            <div className="lk2-rows">
+              {o.findings.map((f, j) => (
+                <div className="lk2-row" key={j}><span className="lk2-row-k">{f.label}</span><RowValue f={f} /></div>
+              ))}
+            </div>
+            <div className="lk2-fsrc">{o.sources.map((s) => <span key={s}>{s}</span>)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Every value in a category. Collapses past forty, and says how to see the rest. */
+function CategoryValues({ findings }: { findings: Finding[] }) {
+  const [all, setAll] = useState(false);
+  const cap = 40;
+  const shown = all ? findings : findings.slice(0, cap);
+  return (
+    <div className="lk2-vals">
+      {shown.map((f, j) => <Value key={j} f={f} showSource />)}
+      {findings.length > cap && (
+        <button className="lk2-more lk2-more-btn" onClick={() => setAll((x) => !x)}>
+          {all ? "show fewer" : `show the other ${findings.length - cap}`}
+        </button>
+      )}
     </div>
   );
 }

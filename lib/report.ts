@@ -108,8 +108,29 @@ export interface SearchReport {
    * to be told apart rather than merged.
    */
   excluded: { partial: number; unrelated: number; total: number };
-  /** on a non-unique subject: the other people the rows describe, kept separate */
+  /**
+   * On a selector that does not identify one person: the records that matched it in
+   * full, grouped by whoever they appear to be.
+   *
+   * These ARE the answer to a name search, so they are shown open rather than folded
+   * away. They are grouped, not merged — two groups may still be the same person under
+   * two addresses, and the tool does not know which.
+   */
+  candidates: OtherSubject[];
+  /** people who matched only PART of the selector — a shared surname, nothing more */
   others: OtherSubject[];
+  /**
+   * Every attributed row, verbatim, column by column, grouped by database.
+   *
+   * The views above classify, rank and deduplicate — all of which involve judgement,
+   * and judgement can be wrong. This is the row as the API returned it, with the
+   * dump's own column names and nothing removed: the activity timestamps the
+   * categories drop as metadata, the internal flags nobody can interpret, the fields
+   * this code has never heard of. An analyst who suspects something was mis-filed, or
+   * who just wants what the source actually said, reads here and does not have to
+   * take the classification's word for anything.
+   */
+  records: RecordGroup[];
   /**
    * Passwords that are the same habit wearing a different year.
    *
@@ -136,6 +157,16 @@ export interface PasswordHabit {
  * the rows seem to describe is surfaced on their own, with what identifies them, so the
  * operator can say which one they meant. They are never consolidated into the subject.
  */
+export interface RecordGroup {
+  /** the database, and what that breach was */
+  database: string;
+  info: string;
+  /** the rows, exactly as the source returned them */
+  rows: Record<string, string>[];
+  /** how each row was judged — so a reader can see why it is here */
+  attribution: Attribution[];
+}
+
 export interface OtherSubject {
   /** the identifying value that holds this group together (an address, a phone) */
   anchor: string;
@@ -367,31 +398,63 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
 
   const findings: Finding[] = [];
   const ownRows: { database: string; items: ExposureItem[] }[] = [];
-  const foreign = new Map<string, { anchor: string; matched: Set<string>; sources: Set<string>; findings: Finding[] }>();
+  // `full` separates the two populations that end up here: records that matched the
+  // WHOLE selector (candidates for who you meant) from records that matched only part
+  // of it (people who merely share a word).
+  const foreign = new Map<string, { anchor: string; matched: Set<string>; sources: Set<string>; findings: Finding[]; full: boolean }>();
   let partial = 0, unrelated = 0;
+  const byDatabase = new Map<string, RecordGroup>();
 
   for (const db of databases) {
     for (const row of db.rows) {
       const verdict = attributeRow(subject, row);
       const items = itemsFromRow(db, row);
 
+      // Kept before anything is classified, so the raw view cannot inherit a mistake
+      // made downstream. Rows belonging to nobody we asked for stay out — those are
+      // the API's collateral, not the subject's record.
+      if (verdict.attribution !== "none") {
+        const g = byDatabase.get(db.name) ?? { database: db.name, info: db.info, rows: [], attribution: [] };
+        byDatabase.set(db.name, g);
+        g.rows.push(row);
+        g.attribution.push(verdict.attribution);
+      }
+
       if (verdict.attribution === "none") { unrelated += 1; continue; }
 
-      // A DIRECT hit on a selector that designates one person is the subject. A direct
-      // hit on one that does not — a name, a bare word — is one CANDIDATE among the
-      // people who share it. Consolidating those into a single identity is how this
-      // tool would produce its most convincing lie: three Jean Duponts rendered as one
-      // man holding three mailboxes and three phone numbers. The documented contract
-      // (docs/leakosint-api.md) says such rows must stay candidates to be told apart.
-      if (verdict.attribution === "direct" && subject.unique) {
-        ownRows.push({ database: db.name, items });
+      // EVERY row that genuinely matched the selector contributes to what leaked. The
+      // categories, the per-breach view, the timeline and the critical pull-outs are
+      // facts about the DATA, and they do not depend on whether the selector happens to
+      // designate one person.
+      //
+      // Refusing to merge a name into one identity is right. Refusing to show its rows
+      // at all was an over-correction with a worse failure mode than the one it fixed:
+      // a search returning an IBAN and a RIB rendered as "clear · 0 data points",
+      // because every row had been filed away behind a collapsed panel. A tool that
+      // hides what it found is not more careful than one that overstates it.
+      if (verdict.attribution === "direct") {
         findings.push(...findingsFrom(items, db.name));
+        if (subject.unique) {
+          // only a selector that identifies somebody earns a consolidated identity
+          ownRows.push({ database: db.name, items });
+          continue;
+        }
+        // otherwise the row is one CANDIDATE record among the people who share the
+        // name — shown in full, grouped, and never folded into a single person
+        const anchor = anchorOf(items) || "(unidentified)";
+        const key = "cand:" + anchor.toLowerCase();
+        const group = foreign.get(key) ?? { anchor, matched: new Set<string>(), sources: new Set<string>(), findings: [], full: true };
+        foreign.set(key, group);
+        for (const w of verdict.words || []) group.matched.add(w);
+        group.sources.add(db.name);
+        group.findings.push(...findingsFrom(items, db.name));
         continue;
       }
-      if (verdict.attribution === "partial") partial += 1;
+
+      partial += 1;
       const anchor = anchorOf(items) || "(unidentified)";
       const key = anchor.toLowerCase();
-      const group = foreign.get(key) ?? { anchor, matched: new Set<string>(), sources: new Set<string>(), findings: [] };
+      const group = foreign.get(key) ?? { anchor, matched: new Set<string>(), sources: new Set<string>(), findings: [], full: false };
       foreign.set(key, group);
       for (const w of verdict.words || []) group.matched.add(w);
       group.sources.add(db.name);
@@ -403,9 +466,10 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
   // Only ever from rows proven to be about ONE person. For any other selector this is
   // empty on purpose, and the summary says why rather than leaving a blank panel.
   const identity = consolidate(ownRows, { region });
+  const candidateCount = [...foreign.values()].filter((g) => g.full).length;
   const summary = subject.unique
     ? describe(identity)
-    : `"${subject.raw}" does not identify one person, so these rows are not merged. ${foreign.size} candidate${foreign.size === 1 ? "" : "s"} below, to be told apart.`;
+    : `"${subject.raw}" does not identify one person, so nothing is merged into a single profile. Everything found is below, grouped into ${candidateCount} candidate record${candidateCount === 1 ? "" : "s"}.`;
 
   // --- by category (deduped on value within a category) ---
   const byCat = new Map<Category, Map<string, Finding>>();
@@ -469,9 +533,11 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     .map(([stem, values]) => ({ stem, values }))
     .sort((a, b) => b.values.length - a.values.length);
 
-  const others: OtherSubject[] = [...foreign.values()]
-    .map((g) => ({ anchor: g.anchor, matched: [...g.matched], sources: [...g.sources].sort(), findings: g.findings }))
+  const grouped = [...foreign.values()]
+    .map((g) => ({ anchor: g.anchor, matched: [...g.matched], sources: [...g.sources].sort(), findings: g.findings, full: g.full }))
     .sort((a, b) => b.findings.length - a.findings.length || a.anchor.localeCompare(b.anchor));
+  const candidates: OtherSubject[] = grouped.filter((g) => g.full);
+  const others: OtherSubject[] = grouped.filter((g) => !g.full);
 
   return {
     subject: { raw: subject.raw, kind: subject.kind, canonical: subject.canonical, unique: subject.unique, note: subject.note },
@@ -485,6 +551,8 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     timeline,
     highlights: { financial: dedupeHi("financial"), passwords: dedupeHi("password") },
     excluded: { partial, unrelated, total: partial + unrelated },
+    records: [...byDatabase.values()],
+    candidates,
     others,
     passwordHabits,
   };
@@ -501,9 +569,12 @@ export function headline(r: SearchReport): string {
   // A selector that cannot identify one person leads with that fact. Everything else in
   // the report reads differently once you know it, so it cannot be a closing footnote.
   if (!r.subject.unique) {
-    const n = r.others.length;
-    if (!n) return `Nothing found for "${r.subject.raw}" at this search depth.`;
-    return `"${r.subject.raw}" matches ${n} ${n === 1 ? "person" : "different people"} in breach data. They are listed separately and deliberately not merged — a name does not identify one person.`;
+    const n = r.candidates.length;
+    if (!n && !r.dataPoints) return `Nothing found for "${r.subject.raw}" at this search depth.`;
+    const crit = r.categories.find((c) => c.severity === "critical");
+    const base = `${r.dataPoints} leaked data point${r.dataPoints === 1 ? "" : "s"} across ${r.breachCount} breach${r.breachCount === 1 ? "" : "es"}`;
+    const what = crit ? `${base}, including ${crit.label.toLowerCase()}` : base;
+    return `${what} — grouped into ${n} candidate record${n === 1 ? "" : "s"}, because a name does not identify one person.`;
   }
   const extra = r.others.length
     ? ` ${r.others.length} other ${r.others.length === 1 ? "person" : "people"} matched part of this query and ${r.others.length === 1 ? "is" : "are"} listed separately.`

@@ -163,18 +163,38 @@ test("the identity consolidates only the subject's own rows, citing each databas
 
 const MUSK = buildSubject("Elon Reeve Musk");
 
-test("a name search NEVER consolidates into one person — every hit is a candidate", () => {
-  // The defect this pins: a name matched three rows and the report rendered them as one
-  // man holding three mailboxes. A name does not identify anybody, so an exact hit on it
-  // is one candidate among the people who share it, not "the subject".
+test("a name search groups into candidates and never merges them into one person", () => {
+  // A name matched three rows and the report rendered them as one man holding three
+  // mailboxes. A name identifies nobody, so a full hit on it is one CANDIDATE among the
+  // people who share it — kept apart, but kept.
   const r = buildReport(MUSK, [
     db("Dump A", "", { FullName: "Elon Reeve Musk", Email: "elon@example.com" }),
     db("Dump B", "", { FullName: "Kimbal Musk", Email: "kimbal@example.com" }),
   ]);
-  assert.deepEqual(r.identity.facets, {}, "nothing is merged into a subject");
-  assert.equal(r.others.length, 2, "both Musks are listed, side by side");
-  assert.deepEqual(r.others.map((o) => o.anchor).sort(), ["elon@example.com", "kimbal@example.com"]);
+  assert.deepEqual(r.identity.facets, {}, "nothing is merged into a single subject");
+  assert.equal(r.candidates.length, 1, "the full-name match is a candidate");
+  assert.equal(r.candidates[0].anchor, "elon@example.com");
+  assert.equal(r.others.length, 1, "the shared surname is somebody else");
+  assert.equal(r.others[0].anchor, "kimbal@example.com");
   assert.match(r.summary, /does not identify one person/);
+});
+
+test("a name search still reports WHAT LEAKED — the bank details are not hidden", () => {
+  // The over-correction this pins: refusing to merge a name was implemented by filing
+  // every row away behind a collapsed panel, so a search returning an IBAN and a RIB
+  // rendered as "clear · 0 data points". Hiding what was found is not more careful than
+  // overstating it.
+  const r = buildReport(MUSK, [
+    db("Bank 2023", "In 2023 a bank dump appeared.", {
+      FullName: "Elon Reeve Musk", IBAN: "FR7630006000011234567890189",
+      Address: "3500 Deer Creek Rd", City: "Palo Alto", Password: "x",
+    }),
+  ]);
+  assert.notEqual(r.verdict, "clear", "an IBAN is not a clean bill of health");
+  assert.ok(r.dataPoints > 0);
+  assert.equal(r.highlights.financial.length, 1, "the IBAN is pulled to the top");
+  assert.ok(cat(r, "location"), "the postal address is reported");
+  assert.equal(r.breachCount, 1);
 });
 
 test("an email search DOES consolidate — it designates somebody", () => {
@@ -186,17 +206,25 @@ test("an email search DOES consolidate — it designates somebody", () => {
   assert.equal(r.identity.facets.name![0].sources.length, 2);
 });
 
-test("the headline LEADS with the ambiguity, because it changes how everything reads", () => {
+test("the headline states what leaked AND that it is not one person", () => {
   const r = buildReport(MUSK, [
     db("A", "", { FullName: "Elon Reeve Musk", Password: "x" }),
     db("B", "", { FullName: "Kimbal Musk", Email: "k@x.com" }),
     db("C", "", { FullName: "Maye Musk", Email: "m@x.com" }),
   ]);
   const h = headline(r);
-  assert.match(h, /matches 3 different people/);
-  assert.match(h, /deliberately not merged/);
-  // and it is the FIRST thing said, not a closing footnote
-  assert.ok(h.startsWith('"Elon Reeve Musk"'));
+  assert.match(h, /leaked data point/, "it says what was found");
+  assert.match(h, /candidate record/, "and that the rows are not one person");
+  assert.match(h, /a name does not identify one person/);
+});
+
+test("nothing attributable is dropped — the raw rows are kept verbatim", () => {
+  const row = { FullName: "Elon Reeve Musk", LastLogin: "2021-09-30", InternalFlag: "A7" };
+  const r = buildReport(MUSK, [db("X", "", row)]);
+  assert.equal(r.records.length, 1);
+  assert.deepEqual(r.records[0].rows[0], row, "the row survives exactly as it arrived");
+  // even the activity timestamp the categories drop as metadata is still readable
+  assert.ok(Object.keys(r.records[0].rows[0]).includes("LastLogin"));
 });
 
 test("a name is marked as not designating one person, so the UI cannot imply it does", () => {

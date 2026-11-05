@@ -31,7 +31,17 @@ export const maxDuration = 45;
 const LEGAL_BASES = ["own-data", "consent", "investigation", "legal-request", "security-research"] as const;
 const BASES = new Set<string>(LEGAL_BASES);
 
-const clampLimit = (n: unknown) => Math.max(100, Math.min(10000, Number(n) || 100));
+/**
+ * Search depth.
+ *
+ * The documentation calls this a result limit, but it is also "la plage de recherche
+ * dans la base de données" — how far into the dumps the query reaches. 100 is the API's
+ * own default and the cheapest; the vendor's reference bot ships 300, and the gap shows
+ * up as rows you simply never see. 300 is the default here for the same reason, and the
+ * price of every depth is quoted before it is spent.
+ */
+const DEFAULT_LIMIT = 300;
+const clampLimit = (n: unknown) => Math.max(100, Math.min(10000, Number(n) || DEFAULT_LIMIT));
 
 // ---- GET: what would this cost? ---------------------------------------------------
 
@@ -43,6 +53,7 @@ export async function GET(req: NextRequest) {
 
   // Both ways of searching a multi-word subject are priced, because the choice is the
   // operator's and it is not only about money: quoting is cheaper AND narrower.
+  // `loose` is what a search runs by default; `exact` is the cheaper, narrower option.
   const exact = buildSubject(raw, { defaultCountry: country, exact: true });
   const loose = buildSubject(raw, { defaultCountry: country, exact: false });
 
@@ -69,7 +80,9 @@ export async function GET(req: NextRequest) {
     exact: { ...quote(exact.query), note: exact.note },
     // only offered when quoting actually changes the query — on an address it does not
     permutations: sameQuery ? null : { ...quote(loose.query), note: loose.note },
-    usd: fmtUSD(priceCredits(estimateCost(exact.query, limit))),
+    // which of the two a search will use if the operator changes nothing
+    defaultMode: sameQuery ? "exact" : "permutations",
+    usd: fmtUSD(priceCredits(estimateCost(sameQuery ? exact.query : loose.query, limit))),
   });
 }
 
@@ -104,9 +117,13 @@ export async function POST(req: NextRequest) {
   const region = String(body?.country || "FR").toUpperCase();
   const subject = buildSubject(raw, {
     defaultCountry: region,
-    // quoting is the default for a multi-word subject: cheaper, and narrower is the
-    // safer error to make when the alternative is returning strangers' records
-    exact: body?.permutations !== true,
+    // UNQUOTED by default on a multi-word subject, which is what the vendor's own bot
+    // sends. Quoting collapses the query to a single exact phrase: a third of the price
+    // and a fraction of the rows, so a name searched that way misses every record that
+    // stores it in another order or alongside a middle name. Narrow is not the same as
+    // careful — the care belongs in attribution, which decides what a returned row is
+    // allowed to mean, not in refusing to ask the question properly.
+    exact: body?.exact === true,
   });
 
   const cfg = readClientConfig(req);
@@ -123,7 +140,7 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT);
+  const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT || DEFAULT_LIMIT);
   const price = priceCredits(estimateCost(subject.query, limit));
 
   // Recorded before the query runs. Fire-and-forget: the trail must never be able to
