@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import { OctoMark } from "./OctoMark";
+import Sift from "./Sift";
 
 const UNCOVERS = [
   "Passwords", "Bank details · RIB / IBAN", "Full name & DOB", "Home address",
@@ -89,6 +90,8 @@ export default function Landing({ signedIn }: { signedIn: boolean }) {
 
         <section className="lk2-lp-trust">
           <h2>A result set is not a report.</h2>
+          {/* The argument, drawn — because this one only lands once you see it happen. */}
+          <Sift />
           <p>
             The index searches every word order, so a query comes back with rows that matched
             <em> something</em> — not rows about the person you asked for. Everything here is

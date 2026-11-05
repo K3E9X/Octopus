@@ -1081,3 +1081,65 @@ body::after {
 .adm-grantbox { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .adm-grantbox input { width: 60px; background: var(--bg-2); border: 1px solid var(--bd); border-radius: var(--r-xs); color: var(--ink); font-family: var(--font-mono); font-size: 11px; padding: 3px 6px; outline: none; }
 .adm-grantbox input:focus { border-color: var(--accent); }
+
+/* ======================================================================
+   SIFT — the product's argument, drawn.
+
+   The SORTED state is the base state, written in the markup. The animation
+   runs backwards from the undifferentiated look and lands on it, so with
+   every animation stripped — reduced motion, an old engine, a renderer that
+   never paints a second frame — the picture still says what it means.
+   Hairlines and one accent, like everything else. It plays once; a loop in
+   the corner of a page is a distraction the third time past it.
+   ====================================================================== */
+.sift {
+  display: grid; grid-template-columns: 130px 1fr 150px; gap: 24px; align-items: center;
+  border: 1px solid var(--bd); border-radius: var(--r-lg); background: var(--bg-1);
+  padding: 26px 24px; margin: 8px 0 32px;
+}
+.sift-col { display: flex; flex-direction: column; gap: 3px; }
+.sift-cap { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-4); }
+.sift-n { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--ink-2); line-height: 1; font-variant-numeric: tabular-nums; }
+.sift-out { text-align: right; align-items: flex-end; }
+/* the two outcomes, told apart by weight rather than by a second hue */
+.sift-out .sift-n { color: var(--accent); }
+.sift-cap-2 { margin-top: 14px; }
+.sift-n-2 { color: var(--ink-4) !important; font-size: 18px; }
+
+.sift-rows { display: flex; flex-direction: column; gap: 7px; }
+.sift-row {
+  display: flex; align-items: center; gap: 7px; height: 22px;
+  padding: 0 10px; border: 1px solid var(--bd-subtle); border-radius: var(--r-xs);
+  background: var(--bg-2);
+}
+.sift-mark { width: 3px; height: 11px; border-radius: 2px; background: var(--bd-strong); }
+.sift-cell { height: 4px; border-radius: 2px; background: var(--bd-strong); opacity: .5; }
+.sift-label { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); }
+
+/* --- the base state IS the sorted one --- */
+.sift-row.mine { transform: translateX(-10px); border-color: var(--accent); background: var(--accent-tint); }
+.sift-row.mine .sift-mark { background: var(--accent); }
+.sift-row.other { transform: translateX(26px); opacity: .32; }
+.sift-row.other .sift-label { opacity: .5; }
+
+/* --- and the animation arrives at it, from the undifferentiated look --- */
+@keyframes sift-settle {
+  from { transform: translateX(0); border-color: var(--bd-subtle); background: var(--bg-2); }
+}
+@keyframes sift-drift {
+  from { transform: translateX(0); opacity: .9; }
+}
+@keyframes sift-mark-on { from { background: var(--bd-strong); } }
+.sift-row.mine  { animation: sift-settle .8s var(--ease) both; animation-delay: calc(var(--i) * 55ms + .35s); }
+.sift-row.other { animation: sift-drift .8s var(--ease) both;  animation-delay: calc(var(--i) * 55ms + .35s); }
+.sift-row.mine .sift-mark { animation: sift-mark-on .8s var(--ease) both; animation-delay: calc(var(--i) * 55ms + .35s); }
+.sift-label { animation: lk2-fade .5s var(--ease) both; animation-delay: calc(var(--i) * 55ms + .75s); }
+
+@media (max-width: 860px) {
+  .sift { grid-template-columns: 1fr; gap: 16px; }
+  .sift-out { text-align: left; align-items: flex-start; }
+  .sift-label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sift-row, .sift-mark, .sift-label { animation: none !important; }
+}
