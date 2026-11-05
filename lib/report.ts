@@ -131,6 +131,8 @@ export interface SearchReport {
    * take the classification's word for anything.
    */
   records: RecordGroup[];
+  /** the identifiers this report surfaced that are worth searching in their own right */
+  pivots: PivotTarget[];
   /**
    * Passwords that are the same habit wearing a different year.
    *
@@ -539,7 +541,7 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
   const candidates: OtherSubject[] = grouped.filter((g) => g.full);
   const others: OtherSubject[] = grouped.filter((g) => !g.full);
 
-  return {
+  const built: SearchReport = {
     subject: { raw: subject.raw, kind: subject.kind, canonical: subject.canonical, unique: subject.unique, note: subject.note },
     verdict,
     identity,
@@ -555,7 +557,12 @@ export function buildReport(subject: Subject, databases: LeakDatabase[], region 
     candidates,
     others,
     passwordHabits,
+    pivots: [],
   };
+  // computed from the finished report, so it sees the consolidated identity AND the
+  // candidate groups rather than a half-built version of either
+  built.pivots = pivotTargets(built);
+  return built;
 }
 
 /**
@@ -588,4 +595,59 @@ export function headline(r: SearchReport): string {
   const crit = r.categories.find((c) => c.severity === "critical");
   const base = `${r.dataPoints} leaked data point${r.dataPoints === 1 ? "" : "s"} across ${r.breachCount} breach${r.breachCount === 1 ? "" : "es"}`;
   return (crit ? `${base}, including ${crit.label.toLowerCase()}.` : `${base}.`) + extra;
+}
+
+// ---- what is worth pivoting on -------------------------------------------------------
+
+export interface PivotTarget {
+  value: string;
+  kind: "email" | "phone" | "username";
+  /** which databases carried it — a value three dumps agree on is the better hop */
+  sources: string[];
+}
+
+/**
+ * The identifiers a report surfaced that are worth searching in their own right.
+ *
+ * This is the whole point of the pivot: a name search ends with "two candidates who
+ * share a name", and the addresses and numbers inside those candidates are exactly the
+ * selectors that DO identify somebody. Searching one of them turns the ambiguity into
+ * a person.
+ *
+ * The subject is never offered back — pivoting onto the query you just ran is a round
+ * trip that buys nothing and bills for it. Most-corroborated first, because a value
+ * three independent dumps agree on is the hop least likely to be a typo in one of them.
+ */
+export function pivotTargets(report: SearchReport): PivotTarget[] {
+  const out = new Map<string, PivotTarget>();
+  const subjectKeys = new Set([report.subject.canonical, report.subject.raw.toLowerCase()]);
+
+  const add = (value: string, kind: PivotTarget["kind"], sources: string[]) => {
+    const v = value.trim();
+    const key = kind + ":" + v.toLowerCase();
+    if (!v || subjectKeys.has(v.toLowerCase())) return;
+    const existing = out.get(key);
+    if (existing) {
+      existing.sources = [...new Set([...existing.sources, ...sources])];
+      return;
+    }
+    out.set(key, { value: v, kind, sources: [...new Set(sources)] });
+  };
+
+  // a consolidated identity already knows which databases agreed on what
+  for (const [facet, kind] of [["email", "email"], ["phone", "phone"], ["username", "username"]] as const) {
+    for (const v of report.identity.facets[facet] || []) add(v.value, kind, v.sources);
+  }
+
+  // on a name search the identity is empty by design, so the candidates carry them
+  for (const group of [...report.candidates, ...report.others]) {
+    for (const f of group.findings) {
+      if (f.category === "email") add(f.value, "email", [f.source]);
+      else if (f.category === "phone") add(f.value, "phone", [f.source]);
+    }
+  }
+
+  return [...out.values()].sort(
+    (a, b) => b.sources.length - a.sources.length || a.kind.localeCompare(b.kind) || a.value.localeCompare(b.value),
+  );
 }

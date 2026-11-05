@@ -21,7 +21,17 @@ export const authEnabled = dbEnabled;
 export const SESSION_COOKIE = "octopus_session";
 const SESSION_DAYS = 14;
 
-export type Role = "admin" | "analyst" | "disabled";
+/**
+ * Roles.
+ *
+ * `tester` is where everybody starts. Registration is open, and an open door that
+ * hands out a working account is how a paid upstream balance gets drained by someone
+ * running a script — so a new account gets a trial allowance sized in searches and
+ * nothing else. `analyst` is the same account once somebody decided it should be one;
+ * the difference is a credit balance, not a different code path, because two code
+ * paths is how one of them ends up unguarded.
+ */
+export type Role = "admin" | "analyst" | "tester" | "disabled";
 
 export interface User {
   id: string;
@@ -117,12 +127,13 @@ export async function createUser(email: string, password: string, name?: string)
   const existing = await q`SELECT id FROM octopus_users WHERE email = ${mail} LIMIT 1`;
   if ((existing as any[]).length) return { error: "that address already has an account" };
 
+  // The first account administers the deployment; everyone after it starts on trial.
   const first = (await countUsers()) === 0;
   const id = "usr_" + randomBytes(9).toString("hex");
   const salt = randomBytes(16).toString("hex");
   const pw = await hash(password, salt);
   const now = Date.now();
-  const role: Role = first ? "admin" : "analyst";
+  const role: Role = first ? "admin" : "tester";
   await q`INSERT INTO octopus_users (id, email, name, role, pw_hash, pw_salt, created_at)
           VALUES (${id}, ${mail}, ${name || null}, ${role}, ${pw}, ${salt}, ${now})`;
   return { user: { id, email: mail, name: name || undefined, role, createdAt: now } };

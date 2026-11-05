@@ -148,17 +148,38 @@ export async function ledgerOf(userId: string, limit = 40): Promise<LedgerRow[]>
 }
 
 /**
- * A new account's welcome balance.
+ * The trial.
  *
- * DEFAULT ZERO, deliberately. It used to hand every new account $0.50 of the operator's
- * own upstream balance, and registration is open: scripting sign-ups against a
- * throwaway domain drained real money at roughly thirty cents of API cost per account,
- * indefinitely. A welcome credit is a business decision with a bill attached, so it is
- * opt-in — set OCTOPUS_STARTER_USD, and only behind registration you control.
+ * Sized in SEARCHES rather than in dollars, because dollars mean nothing to whoever is
+ * setting it and a price that moves with the depth setting would quietly change what
+ * "two free searches" buys. Two is the default; a deployment that wants none sets zero
+ * and new accounts simply start empty.
+ *
+ * It is approximate on purpose and the interface says so: a one-word query at the
+ * default depth is the unit, and a three-word name costs about twice that. Overstating
+ * it would be worse than being vague — somebody would run two names and find the
+ * second one refused.
  */
-export const STARTER_CREDITS = fromUSD(Number(process.env.OCTOPUS_STARTER_USD) || 0);
+export const TRIAL_SEARCHES = Math.max(0, Number(process.env.OCTOPUS_TRIAL_SEARCHES ?? 2));
+
+/** The raw API cost of one plain one-word query at the default depth. */
+const ONE_SEARCH_USD = 0.0002 * (5 + Math.sqrt(300));
+
+export const TRIAL_CREDITS = TRIAL_SEARCHES > 0 ? priceCredits(ONE_SEARCH_USD * TRIAL_SEARCHES) : 0;
+
+/** Kept for deployments that set an explicit dollar figure; it wins when present. */
+const EXPLICIT_STARTER = Number(process.env.OCTOPUS_STARTER_USD);
+export const STARTER_CREDITS = Number.isFinite(EXPLICIT_STARTER) && EXPLICIT_STARTER > 0
+  ? fromUSD(EXPLICIT_STARTER)
+  : TRIAL_CREDITS;
 
 export async function seedStarter(userId: string): Promise<void> {
   if (!creditsEnabled || STARTER_CREDITS <= 0) return;
-  await grant(userId, STARTER_CREDITS, "welcome credit");
+  await grant(userId, STARTER_CREDITS, `trial: about ${TRIAL_SEARCHES} search${TRIAL_SEARCHES === 1 ? "" : "es"}`);
 }
+
+/** What the trial is worth, for the interface to state without recomputing it. */
+export const trialNote = () =>
+  TRIAL_SEARCHES > 0
+    ? `New accounts start with about ${TRIAL_SEARCHES} search${TRIAL_SEARCHES === 1 ? "" : "es"} (${fmtCredits(STARTER_CREDITS)}). A multi-word name costs more than a single address, so the figure is approximate.`
+    : "New accounts start with no balance; an administrator grants credits.";

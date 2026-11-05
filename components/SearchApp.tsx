@@ -40,6 +40,7 @@ interface Identity {
 interface OtherSubject { anchor: string; matched: string[]; sources: string[]; findings: Finding[] }
 interface PasswordHabit { stem: string; values: string[] }
 interface RecordGroup { database: string; info: string; rows: Record<string, string>[]; attribution: string[] }
+interface PivotTarget { value: string; kind: "email" | "phone" | "username"; sources: string[] }
 
 interface Report {
   subject: { raw: string; kind: Kind; canonical: string; unique: boolean; note?: string };
@@ -57,6 +58,7 @@ interface Report {
   passwordHabits: PasswordHabit[];
   candidates: OtherSubject[];
   records: RecordGroup[];
+  pivots: PivotTarget[];
 }
 
 interface Quote {
@@ -125,6 +127,8 @@ export default function SearchApp() {
   const [report, setReport] = useState<Report | null>(null);
   const [headline, setHeadline] = useState("");
   const [view, setView] = useState<View>("identity");
+  // Each hop is kept, so an investigation can be walked back rather than only forward.
+  const [trail, setTrail] = useState<{ label: string; report: Report; headline: string }[]>([]);
   const [account, setAccount] = useState<{ authed: boolean; email?: string; balance?: number; metered: boolean } | null>(null);
 
   useEffect(() => {
@@ -161,6 +165,7 @@ export default function SearchApp() {
       setReport(rep); setHeadline(res.data.headline || "");
       setView(rep.verdict === "clear" ? (rep.others.length ? "category" : "identity") : "identity");
       setStep("report"); setBusy(false);
+      setTrail([{ label: rep.subject.raw, report: rep, headline: res.data.headline || "" }]);
       if (typeof res.data.balance === "number") setAccount((a) => (a ? { ...a, balance: res.data.balance } : a));
       return;
     }
@@ -194,7 +199,21 @@ export default function SearchApp() {
           <Basis {...{ subject, quote, basis, setBasis, caseRef, setCaseRef, permutations, setPermutations, limit, setLimit, run, busy, err, reset }} />
         )}
         {step === "loading" && <Scanning subject={subject} />}
-        {step === "report" && report && <ReportView {...{ report, headline, view, setView, reset }} />}
+        {step === "report" && report && (
+        <ReportView {...{ report, headline, view, setView, reset, trail }}
+          onHop={(label, rep, head) => {
+            setReport(rep); setHeadline(head); setView("identity");
+            setTrail((t) => [...t, { label, report: rep, headline: head }]);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onBack={(i) => {
+            const hop = trail[i];
+            setReport(hop.report); setHeadline(hop.headline); setView("identity");
+            setTrail((t) => t.slice(0, i + 1));
+          }}
+          onBalance={(b) => setAccount((a) => (a ? { ...a, balance: b } : a))}
+        />
+      )}
 
         {step !== "report" && step !== "loading" && <Plans authed={!!account?.authed} />}
       </main>
@@ -325,12 +344,26 @@ function Scanning({ subject }: { subject: string }) {
 
 // ---- step: report ---------------------------------------------------------------------
 
-function ReportView({ report, headline, view, setView, reset }: {
+function ReportView({ report, headline, view, setView, reset, trail, onHop, onBack, onBalance }: {
   report: Report; headline: string; view: View; setView: (v: View) => void; reset: () => void;
+  trail: { label: string; report: Report; headline: string }[];
+  onHop: (label: string, r: Report, h: string) => void;
+  onBack: (i: number) => void;
+  onBalance: (b: number) => void;
 }) {
   const hasHi = report.highlights.financial.length > 0 || report.highlights.passwords.length > 0;
   return (
     <section className="lk2-report">
+      {trail.length > 1 && (
+        <nav className="lk2-trail" aria-label="pivot trail">
+          {trail.map((h, i) => (
+            <button key={i} onClick={() => onBack(i)} className={i === trail.length - 1 ? "on" : ""}>
+              {h.label}
+            </button>
+          ))}
+        </nav>
+      )}
+
       <Verdict report={report} headline={headline} />
 
       {hasHi && <Critical hi={report.highlights} />}
@@ -389,6 +422,8 @@ function ReportView({ report, headline, view, setView, reset }: {
       {report.verdict === "clear" && (
         <p className="lk2-clear">Nothing surfaced at this search depth. A deeper search covers more of the index — raise the limit on a paid plan to widen it.</p>
       )}
+
+      {report.pivots?.length > 0 && <Pivot targets={report.pivots} onHop={onHop} onBalance={onBalance} />}
 
       <div className="lk2-actions">
         <button className="lk2-print" onClick={() => window.print()}>Download report (PDF)</button>
@@ -807,6 +842,103 @@ function CategoryValues({ findings }: { findings: Finding[] }) {
         <button className="lk2-more lk2-more-btn" onClick={() => setAll((x) => !x)}>
           {all ? "show fewer" : `show the other ${findings.length - cap}`}
         </button>
+      )}
+    </div>
+  );
+}
+
+// ---- pivot ---------------------------------------------------------------------------
+//
+// The step that turns a result into an investigation.
+//
+// A name search ends with "two candidates who share a name". The addresses and numbers
+// inside those candidates are exactly the selectors that DO identify somebody, so
+// searching one of them turns the ambiguity into a person. The API takes several
+// queries in one request and bills per query either way, so the whole hop is one round
+// trip — and the total is shown before any of it is sent, like every other spend here.
+
+function Pivot({ targets, onHop, onBalance }: {
+  targets: PivotTarget[];
+  onHop: (label: string, r: Report, h: string) => void;
+  onBalance: (b: number) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const [quote, setQuote] = useState<{ total: { formatted: string } } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [results, setResults] = useState<{ selector: string; report: Report; headline: string }[]>([]);
+
+  const toggle = (v: string) =>
+    setPicked((p) => (p.includes(v) ? p.filter((x) => x !== v) : p.length >= 8 ? p : [...p, v]));
+
+  // priced as you choose, before anything is spent
+  useEffect(() => {
+    if (!picked.length) { setQuote(null); return; }
+    const qs = picked.map((p) => `pivot=${encodeURIComponent(p)}`).join("&");
+    const t = setTimeout(() => {
+      fetch(`/api/search?${qs}`).then((r) => (r.ok ? r.json() : null)).then((d) => d && setQuote(d)).catch(() => {});
+    }, 150);
+    return () => clearTimeout(t);
+  }, [picked]);
+
+  const run = async () => {
+    if (!picked.length || busy) return;
+    setBusy(true); setErr("");
+    const res = await fetch("/api/search", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pivots: picked, legalBasis: "investigation" }),
+    }).then(async (r) => ({ ok: r.ok, d: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, d: {} as any }));
+    setBusy(false);
+    if (!res.ok) { setErr(res.d.error || "The pivot could not run."); return; }
+    setResults(res.d.reports || []);
+    if (typeof res.d.balance === "number") onBalance(res.d.balance);
+  };
+
+  return (
+    <div className="lk2-pivot">
+      <div className="lk2-pivot-h">
+        <b>Pivot</b>
+        <span>{targets.length} identifier{targets.length === 1 ? "" : "s"} found here can be searched in their own right</span>
+      </div>
+      <p className="lk2-others-note">
+        A name identifies nobody; an address or a number does. Searching one of these is
+        what turns this into a person — and they go out as a single request, billed per
+        selector.
+      </p>
+
+      <div className="lk2-pivot-grid">
+        {targets.map((t) => (
+          <button key={t.kind + t.value} className={"lk2-pivot-t" + (picked.includes(t.value) ? " on" : "")}
+            onClick={() => toggle(t.value)}>
+            <span className="lk2-pivot-k">{t.kind}</span>
+            <code>{t.value}</code>
+            {t.sources.length > 1 && <em>{t.sources.length} dumps</em>}
+          </button>
+        ))}
+      </div>
+
+      <div className="lk2-spend">
+        <span>pivot on</span><b>{picked.length || "—"}</b>
+        <span>for</span><b>{quote?.total.formatted || "—"}</b>
+        <button className="lk2-pivot-go" onClick={run} disabled={busy || !picked.length}>
+          {busy ? "…" : "Run the pivot"}
+        </button>
+      </div>
+      {err && <p className="lk2-err">{err}</p>}
+
+      {results.length > 0 && (
+        <div className="lk2-pivot-res">
+          {results.map((r) => (
+            <button className="lk2-pivot-card" key={r.selector} onClick={() => onHop(r.selector, r.report, r.headline)}>
+              <div className="lk2-pivot-card-h">
+                <code>{r.selector}</code>
+                <span className={"lk2-sev s-" + r.report.verdict}>{r.report.verdict}</span>
+              </div>
+              <p>{r.headline}</p>
+              <em>open this report →</em>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

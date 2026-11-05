@@ -46,9 +46,28 @@ const clampLimit = (n: unknown) => Math.max(100, Math.min(10000, Number(n) || DE
 // ---- GET: what would this cost? ---------------------------------------------------
 
 export async function GET(req: NextRequest) {
+  const limit = clampLimit(req.nextUrl.searchParams.get("limit"));
+
+  // A pivot is quoted as a batch: several selectors, billed per selector, one round
+  // trip. The operator sees the total before a single one of them is sent.
+  const pivots = (req.nextUrl.searchParams.getAll("pivot") || []).map((x) => x.trim()).filter(Boolean);
+  if (pivots.length) {
+    const country = (req.nextUrl.searchParams.get("country") || "FR").toUpperCase();
+    const subjects = pivots.slice(0, MAX_PIVOTS).map((p) => buildSubject(p, { defaultCountry: country }));
+    const each = subjects.map((s) => {
+      const usd = estimateCost(s.query, limit);
+      return { selector: s.raw, kind: s.kind, query: s.query, usd, credits: priceCredits(usd) };
+    });
+    const usdTotal = estimateCost(subjects.map((s) => s.query), limit);
+    const credits = priceCredits(usdTotal);
+    return NextResponse.json({
+      pivot: true, limit, metered: creditsEnabled, each,
+      total: { usd: usdTotal, credits, formatted: creditsEnabled ? fmtCredits(credits) : formatCost(usdTotal) },
+    });
+  }
+
   const raw = (req.nextUrl.searchParams.get("q") || "").trim();
   if (!raw) return NextResponse.json({ error: "no query" }, { status: 400 });
-  const limit = clampLimit(req.nextUrl.searchParams.get("limit"));
   const country = (req.nextUrl.searchParams.get("country") || "FR").toUpperCase();
 
   // Both ways of searching a multi-word subject are priced, because the choice is the
@@ -88,6 +107,23 @@ export async function GET(req: NextRequest) {
 
 // ---- POST: run it -----------------------------------------------------------------
 
+/**
+ * Pivot — the step that turns a result into an investigation.
+ *
+ * A name search returns addresses, numbers and handles. Those DO identify somebody,
+ * which the name never did, so searching them is where a list of leaks becomes a
+ * person. The API takes an array of queries in one request, and it bills per query
+ * either way, so the whole hop costs one round trip instead of N — and stays inside
+ * the three-requests-per-second limit that N separate calls would walk straight into.
+ *
+ * The batch comes back as ONE merged result with no indication of which query produced
+ * which row. That is fine here and nowhere else: every row is judged against every
+ * pivot selector by the same attribution the single-subject path uses, so each report
+ * contains exactly the rows that are about ITS subject. A merged response is only a
+ * problem for a tool that trusts what it is handed.
+ */
+const MAX_PIVOTS = 8;
+
 export async function POST(req: NextRequest) {
   // Without a database there is nowhere to keep accounts, so the deployment is
   // SINGLE-OPERATOR: the tool runs, unmetered and unlogged, and the response says so
@@ -101,7 +137,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const raw = String(body?.subject || "").trim();
-  if (!raw) return NextResponse.json({ error: "Enter something to search for." }, { status: 400 });
+  const isPivot = Array.isArray(body?.pivots) && body.pivots.length > 0;
+  if (!raw && !isPivot) return NextResponse.json({ error: "Enter something to search for." }, { status: 400 });
   if (raw.length > 256) return NextResponse.json({ error: "That query is too long to be a selector." }, { status: 400 });
 
   // The accountability gate. Cheap to satisfy, impossible to skip: the record of WHY
@@ -115,6 +152,15 @@ export async function POST(req: NextRequest) {
   }
 
   const region = String(body?.country || "FR").toUpperCase();
+
+  // --- pivot: several selectors, one billed round trip ------------------------------
+  const pivotList: string[] = Array.isArray(body?.pivots)
+    ? body.pivots.map((x: unknown) => String(x || "").trim()).filter(Boolean)
+    : [];
+  if (pivotList.length) {
+    return runPivot(req, pivotList.slice(0, MAX_PIVOTS), { user, legalBasis, region, body });
+  }
+
   const subject = buildSubject(raw, {
     defaultCountry: region,
     // UNQUOTED by default on a multi-word subject, which is what the vendor's own bot
@@ -143,8 +189,20 @@ export async function POST(req: NextRequest) {
   const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT || DEFAULT_LIMIT);
   const price = priceCredits(estimateCost(subject.query, limit));
 
-  // Recorded before the query runs. Fire-and-forget: the trail must never be able to
-  // block or break collection, but it must exist whether or not the query succeeds.
+  if (creditsEnabled && user) {
+    const charge = await debit(user.id, price, `search: ${subject.canonical.slice(0, 48)}`);
+    if (!charge.ok) {
+      return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
+    }
+  }
+
+  // Recorded once the charge has cleared, because only then will the query actually
+  // reach the source. Writing it first meant an account with no balance could grow the
+  // trail without limit, for free, with an attacker-chosen case reference — and push
+  // older entries out of the verification window on the way. A query that was refused
+  // before it ran touched nobody, so there is nobody to record.
+  //
+  // Fire-and-forget beyond that: the trail must never be able to block collection.
   recordQuery({
     operator: user?.email || "single-operator",
     kind: "search",
@@ -153,13 +211,6 @@ export async function POST(req: NextRequest) {
     caseId: String(body?.caseRef || "") || undefined,
     note: `kind=${subject.kind} limit=${limit} query=${subject.query}`,
   }).catch(() => {});
-
-  if (creditsEnabled && user) {
-    const charge = await debit(user.id, price, `search: ${subject.canonical.slice(0, 48)}`);
-    if (!charge.ok) {
-      return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
-    }
-  }
 
   // Refunding is not idempotent and the ledger carries no "already refunded" marker, so
   // the money has to go back exactly once. The refusal path's refund used to sit INSIDE
@@ -238,5 +289,93 @@ export async function POST(req: NextRequest) {
       error: "The search failed — you were not charged.",
       refunded: true, balance: user ? await balanceOf(user.id).catch(() => undefined) : undefined,
     }, { status: 500 });
+  }
+}
+
+// ---- the pivot run ------------------------------------------------------------------
+
+interface PivotCtx {
+  user: { id: string; email: string } | null;
+  legalBasis: string;
+  region: string;
+  body: any;
+}
+
+async function runPivot(req: NextRequest, selectors: string[], ctx: PivotCtx) {
+  const { user, legalBasis, region, body } = ctx;
+
+  // Each selector is a query about a person and gets its own line in the trail. One
+  // audit row for "a pivot happened" would record none of the people it was about.
+  const subjects = selectors.map((raw) => buildSubject(raw, { defaultCountry: region, exact: body?.exact === true }));
+
+  const cfg = readClientConfig(req);
+  const stored = await sourceToken();
+  const token = stored.token || cfg.leakosint || "";
+  if (!token) {
+    return NextResponse.json({ error: "This deployment has no leak source configured.", configured: false }, { status: 400 });
+  }
+
+  const limit = clampLimit(body?.limit || cfg.leakosintLimit || process.env.LEAKOSINT_LIMIT || DEFAULT_LIMIT);
+  const queries = subjects.map((s) => s.query);
+  const price = priceCredits(estimateCost(queries, limit));
+
+  if (creditsEnabled && user) {
+    const charge = await debit(user.id, price, `pivot: ${selectors.length} selectors`);
+    if (!charge.ok) {
+      return NextResponse.json({ error: charge.error, insufficient: true, balance: charge.balance, price }, { status: 402 });
+    }
+  }
+
+  // One line per selector, written once the charge has cleared. A single row saying
+  // "a pivot happened" would record none of the people it was about.
+  for (const s of subjects) {
+    recordQuery({
+      operator: user?.email || "single-operator",
+      kind: "search",
+      selector: s.canonical,
+      legalBasis,
+      caseId: String(body?.caseRef || "") || undefined,
+      note: `pivot kind=${s.kind} limit=${limit} query=${s.query}`,
+    }).catch(() => {});
+  }
+
+  let refunded = false;
+  const giveBack = async (why: string) => {
+    if (refunded || !user) return;
+    refunded = true;
+    await refund(user.id, price, why).catch(() => {});
+  };
+
+  try {
+    const res = await leakOsint({
+      token, request: queries, limit,
+      lang: cfg.leakosintLang || process.env.LEAKOSINT_LANG || "en",
+    });
+    if (res.error) {
+      await giveBack(`refund: ${res.error}`);
+      return NextResponse.json({ error: "The leak source refused the pivot.", reason: "refused", refunded: true }, { status: 502 });
+    }
+    if (res.unreadable) {
+      await giveBack("refund: unreadable response");
+      return NextResponse.json({ error: "The leak source answered in a shape this version cannot read.", reason: "unreadable", refunded: true }, { status: 502 });
+    }
+
+    // One merged response, judged separately per selector. A row only reaches a report
+    // if it is about THAT report's subject.
+    const reports = subjects.map((s) => {
+      const report = buildReport(s, res.databases, region);
+      return { selector: s.raw, kind: s.kind, report, headline: headline(report) };
+    });
+
+    return NextResponse.json({
+      pivot: true,
+      reports,
+      query: { sent: queries, limit, rowsReturned: res.rowCount, databases: res.databases.length },
+      charged: creditsEnabled && user ? price : 0,
+      balance: user ? await balanceOf(user.id) : undefined,
+    });
+  } catch {
+    await giveBack("refund: pivot threw");
+    return NextResponse.json({ error: "The pivot failed — you were not charged.", refunded: true }, { status: 500 });
   }
 }

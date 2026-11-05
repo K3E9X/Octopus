@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listUsers, setRole, type Role } from "@/lib/auth";
 import { requireAdmin, authEnabled } from "@/lib/session-server";
 import { listAudit, verifyAuditChain, auditEnabled } from "@/lib/audit";
-import { grant, balanceOf, ledgerOf, fromUSD, creditsEnabled } from "@/lib/credits";
+import { grant, balanceOf, ledgerOf, fromUSD, creditsEnabled, trialNote } from "@/lib/credits";
 import { sourceFingerprint, setSourceToken, clearSourceToken, sourceToken, storedKeyAvailable } from "@/lib/sourcekey";
 import { leakOsint, estimateCost, formatCost } from "@/lib/leakosint";
 import { dbReachable } from "@/lib/db";
@@ -34,7 +34,7 @@ export async function GET() {
     : users;
   return NextResponse.json({
     configured: true, metered: creditsEnabled, users: withBalance, activity, chain,
-    source, storable: storedKeyAvailable, database,
+    source, storable: storedKeyAvailable, database, trial: creditsEnabled ? trialNote() : "",
   });
 }
 
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   }
 
   const role = String(body?.role || "") as Role;
-  if (!id || !["admin", "analyst", "disabled"].includes(role)) {
+  if (!id || !["admin", "analyst", "tester", "disabled"].includes(role)) {
     return NextResponse.json({ error: "id and a valid role are required" }, { status: 400 });
   }
   if (id === admin.id && role !== "admin") {
