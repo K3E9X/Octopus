@@ -17,6 +17,8 @@ import { useMemo, useState } from "react";
 type Sev = "critical" | "high" | "medium" | "low";
 interface Finding { category: string; severity: Sev; label: string; value: string; source: string; masked?: boolean }
 interface SrcReport { name: string; info: string; date?: string; sortDate: number; findings: Finding[]; severity: Sev }
+// Only what the constellation draws. The subject arrives as a LABEL, not as the
+// report's subject object, so this view stays independent of the report's shape.
 interface Report { subject: string; sources: SrcReport[]; breachCount: number; dataPoints: number }
 
 // aligned to the CSS severity ramp (hsl → hex), off the brand orange on purpose

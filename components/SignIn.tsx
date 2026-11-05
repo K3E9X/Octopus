@@ -99,7 +99,7 @@ export default function SignIn() {
                   ? "There is no database, so there is nowhere to keep them. The instance runs in single-operator mode and the tool is open — set POSTGRES_URL to put it behind accounts."
                   : "Set OCTOPUS_SESSION_SECRET to 16 characters or more. Without it sessions cannot be signed, and a shared fallback secret would let any deployment forge another's."}
               </p>
-              <Link className="ax-submit" href="/app">Open the tool</Link>
+              <Link className="ax-submit" href="/search">Open the search</Link>
             </div>
           ) : (
             <>

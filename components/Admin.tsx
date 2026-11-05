@@ -61,7 +61,7 @@ export default function Admin({ me, disabledReason }: { me?: { id: string; email
         <Link className="auth-brand" href="/"><Logo size={26} /><span><b>OCTOPUS</b><small>OSINT</small></span></Link>
         <span className="adm-me">{me?.email}</span>
         <span className="flex" />
-        <Link className="ping-btn" href="/app">Open the tool</Link>
+        <Link className="ping-btn" href="/search">Open the search</Link>
         <button className="ping-btn" onClick={async () => { await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "signout" }) }); location.href = "/"; }}>Sign out</button>
       </header>
 
